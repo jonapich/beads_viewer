@@ -1671,6 +1671,13 @@ func (t *TreeModel) SelectByID(id string) bool {
 	return false
 }
 
+// ScrollCursorToTop scrolls so the selected row is the first visible line
+// (as far as the list length allows).
+func (t *TreeModel) ScrollCursorToTop() {
+	t.viewportOffset = t.cursor
+	t.ensureCursorVisible()
+}
+
 // GetSelectedID returns the ID of the currently selected issue, or empty string.
 func (t *TreeModel) GetSelectedID() string {
 	if issue := t.SelectedIssue(); issue != nil {

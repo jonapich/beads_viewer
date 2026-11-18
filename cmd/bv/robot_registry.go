@@ -158,7 +158,6 @@ type phaseOneRobotHandlerConfig struct {
 	SchemaCommand         *string
 	RobotMaxResults       *int
 	RecipeLoader          func() *recipe.Loader
-	StructuredOutput      func() bool
 }
 
 type phaseTwoRobotHandlerConfig struct {
@@ -1019,12 +1018,6 @@ func registerPhaseOneRobotHandlers(registry *RobotRegistry, cfg phaseOneRobotHan
 		FlagPtr:     cfg.RobotHelpFlag,
 		Description: "Show AI agent help",
 		Handler: func(ctx RobotContext) error {
-			if cfg.StructuredOutput != nil && cfg.StructuredOutput() {
-				if err := ctx.EncoderOrDefault().Encode(generateRobotDocs("guide")); err != nil {
-					return fmt.Errorf("encoding robot help: %w", err)
-				}
-				return nil
-			}
 			if err := writeRobotHelp(ctx.StdoutOrDefault()); err != nil {
 				return fmt.Errorf("writing robot help: %w", err)
 			}
@@ -1037,12 +1030,11 @@ func registerPhaseOneRobotHandlers(registry *RobotRegistry, cfg phaseOneRobotHan
 		FlagPtr:     cfg.VersionFlag,
 		Description: "Show version",
 		Handler: func(ctx RobotContext) error {
-			if (cfg.StructuredOutput != nil && cfg.StructuredOutput()) || ctx.EnvRobot {
+			if ctx.EnvRobot {
 				if err := ctx.EncoderOrDefault().Encode(map[string]interface{}{
-					"generated_at":  robotNow().Format(time.RFC3339),
-					"tool":          "bv",
-					"version":       version.Version,
-					"output_format": robotOutputFormat,
+					"generated_at": robotNow().Format(time.RFC3339),
+					"tool":         "bv",
+					"version":      version.Version,
 				}); err != nil {
 					return fmt.Errorf("encoding version output: %w", err)
 				}
@@ -1090,15 +1082,13 @@ func registerPhaseOneRobotHandlers(registry *RobotRegistry, cfg phaseOneRobotHan
 			}
 
 			output := struct {
-				GeneratedAt  string                 `json:"generated_at"`
-				OutputFormat string                 `json:"output_format,omitempty"`
-				Version      string                 `json:"version,omitempty"`
-				Recipes      []recipe.RecipeSummary `json:"recipes"`
+				GeneratedAt string                 `json:"generated_at"`
+				Version     string                 `json:"version,omitempty"`
+				Recipes     []recipe.RecipeSummary `json:"recipes"`
 			}{
-				GeneratedAt:  robotNow().Format(time.RFC3339),
-				OutputFormat: robotOutputFormat,
-				Version:      version.Version,
-				Recipes:      summaries,
+				GeneratedAt: robotNow().Format(time.RFC3339),
+				Version:     version.Version,
+				Recipes:     summaries,
 			}
 
 			if err := ctx.EncoderOrDefault().Encode(output); err != nil {
@@ -5267,7 +5257,6 @@ func handleRobotCorrelationStats(ctx RobotContext) error {
 	output := struct {
 		correlation.FeedbackStats
 		GeneratedAt     string                `json:"generated_at"`
-		OutputFormat    string                `json:"output_format,omitempty"`
 		Version         string                `json:"version,omitempty"`
 		SourcePath      string                `json:"source_path,omitempty"`
 		SourceKind      string                `json:"source_kind,omitempty"`
@@ -5281,7 +5270,6 @@ func handleRobotCorrelationStats(ctx RobotContext) error {
 	}{
 		FeedbackStats:   stats,
 		GeneratedAt:     env.GeneratedAt,
-		OutputFormat:    env.OutputFormat,
 		Version:         env.Version,
 		SourcePath:      env.SourcePath,
 		SourceKind:      env.SourceKind,

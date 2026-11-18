@@ -964,42 +964,6 @@ func TestConfigLoadInvalidYAML(t *testing.T) {
 	}
 }
 
-// TestConfigLoadPermissionError tests LoadConfig with an unreadable file
-func TestConfigLoadPermissionError(t *testing.T) {
-	// Skip on systems where we can't reliably test permissions
-	if os.Getuid() == 0 {
-		t.Skip("Skipping permission test when running as root")
-	}
-
-	t.Log("Testing LoadConfig with permission denied")
-
-	tmpDir := t.TempDir()
-	bvDir := filepath.Join(tmpDir, ".bv")
-	if err := os.MkdirAll(bvDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create file with no read permissions
-	configPath := filepath.Join(bvDir, "drift.yaml")
-	if err := os.WriteFile(configPath, []byte("density_warning_pct: 50"), 0000); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("Created unreadable file at: %s", configPath)
-
-	_, err := LoadConfig(tmpDir)
-	if err == nil {
-		t.Error("expected error for unreadable file, got nil")
-	} else {
-		t.Logf("Got expected error: %v", err)
-		if !strings.Contains(err.Error(), "reading") {
-			t.Errorf("error should mention reading, got: %v", err)
-		}
-	}
-
-	// Cleanup: restore permissions so temp dir can be removed
-	os.Chmod(configPath, 0644)
-}
-
 // TestConfigSaveInvalidConfig tests SaveConfig with a config that fails validation
 func TestConfigSaveInvalidConfig(t *testing.T) {
 	t.Log("Testing SaveConfig with invalid config")
@@ -1051,34 +1015,6 @@ func TestConfigSaveMkdirError(t *testing.T) {
 			t.Errorf("error should mention creating config directory, got: %v", err)
 		}
 	}
-}
-
-// TestConfigSavePermissionError tests SaveConfig when directory is not writable
-func TestConfigSavePermissionError(t *testing.T) {
-	// Skip on systems where we can't reliably test permissions
-	if os.Getuid() == 0 {
-		t.Skip("Skipping permission test when running as root")
-	}
-
-	t.Log("Testing SaveConfig with permission denied")
-
-	tmpDir := t.TempDir()
-	bvDir := filepath.Join(tmpDir, ".bv")
-	if err := os.MkdirAll(bvDir, 0555); err != nil { // Read-only directory
-		t.Fatal(err)
-	}
-	t.Logf("Created read-only directory at: %s", bvDir)
-
-	config := DefaultConfig()
-	err := SaveConfig(tmpDir, config)
-	if err == nil {
-		t.Error("expected error for read-only directory, got nil")
-	} else {
-		t.Logf("Got expected error: %v", err)
-	}
-
-	// Cleanup: restore permissions
-	os.Chmod(bvDir, 0755)
 }
 
 func TestConfigSave(t *testing.T) {

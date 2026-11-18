@@ -605,8 +605,8 @@ func TestNewModelHonorsSearchConfigFromEnvAndCustomWeights(t *testing.T) {
 	if m.semanticHybridPreset != search.PresetImpactFirst {
 		t.Fatalf("semanticHybridPreset = %q, want %q", m.semanticHybridPreset, search.PresetImpactFirst)
 	}
-	if m.workDir != "/repo" {
-		t.Fatalf("workDir = %q, want /repo", m.workDir)
+	if filepath.Base(m.workDir) != "repo" {
+		t.Fatalf("workDir = %q, want .../repo", m.workDir)
 	}
 	cfg := m.semanticSearch.getHybridConfig()
 	if !cfg.Enabled || !cfg.CustomWeights || cfg.Weights.TextRelevance != 0.5 {

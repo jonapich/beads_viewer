@@ -452,6 +452,15 @@ func (g *GraphModel) SelectByID(id string) bool {
 		if sortedID == id {
 			g.selectedIdx = i
 			g.ensureVisible()
+			// Put the selected node at the top of the node list, clamped so
+			// the list stays full when the node is near the end. The list's
+			// visible rows are height-2 (panel) minus 4 (header/footer), as
+			// in View/renderNodeList; height is from the last render.
+			offset := i
+			if visible := g.height - 6; visible > 0 {
+				offset = min(offset, max(0, len(g.sortedIDs)-visible))
+			}
+			g.scrollOffset = offset
 			return true
 		}
 	}

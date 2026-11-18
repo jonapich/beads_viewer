@@ -106,18 +106,18 @@ func TestCheckForUpdates_Network(t *testing.T) {
 		checksumHash := sha256.Sum256([]byte(checksumBody))
 		release := Release{
 			TagName: tag,
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/" + tag,
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/" + tag,
 			Assets: []Asset{
 				{
 					Name:               stableAssetName(),
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/" + stableAssetName(),
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/" + stableAssetName(),
 					Size:               1024,
 					Digest:             testSHA256DigestA,
 					State:              "uploaded",
 				},
 				{
 					Name:               "checksums.txt",
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/checksums.txt",
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/checksums.txt",
 					Size:               int64(len(checksumBody)),
 					Digest:             "sha256:" + hex.EncodeToString(checksumHash[:]),
 					State:              "uploaded",
@@ -145,7 +145,7 @@ func TestCheckForUpdates_Network(t *testing.T) {
 			responseBody:   installableReleaseBody("v99.0.0", validChecksumBody),
 			responseStatus: http.StatusOK,
 			expectTag:      "v99.0.0",
-			expectURL:      "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0",
+			expectURL:      "https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0",
 			expectErr:      false,
 			checksumBody:   validChecksumBody,
 		},
@@ -160,7 +160,7 @@ func TestCheckForUpdates_Network(t *testing.T) {
 		},
 		{
 			name:           "Same version (no update)",
-			responseBody:   `{"tag_name":"v0.0.0","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v0.0.0"}`, // Assumes current > v0.0.0
+			responseBody:   `{"tag_name":"v0.0.0","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v0.0.0"}`, // Assumes current > v0.0.0
 			responseStatus: http.StatusOK,
 			expectTag:      "",
 			expectURL:      "",
@@ -200,7 +200,7 @@ func TestCheckForUpdates_Network(t *testing.T) {
 		},
 		{
 			name:           "Invalid release tag",
-			responseBody:   `{"tag_name":"v99.0.0.1","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0.1"}`,
+			responseBody:   `{"tag_name":"v99.0.0.1","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0.1"}`,
 			responseStatus: http.StatusOK,
 			expectTag:      "",
 			expectURL:      "",
@@ -208,7 +208,7 @@ func TestCheckForUpdates_Network(t *testing.T) {
 		},
 		{
 			name:           "Newer release missing platform asset",
-			responseBody:   `{"tag_name":"v99.0.0","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0","assets":[{"name":"checksums.txt","browser_download_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/checksums.txt","size":256,"digest":"` + testSHA256DigestB + `","state":"uploaded"}]}`,
+			responseBody:   `{"tag_name":"v99.0.0","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0","assets":[{"name":"checksums.txt","browser_download_url":"https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/checksums.txt","size":256,"digest":"` + testSHA256DigestB + `","state":"uploaded"}]}`,
 			responseStatus: http.StatusOK,
 			expectTag:      "",
 			expectURL:      "",
@@ -216,7 +216,7 @@ func TestCheckForUpdates_Network(t *testing.T) {
 		},
 		{
 			name:           "Newer release missing checksum asset",
-			responseBody:   `{"tag_name":"v99.0.0","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0","assets":[{"name":"` + stableAssetName() + `","browser_download_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/` + stableAssetName() + `","size":1024,"digest":"` + testSHA256DigestA + `","state":"uploaded"}]}`,
+			responseBody:   `{"tag_name":"v99.0.0","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0","assets":[{"name":"` + stableAssetName() + `","browser_download_url":"https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/` + stableAssetName() + `","size":1024,"digest":"` + testSHA256DigestA + `","state":"uploaded"}]}`,
 			responseStatus: http.StatusOK,
 			expectTag:      "",
 			expectURL:      "",
@@ -378,7 +378,7 @@ func olderReleaseServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"tag_name":"v0.0.1","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v0.0.1","assets":[]}`))
+		_, _ = w.Write([]byte(`{"tag_name":"v0.0.1","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v0.0.1","assets":[]}`))
 	}))
 	t.Cleanup(server.Close)
 	return server
@@ -394,15 +394,15 @@ func writeUpdaterConfig(t *testing.T, configDir, body string) {
 	}
 }
 
-// TestUpdater_OptOutEnvAndConfig covers the startup-check opt-outs: the
-// default is on, config.yaml `updates: {check: false}` turns it off,
+// TestUpdater_OptOutEnvAndConfig covers the startup-check policy: the
+// default is off, config.yaml `updates: {check: true}` turns it on,
 // BV_NO_UPDATE_CHECK=1 turns it off even when config says on, and
 // BV_NO_UPDATE_CHECK=0 explicitly enables the check, overriding saved policy.
 func TestUpdater_OptOutEnvAndConfig(t *testing.T) {
 	configDir := isolateUpdaterConfig(t)
 
-	if !StartupCheckEnabled() {
-		t.Fatal("default: startup check should be enabled with no env and no config")
+	if StartupCheckEnabled() {
+		t.Fatal("default: startup check should be disabled with no env and no config")
 	}
 	if LoadPreferences().UseAmbientToken {
 		t.Fatal("default: ambient token must not be used")
@@ -431,18 +431,19 @@ func TestUpdater_OptOutEnvAndConfig(t *testing.T) {
 	}
 
 	// BV_NO_SAVED_CONFIG makes bv ignore config.yaml entirely.
-	writeUpdaterConfig(t, configDir, "updates:\n  check: false\n  use_token: true\n")
+	t.Setenv(EnvNoUpdateCheck, "")
+	writeUpdaterConfig(t, configDir, "updates:\n  check: true\n  use_token: true\n")
 	t.Setenv(envNoSavedConfig, "1")
 	prefs := LoadPreferences()
-	if !prefs.CheckOnStartup || prefs.UseAmbientToken {
+	if prefs.CheckOnStartup || prefs.UseAmbientToken {
 		t.Fatalf("BV_NO_SAVED_CONFIG should fall back to defaults, got %+v", prefs)
 	}
 
 	// Malformed YAML falls back to defaults rather than failing closed/open oddly.
 	t.Setenv(envNoSavedConfig, "")
 	writeUpdaterConfig(t, configDir, "updates: [not a mapping")
-	if !StartupCheckEnabled() {
-		t.Fatal("unparseable config.yaml should fall back to the default (enabled)")
+	if StartupCheckEnabled() {
+		t.Fatal("unparseable config.yaml should fall back to the default (disabled)")
 	}
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_OWNER="Dicklesworthstone"
+REPO_OWNER="jonapich"
 REPO_NAME="beads_viewer"
 BIN_NAME="bv"
 MIN_GO_VERSION="1.26.11"

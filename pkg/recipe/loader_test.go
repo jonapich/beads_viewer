@@ -851,6 +851,7 @@ func TestDefaultUserRecipesPathAndNoSavedConfigIsolation(t *testing.T) {
 	}
 
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	wantHomePath := filepath.Join(homeDir, ".config", "bv", "recipes.yaml")
 	if got := recipe.DefaultUserRecipesPath(); got != wantHomePath {

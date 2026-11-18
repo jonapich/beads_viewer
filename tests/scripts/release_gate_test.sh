@@ -276,7 +276,7 @@ reject replaced-net 'must use its verified upstream module' bash "$replaced_net/
 
 # This first control fails against the old gate: it printed PASSED after skips
 # and did not emit an eligibility receipt.
-run_gate skipped "$fixture" 2 RELEASE_GATE_SKIP='1 2 3 4 5 6 7 8 9 10 11'
+run_gate skipped "$fixture" 2 RELEASE_GATE_SKIP='1 2 3 4 5 6 7 8 9 10'
 if grep -q 'RELEASE GATE PASSED' "$tmp/gate-skipped.log"; then
   fail 'skipped checks were advertised as a passing release gate'
 fi
@@ -291,7 +291,7 @@ import json, pathlib, sys
 r = json.load(open(sys.argv[1]))
 assert r['eligible'] is True
 assert r['source']['revision'] == sys.argv[2]
-assert len(r['stages']) == 11 and all(s['status'] == 'passed' for s in r['stages'])
+assert len(r['stages']) == 10 and all(s['status'] == 'passed' for s in r['stages'])
 assert 'go test -race -count=1' in r['stages'][2]['command']
 assert r['dataset']['sha256'] and r['toolchain']['GOVERSION']
 assert r['toolchain']['GOTOOLCHAIN'] == 'local'
@@ -366,8 +366,8 @@ if [ "$scope" = gate-mechanics ]; then
 import json, sys
 r = json.load(open(sys.argv[1]))
 assert r['eligible'] is False
-assert r['stages'][10]['name'] == 'source-vulnerabilities'
-assert r['stages'][10]['status'] == 'failed'
+assert r['stages'][9]['name'] == 'source-vulnerabilities'
+assert r['stages'][9]['status'] == 'failed'
 assert all(row['exit_code'] == int(sys.argv[2]) for row in r['source_audit']['scans'])
 PY
     reject "scanner-exit-$code" diagnostic env RELEASE_GATE_RECEIPT="$gate_receipt" bash "$fixture/scripts/release_gate.sh" verify-source
@@ -439,7 +439,7 @@ reject changed-audit 'source vulnerability evidence changed' env RELEASE_GATE_RE
 # When goreleaser is absent on a diagnostic host, verify that `package` still
 # fails closed (and still binds packaging_config), continue testing all 5
 # pure-Go cross-builds and tamper controls, and return sentinel 200 at the end
-# so Stage 10 records SKIPPED (ineligible receipt) instead of FAILED.
+# so Stage 9 records SKIPPED (ineligible receipt) instead of FAILED.
 goreleaser_dist="$tmp/goreleaser-packages"
 goreleaser_skipped=0
 if command -v goreleaser >/dev/null 2>&1; then

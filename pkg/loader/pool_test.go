@@ -68,7 +68,7 @@ func TestOpenIssuesFileRetriesChangedSnapshot(t *testing.T) {
 			if len(opened) != 2 {
 				t.Fatalf("open attempts = %d, want one rejected snapshot and one fresh snapshot", len(opened))
 			}
-			if _, err := opened[0].Stat(); !errors.Is(err, os.ErrClosed) {
+			if _, err := opened[0].Stat(); err == nil { // Windows reports an invalid handle, not os.ErrClosed
 				t.Fatalf("rejected handle was not closed: %v", err)
 			}
 			got, err := io.ReadAll(file)
@@ -103,7 +103,7 @@ func TestOpenIssuesFileDoesNotHidePersistentFailure(t *testing.T) {
 		t.Fatalf("persistent replacement = file %v error %v attempts %d; want bounded refusal", file, err, len(rejected))
 	}
 	for _, handle := range rejected {
-		if _, err := handle.Stat(); !errors.Is(err, os.ErrClosed) {
+		if _, err := handle.Stat(); err == nil {
 			t.Fatalf("persistent mismatch leaked a handle: %v", err)
 		}
 	}

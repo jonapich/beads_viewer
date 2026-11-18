@@ -26,7 +26,7 @@
     Do not add the install directory to the user PATH.
 .EXAMPLE
     # Pin the script to a commit rather than piping `main` (see README):
-    irm https://raw.githubusercontent.com/Dicklesworthstone/beads_viewer/<commit>/install.ps1 -OutFile install.ps1
+    irm https://raw.githubusercontent.com/jonapich/beads_viewer/<commit>/install.ps1 -OutFile install.ps1
     .\install.ps1 -Version v0.23.0
 .NOTES
     BV_INSTALL_API_URL, BV_INSTALL_DOWNLOAD_URL and BV_INSTALL_SOURCE_URL
@@ -45,7 +45,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$REPO_OWNER = "Dicklesworthstone"
+$REPO_OWNER = "jonapich"
 $REPO_NAME = "beads_viewer"
 $MODULE = "github.com/$REPO_OWNER/$REPO_NAME"
 $BIN_NAME = "bv"

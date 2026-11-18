@@ -19,7 +19,6 @@ const (
 	ContextTimeTravelInput    Context = "time-travel-input"
 	ContextAlerts             Context = "alerts"
 	ContextRepoPicker         Context = "repo-picker"
-	ContextAgentPrompt        Context = "agent-prompt"
 	ContextCassSession        Context = "cass-session"
 	ContextUpdateModal        Context = "update-modal"
 
@@ -62,11 +61,6 @@ func (m Model) CurrentContext() Context {
 	// Help overlay
 	if m.showHelp {
 		return ContextHelp
-	}
-
-	// Agent prompt modal
-	if m.showAgentPrompt {
-		return ContextAgentPrompt
 	}
 
 	// Cass session modal (bv-qi94)
@@ -218,7 +212,6 @@ func (c Context) Description() string {
 		ContextTimeTravelInput:    "Time-travel input",
 		ContextAlerts:             "Alerts panel",
 		ContextRepoPicker:         "Repo picker",
-		ContextAgentPrompt:        "Agent prompt",
 		ContextCassSession:        "Cass session preview",
 		ContextUpdateModal:        "Self-update modal",
 		ContextInsights:           "Insights panel",
@@ -249,7 +242,7 @@ func (c Context) IsOverlay() bool {
 	switch c {
 	case ContextLabelPicker, ContextRecipePicker, ContextHelp, ContextQuitConfirm,
 		ContextLabelHealthDetail, ContextLabelDrilldown, ContextLabelGraphAnalysis,
-		ContextTimeTravelInput, ContextAlerts, ContextRepoPicker, ContextAgentPrompt,
+		ContextTimeTravelInput, ContextAlerts, ContextRepoPicker,
 		ContextCassSession, ContextUpdateModal:
 		return true
 	}
@@ -281,7 +274,6 @@ func AllContexts() []Context {
 		ContextTimeTravelInput,
 		ContextAlerts,
 		ContextRepoPicker,
-		ContextAgentPrompt,
 		ContextCassSession,
 		ContextUpdateModal,
 		ContextInsights,

@@ -185,13 +185,7 @@ var (
 	NoUpdateCheck = register(Var{
 		Name:        "BV_NO_UPDATE_CHECK",
 		Description: "Skip the TUI's startup release check with `1`/`true`/`yes`/`on`; `0`/`false`/`no`/`off` enables it. Nonempty values override `updates.check` in user config (case-insensitive, trimmed); invalid values skip the check, and empty values preserve config. Explicit `--check-update` / `--update` still work.",
-		Default:     "(check on)",
-	})
-
-	OutputFormat = register(Var{
-		Name:        "BV_OUTPUT_FORMAT",
-		Description: "Default robot output format: `json` or `toon` (overridden by `--format`).",
-		Default:     "`json`",
+		Default:     "(check off)",
 	})
 
 	Phase2TimeoutS = register(Var{
@@ -288,30 +282,6 @@ var (
 		Name:        "BV_THEME",
 		Description: "Pin the TUI palette: `light` or `dark` (overridden by `--theme`).",
 		Default:     "(auto-detect)",
-	})
-
-	ToonDefaultFormat = register(Var{
-		Name:        "TOON_DEFAULT_FORMAT",
-		Description: "Fallback robot output format (`json` or `toon`) when `--format` and `BV_OUTPUT_FORMAT` are unset.",
-		Default:     "(unset)",
-	})
-
-	ToonIndent = register(Var{
-		Name:        "TOON_INDENT",
-		Description: "Indentation width (0–16) passed to TOON encoding.",
-		Default:     "(default)",
-	})
-
-	ToonKeyFolding = register(Var{
-		Name:        "TOON_KEY_FOLDING",
-		Description: "Key folding mode passed to TOON encoding.",
-		Default:     "(default)",
-	})
-
-	ToonStats = register(Var{
-		Name:        "TOON_STATS",
-		Description: "Set to `1` to write JSON vs TOON token estimates to stderr (`--stats` sets it).",
-		Default:     "(off)",
 	})
 
 	TUIAutocloseMS = register(Var{

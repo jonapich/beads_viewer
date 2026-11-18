@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -837,7 +838,7 @@ func TestTreeStatePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := TreeStatePath(tt.beadsDir)
-			if got != tt.want {
+			if got != filepath.FromSlash(tt.want) {
 				t.Errorf("TreeStatePath(%q) = %q, want %q", tt.beadsDir, got, tt.want)
 			}
 		})
@@ -980,8 +981,10 @@ func TestSaveState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to stat state file: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("State file permissions = %04o, want 0600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("State file permissions = %04o, want 0600", perm)
+		}
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil {

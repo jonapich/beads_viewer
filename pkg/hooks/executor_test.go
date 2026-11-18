@@ -411,7 +411,8 @@ func hookEnvEcho(keys ...string) string {
 	commands := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if runtime.GOOS == "windows" {
-			commands = append(commands, "if defined "+key+" (echo [%"+key+"%]) else (echo [])")
+			// The outer parentheses keep "& next" out of the else branch.
+			commands = append(commands, "(if defined "+key+" (echo [%"+key+"%]) else (echo []))")
 		} else {
 			commands = append(commands, "printf '[%s]\\n' \"$"+key+"\"")
 		}
@@ -720,11 +721,10 @@ func TestLoadDefaultNoHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
+	tmp := t.TempDir() // registered first so the chdir restore below runs before its removal
 	t.Cleanup(func() {
 		_ = os.Chdir(origWD)
 	})
-
-	tmp := t.TempDir()
 	if err := os.Chdir(tmp); err != nil {
 		t.Fatalf("chdir temp: %v", err)
 	}

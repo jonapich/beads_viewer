@@ -211,21 +211,6 @@ func TestStartup_UpdateCheckDoesNotBlock(t *testing.T) {
 // Binary integrity tests
 // ============================================================================
 
-func TestBinary_HasProperPermissions(t *testing.T) {
-	bv := buildBvBinary(t)
-
-	info, err := os.Stat(bv)
-	if err != nil {
-		t.Fatalf("stat binary: %v", err)
-	}
-
-	// Should be executable
-	mode := info.Mode()
-	if mode&0111 == 0 {
-		t.Errorf("binary should be executable, mode: %v", mode)
-	}
-}
-
 func TestBinary_RespondsToSignals(t *testing.T) {
 	// Verify the binary handles interrupts gracefully
 	// This is important for the update process

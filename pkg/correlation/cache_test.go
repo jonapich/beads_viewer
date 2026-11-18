@@ -469,7 +469,7 @@ func TestNewCachedCorrelatorWithOptions(t *testing.T) {
 func TestNewCachedCorrelatorForwardsExplicitBeadsPath(t *testing.T) {
 	repoPath := "/tmp/test"
 	explicitPath := filepath.Join(repoPath, ".beads", "custom.jsonl")
-	expectedPath := filepath.Join(".beads", "custom.jsonl")
+	expectedPath := filepath.ToSlash(filepath.Join(".beads", "custom.jsonl")) // git pathspecs use "/"
 
 	correlator := NewCachedCorrelator(repoPath, explicitPath)
 
@@ -481,7 +481,7 @@ func TestNewCachedCorrelatorForwardsExplicitBeadsPath(t *testing.T) {
 func TestNewCachedCorrelatorWithOptionsForwardsExplicitBeadsPath(t *testing.T) {
 	repoPath := "/tmp/test"
 	explicitPath := filepath.Join(repoPath, ".beads", "custom.jsonl")
-	expectedPath := filepath.Join(".beads", "custom.jsonl")
+	expectedPath := filepath.ToSlash(filepath.Join(".beads", "custom.jsonl")) // git pathspecs use "/"
 
 	correlator := NewCachedCorrelatorWithOptions(repoPath, 10*time.Minute, 20, explicitPath)
 

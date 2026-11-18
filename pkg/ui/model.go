@@ -22,7 +22,6 @@ import (
 
 	"github.com/Dicklesworthstone/beads_viewer/internal/datasource"
 	"github.com/Dicklesworthstone/beads_viewer/internal/env"
-	"github.com/Dicklesworthstone/beads_viewer/pkg/agents"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/baseline"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/cass"
@@ -76,7 +75,6 @@ const (
 	focusAttention
 	focusLabelPicker
 	focusSprint             // Sprint dashboard view (bv-161)
-	focusAgentPrompt        // AGENTS.md integration prompt (bv-i8dk)
 	focusFlowMatrix         // Cross-label flow matrix view
 	focusTutorial           // Interactive tutorial (bv-8y31)
 	focusCassModal          // Cass session preview modal (bv-5bqh)
@@ -1052,88 +1050,6 @@ func CheckCassHealthCmd() tea.Cmd {
 	}
 }
 
-// AgentFileCheckMsg is sent after checking for AGENTS.md integration (bv-i8dk)
-type AgentFileCheckMsg struct {
-	ShouldPrompt    bool
-	FilePath        string
-	FileType        string
-	IsUpgrade       bool
-	ExistingVersion int
-}
-
-// CheckAgentFileCmd returns a command that checks if we should prompt for AGENTS.md
-func CheckAgentFileCmd(workDir string) tea.Cmd {
-	return func() tea.Msg {
-		if workDir == "" {
-			return AgentFileCheckMsg{ShouldPrompt: false}
-		}
-
-		// Detect agent file in workDir first; if not found, check up to 3 parent
-		// directories so running in a subdirectory finds/upgrades a parent AGENTS.md
-		// instead of prompting to create a duplicate file.
-		detection := agents.DetectAgentFile(workDir)
-		if !detection.Found() {
-			detection = agents.DetectAgentFileInParents(workDir, 3)
-		}
-		if !detection.Found() {
-			return AgentFileCheckMsg{ShouldPrompt: false}
-		}
-
-		prefDir := workDir
-		if fileDir := filepath.Dir(detection.FilePath); fileDir != "" && fileDir != "." {
-			prefDir = fileDir
-		}
-
-		// Fresh blurb prompt when file exists without any blurb
-		if detection.NeedsBlurb() {
-			if !agents.ShouldPromptForAgentFile(workDir) || (prefDir != workDir && !agents.ShouldPromptForAgentFile(prefDir)) {
-				return AgentFileCheckMsg{ShouldPrompt: false}
-			}
-			return AgentFileCheckMsg{
-				ShouldPrompt: true,
-				FilePath:     detection.FilePath,
-				FileType:     detection.FileType,
-			}
-		}
-
-		// Upgrade prompt when file has an outdated blurb (v1..v7 or legacy) or
-		// duplicate v8 blurbs requiring consolidation, never when future-versioned or malformed.
-		if detection.NeedsUpgrade() && !detection.HasFutureBlurb() && !detection.HasMalformedBlurb() {
-			canPromptDir := func(dir string) bool {
-				if !detection.HasDuplicateBlurbs() {
-					return agents.ShouldPromptForAgentUpgrade(dir, agents.BlurbVersion)
-				}
-				if agents.SavedConfigDisabled() {
-					return false
-				}
-				pref, err := agents.LoadAgentPromptPreference(dir)
-				if err != nil || pref == nil {
-					return true
-				}
-				if pref.DontAskAgain {
-					return false
-				}
-				if !pref.DeclinedAt.IsZero() && pref.BlurbVersionOffered >= agents.BlurbVersion {
-					return false
-				}
-				return true
-			}
-			if !canPromptDir(workDir) || (prefDir != workDir && !canPromptDir(prefDir)) {
-				return AgentFileCheckMsg{ShouldPrompt: false}
-			}
-			return AgentFileCheckMsg{
-				ShouldPrompt:    true,
-				FilePath:        detection.FilePath,
-				FileType:        detection.FileType,
-				IsUpgrade:       true,
-				ExistingVersion: detection.BlurbVersion,
-			}
-		}
-
-		return AgentFileCheckMsg{ShouldPrompt: false}
-	}
-}
-
 type sharedIncrementalCorrelator struct {
 	mu sync.Mutex
 	ic *correlation.IncrementalCorrelator
@@ -1640,10 +1556,7 @@ type Model struct {
 	sprintViewText         string
 	sprintAtRiskThresholds analysis.AtRiskThresholds
 
-	// AGENTS.md integration (bv-i8dk)
-	showAgentPrompt  bool
-	agentPromptModal AgentPromptModal
-	workDir          string // Working directory for agent file detection
+	workDir string // Working directory of the loaded project
 
 	// Tutorial integration (bv-8y31)
 	showTutorial              bool
@@ -3236,14 +3149,6 @@ func (m *Model) rebuildInsightsPanel() {
 	m.insightsPanel = panel
 }
 
-func (m *Model) resizeAgentPromptModal() {
-	modalW := 60
-	if m.width > 0 && m.width < 64 {
-		modalW = max(24, m.width-4)
-	}
-	m.agentPromptModal.SetSize(modalW, m.height)
-}
-
 func (m *Model) Init() tea.Cmd {
 	// Note: ReadyTimeoutCmd is no longer needed since the model is now
 	// initialized as ready with default dimensions in NewModel().
@@ -3261,8 +3166,8 @@ func (m *Model) Init() tea.Cmd {
 			cmds = append(cmds, hybridCmd)
 		}
 	}
-	// The automatic release check is opt-out (BV_NO_UPDATE_CHECK=1 or
-	// updates.check: false in ~/.config/bv/config.yaml); explicit
+	// The automatic release check is opt-in (BV_NO_UPDATE_CHECK=0 or
+	// updates.check: true in ~/.config/bv/config.yaml); explicit
 	// --check-update/--update still work when it is disabled (#197).
 	// CheckUpdateCmd itself suppresses outbound network calls under BV_TEST_MODE.
 	if updater.StartupCheckEnabled() {
@@ -3282,11 +3187,6 @@ func (m *Model) Init() tea.Cmd {
 	// Start loading history in background.
 	if historyCmd := m.startHistoryLoad(); historyCmd != nil {
 		cmds = append(cmds, historyCmd)
-	}
-	// Check for AGENTS.md integration prompt (bv-i8dk).
-	// Skip in read-only historical mode (beadsPath == "") or workspace mode.
-	if m.beadsPath != "" && m.workDir != "" && !m.workspaceMode {
-		cmds = append(cmds, CheckAgentFileCmd(m.workDir))
 	}
 	return tea.Batch(cmds...)
 }
@@ -3453,6 +3353,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusIsError = false
 		}
 		return m, nil
+
+	case quickEditResultMsg:
+		m.brUpdateInFlight = false
+		if msg.err != nil {
+			message := fmt.Sprintf("%s failed: %v", msg.summary, msg.err)
+			if msg.output != "" {
+				message += " — " + msg.output
+			}
+			m.editorFailure(message, "")
+			return m, nil
+		}
+		if msg.refreshErr != nil {
+			m.editorFailure(fmt.Sprintf("%s saved, but tracker export refresh failed: %v", msg.summary, msg.refreshErr), "")
+			return m, m.reloadAfterEdit()
+		}
+		m.statusMsg = "✅ " + msg.summary + "; refreshing…"
+		m.statusIsError = false
+		return m, m.reloadAfterEdit()
 
 	case brUpdateResultMsg:
 		if msg.session == nil || msg.session != m.editorSession {
@@ -4198,20 +4116,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cassReturnFocus = msg.request.focus
 		m.focused = m.restoreTopModalOrListFocus()
 		return m, nil
-
-	case AgentFileCheckMsg:
-		// AGENTS.md integration check (bv-i8dk)
-		if msg.ShouldPrompt && msg.FilePath != "" {
-			m.recordSavedViewFocus()
-			m.showAgentPrompt = true
-			if msg.IsUpgrade {
-				m.agentPromptModal = NewAgentUpgradePromptModal(msg.FilePath, msg.FileType, msg.ExistingVersion, m.theme)
-			} else {
-				m.agentPromptModal = NewAgentPromptModal(msg.FilePath, msg.FileType, m.theme)
-			}
-			m.resizeAgentPromptModal()
-			m.focused = m.restoreTopModalOrListFocus()
-		}
 
 	case CapsLockTimerExpiredMsg:
 		if m.capsLockTracker != nil && m.capsLockTracker.HandleTimerExpired() == TriggerFullTutorial {
@@ -5411,89 +5315,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// 4) Handle AGENTS.md prompt modal (bv-i8dk)
-		if m.showAgentPrompt {
-			m.focused = focusAgentPrompt
-			if msg.String() == "?" || msg.String() == "f1" {
-				m.openHelpFromFocus(focusAgentPrompt)
-				return m, nil
-			}
-			if m.effectiveTutorialKeyBindings().IsContextHelp(msg) {
-				m.openContextTutorialFromFocus(focusAgentPrompt)
-				return m, nil
-			}
-			m.agentPromptModal, cmd = m.agentPromptModal.Update(msg)
-			cmds = append(cmds, cmd)
-
-			// Check if user made a decision
-			switch m.agentPromptModal.Result() {
-			case AgentPromptAccept:
-				// User accepted - add or upgrade blurb in file
-				filePath := m.agentPromptModal.FilePath()
-				shouldUpgrade := m.agentPromptModal.IsUpgrade()
-				if !shouldUpgrade && filePath != "" {
-					if info, statErr := os.Lstat(filePath); statErr == nil && info.Mode().IsRegular() {
-						if raw, readErr := os.ReadFile(filePath); readErr == nil {
-							content := string(raw)
-							shouldUpgrade = agents.ContainsAnyBlurb(content) || agents.NeedsUpdate(content)
-						}
-					}
-				}
-				var writeErr error
-				if shouldUpgrade {
-					writeErr = agents.UpdateBlurbInFile(filePath)
-				} else {
-					writeErr = agents.AppendBlurbToFile(filePath)
-				}
-				if writeErr != nil {
-					m.statusMsg = "Failed to update " + filepath.Base(filePath) + ": " + writeErr.Error()
-					m.statusIsError = true
-				} else {
-					if shouldUpgrade {
-						m.statusMsg = "✓ Updated beads instructions in " + filepath.Base(filePath)
-					} else {
-						m.statusMsg = "✓ Added beads instructions to " + filepath.Base(filePath)
-					}
-					// Record acceptance
-					if m.workDir != "" {
-						_ = agents.RecordAccept(m.workDir)
-					}
-					if dir := filepath.Dir(filePath); dir != "" && dir != "." && dir != m.workDir {
-						_ = agents.RecordAccept(dir)
-					}
-				}
-				m.showAgentPrompt = false
-				m.focused = m.restoreTopModalOrListFocus()
-				m.ensureActiveModalInputFocus()
-			case AgentPromptDecline:
-				// User declined - suppress re-prompting for the current blurb version
-				filePath := m.agentPromptModal.FilePath()
-				if m.workDir != "" {
-					_ = agents.RecordDecline(m.workDir, false)
-				}
-				if dir := filepath.Dir(filePath); dir != "" && dir != "." && dir != m.workDir {
-					_ = agents.RecordDecline(dir, false)
-				}
-				m.showAgentPrompt = false
-				m.focused = m.restoreTopModalOrListFocus()
-				m.ensureActiveModalInputFocus()
-			case AgentPromptNeverAsk:
-				// User chose "don't ask again" - save preference
-				filePath := m.agentPromptModal.FilePath()
-				if m.workDir != "" {
-					_ = agents.RecordDecline(m.workDir, true)
-				}
-				if dir := filepath.Dir(filePath); dir != "" && dir != "." && dir != m.workDir {
-					_ = agents.RecordDecline(dir, true)
-				}
-				m.showAgentPrompt = false
-				m.focused = m.restoreTopModalOrListFocus()
-				m.ensureActiveModalInputFocus()
-			}
-			return m, tea.Batch(cmds...)
-		}
-
-		// 5) Handle cass session modal (bv-5bqh)
+		// 4) Handle cass session modal (bv-5bqh)
 		if m.showCassModal {
 			m.focused = focusCassModal
 			if msg.String() == "?" || msg.String() == "f1" {
@@ -6806,6 +6628,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.isGraphView {
 					m.focused = focusGraph
 					m.refreshBoardAndGraphForCurrentFilter()
+					// Keep the issue selected in the list selected in the graph.
+					if item, ok := m.list.SelectedItem().(IssueItem); ok {
+						m.graphView.SelectByID(item.Issue.ID)
+					}
 				} else {
 					m.focused = focusList
 				}
@@ -6839,6 +6665,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.isSprintView = false
 					m.showVelocityComparison = false
 					m.refreshTreeView()
+					// Keep the issue selected in the list selected in the tree
+					// (expanding collapsed ancestors to reveal it).
+					if item, ok := m.list.SelectedItem().(IssueItem); ok && m.tree.SelectByID(item.Issue.ID) {
+						m.tree.ScrollCursorToTop()
+					}
 					m.focused = focusTree
 				}
 				return m, nil
@@ -6999,10 +6830,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ensureActiveModalInputFocus()
 				return m, nil
 
+			case "0", "1", "2", "3", "4":
+				// Set priority P0-P4 on the selected issue.
+				if !m.quickEditFocus() {
+					return m, nil
+				}
+				p := int(msg.String()[0] - '0')
+				return m, m.setSelectedPriority(p)
+
 			case "x":
-				// Export to Markdown file
-				m.exportToMarkdown()
-				return m, nil
+				// Toggle the close-candidate label on the selected issue.
+				if !m.quickEditFocus() {
+					return m, nil
+				}
+				return m, m.toggleCloseCandidate()
 
 			case "l":
 				// Open label picker for quick filter (bv-126)
@@ -7097,9 +6938,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var tutorialCmd tea.Cmd
 				m.tutorialModel, tutorialCmd = m.tutorialModel.Update(msg)
 				return m, tutorialCmd
-			}
-			if m.showAgentPrompt {
-				return m, nil
 			}
 			if m.showCassModal {
 				var cassCmd tea.Cmd
@@ -7310,9 +7148,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.labelPicker.SetSize(m.width, max(1, m.height-1))
 		if m.showUpdateModal {
 			m.updateModal.SetSize(m.width, m.height)
-		}
-		if m.showAgentPrompt {
-			m.resizeAgentPromptModal()
 		}
 		if m.showCassModal {
 			m.cassModal.SetSize(m.width, m.height)
@@ -8690,7 +8525,7 @@ func isHistoryFileTreeNavKey(key string) bool {
 
 func isModalFocus(f focus) bool {
 	switch f {
-	case focusQuitConfirm, focusHelp, focusTutorial, focusAgentPrompt,
+	case focusQuitConfirm, focusHelp, focusTutorial,
 		focusCassModal, focusUpdateModal, focusTimeTravelInput,
 		focusRecipePicker, focusRepoPicker, focusLabelPicker:
 		return true
@@ -8740,7 +8575,7 @@ func (m *Model) resetUnderlyingViewToMainList() {
 
 func (m *Model) hasOpenModalOverlay() bool {
 	return m.showQuitConfirm || m.showHelp || m.showTutorial ||
-		m.showAgentPrompt || m.showCassModal || m.showUpdateModal ||
+		m.showCassModal || m.showUpdateModal ||
 		m.showTimeTravelPrompt || m.showRecipePicker || m.showRepoPicker ||
 		m.showLabelPicker
 }
@@ -8883,9 +8718,6 @@ func (m *Model) restoreTopModalOrListFocus() focus {
 	if m.showTutorial {
 		return focusTutorial
 	}
-	if m.showAgentPrompt {
-		return focusAgentPrompt
-	}
 	if m.showCassModal {
 		return focusCassModal
 	}
@@ -8915,9 +8747,6 @@ func (m *Model) restoreFocusFromHelp() focus {
 	}
 	if m.showTutorial {
 		return focusTutorial
-	}
-	if m.showAgentPrompt {
-		return focusAgentPrompt
 	}
 	if m.showCassModal {
 		return focusCassModal
@@ -8951,9 +8780,6 @@ func (m *Model) restoreFocusFromTutorial() focus {
 	}
 	if m.showHelp {
 		return focusHelp
-	}
-	if m.showAgentPrompt {
-		return focusAgentPrompt
 	}
 	if m.showCassModal {
 		return focusCassModal
@@ -9164,9 +8990,6 @@ func (m *Model) renderMainView() (body string, overlay bool) {
 	} else if m.showTutorial {
 		// Interactive tutorial (bv-8y31) - full screen overlay (including context help over modals)
 		body = m.tutorialModel.View()
-	} else if m.showAgentPrompt {
-		// AGENTS.md prompt modal (bv-i8dk)
-		body = m.agentPromptModal.CenterModal(m.width, m.height-1)
 	} else if m.showCassModal {
 		// Cass session preview modal (bv-5bqh)
 		body = m.cassModal.CenterModal(m.width, m.height-1)
@@ -9752,7 +9575,8 @@ func (m *Model) buildHelpBodyLines() (bodyLines []string, availLines int) {
 		{"F5", "Force refresh"},
 		{"t", "Time-travel"},
 		{"T", "Quick time-travel"},
-		{"x", "Export markdown"},
+		{"0-4", "Set priority"},
+		{"x", "Mark for close triage"},
 		{"y", "Copy ID"},
 		{"C", "Copy to clipboard"},
 		{"O", "Open in editor"},
@@ -10901,11 +10725,11 @@ func (m *Model) renderFooter() string {
 		if m.timeTravelMode {
 			keyHints = append(keyHints, keyStyle.Render("t")+" exit diff", keyStyle.Render("C")+" copy", keyStyle.Render("abgi")+" views", keyStyle.Render("?")+" help")
 		} else if m.isSplitView {
-			keyHints = append(keyHints, keyStyle.Render("tab")+" focus", keyStyle.Render("C")+" copy", keyStyle.Render("x")+" export", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
+			keyHints = append(keyHints, keyStyle.Render("tab")+" focus", keyStyle.Render("0-4")+" priority", keyStyle.Render("x")+" mark for triage", keyStyle.Render("O")+" edit", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
 		} else if m.showDetails {
-			keyHints = append(keyHints, keyStyle.Render("esc")+" back", keyStyle.Render("C")+" copy", keyStyle.Render("O")+" edit", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
+			keyHints = append(keyHints, keyStyle.Render("esc")+" back", keyStyle.Render("0-4")+" priority", keyStyle.Render("x")+" mark for triage", keyStyle.Render("O")+" edit", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
 		} else {
-			keyHints = append(keyHints, keyStyle.Render("⏎")+" details", keyStyle.Render("t")+" diff", keyStyle.Render("S")+" triage", keyStyle.Render("l")+" labels", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
+			keyHints = append(keyHints, keyStyle.Render("⏎")+" details", keyStyle.Render("0-4")+" priority", keyStyle.Render("x")+" mark for triage", keyStyle.Render("l")+" labels", keyStyle.Render("Ctrl+R")+" refresh", keyStyle.Render("?")+" help")
 			if m.workspaceMode {
 				keyHints = append(keyHints, keyStyle.Render("w")+" repos")
 			}
@@ -11187,6 +11011,148 @@ func (m *Model) hasActiveFilters() bool {
 		return true
 	}
 	return false
+}
+
+// closeCandidateLabel marks an issue for later close triage (toggled with x).
+const closeCandidateLabel = "close-candidate"
+
+// quickEditResultMsg reports a single-key tracker update (priority, label).
+type quickEditResultMsg struct {
+	summary    string
+	output     string
+	err        error
+	refreshErr error
+}
+
+// quickEditFocus reports whether the current view supports single-key edits.
+func (m *Model) quickEditFocus() bool {
+	switch m.focused {
+	case focusList, focusDetail, focusTree, focusGraph:
+		return true
+	}
+	return false
+}
+
+func (m *Model) setSelectedPriority(p int) tea.Cmd {
+	issue, reason := m.selectedIssueForActionWithReason()
+	if issue == nil {
+		m.statusMsg, m.statusIsError = reason, true
+		return nil
+	}
+	if issue.Priority == p {
+		m.statusMsg, m.statusIsError = fmt.Sprintf("%s is already P%d", issue.ID, p), false
+		return nil
+	}
+	summary := fmt.Sprintf("P%d → P%d for %s", issue.Priority, p, issue.ID)
+	return m.runQuickEdit(issue, []string{"--priority=" + strconv.Itoa(p)}, summary)
+}
+
+func (m *Model) toggleCloseCandidate() tea.Cmd {
+	issue, reason := m.selectedIssueForActionWithReason()
+	if issue == nil {
+		m.statusMsg, m.statusIsError = reason, true
+		return nil
+	}
+	if slices.Contains(issue.Labels, closeCandidateLabel) {
+		return m.runQuickEdit(issue, []string{"--remove-label=" + closeCandidateLabel},
+			fmt.Sprintf("Removed %s from %s", closeCandidateLabel, issue.ID))
+	}
+	return m.runQuickEdit(issue, []string{"--add-label=" + closeCandidateLabel},
+		fmt.Sprintf("Marked %s as %s", issue.ID, closeCandidateLabel))
+}
+
+// runQuickEdit runs `<tracker> update --json <flags> -- <id>` against the
+// issue's own tracker (same route and guards as the $EDITOR save path), then
+// refreshes the JSONL export when the view reads one, and reloads.
+func (m *Model) runQuickEdit(issue *model.Issue, flags []string, summary string) tea.Cmd {
+	if m.timeTravelMode {
+		m.statusMsg, m.statusIsError = "❌ Read-only while time-traveling", true
+		return nil
+	}
+	if m.brUpdateInFlight {
+		m.statusMsg, m.statusIsError = "⏳ Finish the current tracker update first", false
+		return nil
+	}
+	if err := editorOriginError(issue.Origin); err != nil {
+		m.editorFailure(err.Error(), "")
+		return nil
+	}
+	origin := *issue.Origin
+	sourcePath := m.beadsPath
+	m.brUpdateInFlight = true
+	m.statusMsg, m.statusIsError = "⏳ "+summary+"…", false
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), brUpdateTimeout)
+		defer cancel()
+		args := append([]string{"update", "--json"}, flags...)
+		args = append(args, "--", origin.LocalID)
+		result := quickEditResultMsg{summary: summary}
+		_, result.output, result.err = runEditorTracker(ctx, origin, true, args...)
+		if result.err == nil && (origin.Tracker == "bd" || sourcePath == "" || strings.EqualFold(filepath.Ext(sourcePath), ".jsonl")) {
+			result.refreshErr = refreshEditorExport(ctx, origin, sourcePath)
+		}
+		return result
+	}
+}
+
+// writeReverseLinks appends "Children" and "Blocks" sections for issueID to
+// the detail markdown. Parent-child and blocking edges live on the child /
+// blocked issue, so they are found by scanning the issue map. Open issues are
+// listed before closed ones, each group ordered by ID.
+func (m *Model) writeReverseLinks(sb *strings.Builder, issueID string) {
+	var children, blocks []*model.Issue
+	for _, other := range m.issueMap {
+		if other == nil || other.ID == issueID {
+			continue
+		}
+		isChild, isBlocked := false, false
+		for _, dep := range other.Dependencies {
+			if dep == nil || dep.DependsOnID != issueID {
+				continue
+			}
+			if dep.Type == model.DepParentChild {
+				isChild = true
+			} else if dep.Type.IsBlocking() {
+				isBlocked = true
+			}
+		}
+		if isChild {
+			children = append(children, other)
+		}
+		if isBlocked {
+			blocks = append(blocks, other)
+		}
+	}
+
+	closed := func(is *model.Issue) bool {
+		return is.Status == model.StatusClosed || is.Status == model.StatusTombstone
+	}
+	write := func(heading string, list []*model.Issue) {
+		if len(list) == 0 {
+			return
+		}
+		sort.Slice(list, func(i, j int) bool {
+			ci, cj := closed(list[i]), closed(list[j])
+			if ci != cj {
+				return !ci
+			}
+			return list[i].ID < list[j].ID
+		})
+		open := 0
+		for _, is := range list {
+			if !closed(is) {
+				open++
+			}
+		}
+		fmt.Fprintf(sb, "### %s (%d open / %d total)\n", heading, open, len(list))
+		for _, is := range list {
+			fmt.Fprintf(sb, "- %s **%s** (%s) %s\n",
+				GetStatusIcon(string(is.Status)), is.ID, is.Status, truncateRunesHelper(is.Title, 60, "..."))
+		}
+		sb.WriteString("\n")
+	}
+	write("Children", children)
+	write("Blocks", blocks)
 }
 
 // clearAllFilters resets all filters to their default state
@@ -12052,7 +12018,7 @@ func (m *Model) handleLeftClick(x, y int) *Model {
 	}
 	// Ignore clicks while any overlay/modal is up: the main list isn't drawn,
 	// so there is nothing meaningful to focus or select.
-	if m.showQuitConfirm || m.showAgentPrompt || m.showCassModal ||
+	if m.showQuitConfirm || m.showCassModal ||
 		m.showUpdateModal || m.showLabelHealthDetail || m.showLabelGraphAnalysis ||
 		m.showLabelDrilldown || m.showAlertsPanel || m.showTimeTravelPrompt ||
 		m.showRecipePicker || m.showRepoPicker || m.showLabelPicker ||
@@ -12338,6 +12304,10 @@ func (m *Model) updateViewportContent() {
 		// highlighter scan its lexer registry again on every selected issue.
 		sb.WriteString("```text\n" + treeStr + "```\n\n")
 	}
+
+	// Reverse links: children (parent-child) and issues this one blocks.
+	// Those edges are stored on the other issue, so scan for them.
+	m.writeReverseLinks(&sb, item.ID)
 
 	// Comments
 	if len(item.Comments) > 0 {
@@ -13077,8 +13047,6 @@ func (f focus) String() string {
 		return "label_picker"
 	case focusSprint:
 		return "sprint"
-	case focusAgentPrompt:
-		return "agent_prompt"
 	case focusFlowMatrix:
 		return "flow_matrix"
 	case focusTutorial:
@@ -13642,7 +13610,7 @@ func (m *Model) showCassSessionModal() tea.Cmd {
 	}
 	request := &cassSessionRequest{
 		cancel: cancel, beadID: issue.ID, localID: localID, issueWorkspace: issueWorkspace,
-		focus: m.focused,
+		focus:          m.focused,
 		dataGeneration: m.semanticDataGeneration, workDir: m.workDir,
 		status: "Looking up sessions for " + issue.ID + "… (V/Esc cancel)",
 		budget: budget,
@@ -13673,7 +13641,7 @@ func (m *Model) showCassSessionModal() tea.Cmd {
 func (m *Model) cassLookupIsCurrent(request *cassSessionRequest) bool {
 	if request == nil || request != m.cassRequest || request.focus != m.focused ||
 		request.dataGeneration != m.semanticDataGeneration || request.workDir != m.workDir ||
-		m.showQuitConfirm || m.showHelp || m.showTutorial || m.showAgentPrompt || m.showUpdateModal ||
+		m.showQuitConfirm || m.showHelp || m.showTutorial || m.showUpdateModal ||
 		m.showAlertsPanel || m.showLabelHealthDetail || m.showLabelGraphAnalysis || m.showLabelDrilldown ||
 		m.showTimeTravelPrompt || m.showRecipePicker || m.showRepoPicker || m.showLabelPicker ||
 		(m.focused == focusList && m.list.FilterState() == list.Filtering) ||
@@ -14753,7 +14721,7 @@ func (m *Model) canScrollShortcutsSidebar(key string) bool {
 	}
 	if m.showHelp || m.showTutorial || m.showTimeTravelPrompt ||
 		m.showLabelPicker || m.showRepoPicker || m.showRecipePicker ||
-		m.showAgentPrompt || m.showCassModal || m.showUpdateModal || m.showAlertsPanel || m.showQuitConfirm {
+		m.showCassModal || m.showUpdateModal || m.showAlertsPanel || m.showQuitConfirm {
 		return false
 	}
 	if m.list.FilterState() == list.Filtering || m.isTextInputActive() || m.historyView.IsSearching() {

@@ -49,7 +49,7 @@ func updaterHTTPResponse(req *http.Request, status int, location, body string) *
 // transport only returns in-memory responses; no test URL can reach a network.
 func TestUpdaterRedirectPolicyAtEveryRequestSite(t *testing.T) {
 	authorizeUpdaterHTTPTest(t)
-	const metadata = `{"tag_name":"v0.0.1","html_url":"https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v0.0.1","assets":[]}`
+	const metadata = `{"tag_name":"v0.0.1","html_url":"https://github.com/jonapich/beads_viewer/releases/tag/v0.0.1","assets":[]}`
 	const payload = "bounded-download-fixture"
 	checksum := sha256.Sum256([]byte(payload))
 	for _, operation := range []string{"startup check", "latest release", "checksum bytes", "archive download"} {
@@ -245,9 +245,9 @@ func TestUpdaterRedirectLimit(t *testing.T) {
 func updaterRedirectReleaseFixture() (*Release, string) {
 	manifest := strings.TrimPrefix(testSHA256DigestA, "sha256:") + "  " + stableAssetName() + "\n"
 	digest := sha256.Sum256([]byte(manifest))
-	prefix := "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/"
+	prefix := "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/"
 	return &Release{
-		TagName: "v99.0.0", HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0",
+		TagName: "v99.0.0", HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0",
 		Assets: []Asset{
 			{Name: stableAssetName(), BrowserDownloadURL: prefix + stableAssetName(), Size: 1, State: "uploaded", Digest: testSHA256DigestA},
 			{Name: "checksums.txt", BrowserDownloadURL: prefix + "checksums.txt", Size: int64(len(manifest)), State: "uploaded", Digest: "sha256:" + hex.EncodeToString(digest[:])},

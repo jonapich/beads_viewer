@@ -49,7 +49,6 @@ commands=(
   "correlation-stats|--robot-correlation-stats|1"
   "capabilities|--robot-capabilities|1"
   "schema|--robot-schema|1"
-  "triage-toon|--robot-triage --format toon|0"
   "triage-by-track|--robot-triage --robot-triage-by-track|1"
   "triage-by-label|--robot-triage --robot-triage-by-label|1"
   "recipe-plan|--recipe actionable --robot-plan|1"

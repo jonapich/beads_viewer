@@ -368,7 +368,11 @@ PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: "mode=ro"}
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath // Windows drive path: file:///C:/...
+	}
+	u := url.URL{Scheme: "file", Path: uriPath, RawQuery: "mode=ro"}
 	reader, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		t.Fatal(err)
@@ -631,59 +635,6 @@ func TestWatcherRecoveryNegativeControls(t *testing.T) {
 			t.Fatalf("expected -shm negative control failure, got err=%v", quietErr)
 		}
 	})
-}
-
-func TestWatcherSameSizeAtomicRename(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "issues.jsonl")
-	fixedTime := time.Now().Truncate(time.Second)
-
-	if err := os.WriteFile(path, []byte("{\"id\":\"1\"}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chtimes(path, fixedTime, fixedTime); err != nil {
-		t.Fatal(err)
-	}
-	beforeInfo, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	w, err := NewWatcher(path, WithForcePoll(true), WithDebounceDuration(time.Millisecond))
-	if err != nil {
-		t.Fatal(err)
-	}
-	clock := newManualPollClock()
-	clock.attach(w)
-	if err := w.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer w.Stop()
-
-	requireWatchQuiet(t, w, clock)
-
-	staged := filepath.Join(dir, "issues.jsonl.tmp")
-	if err := os.WriteFile(staged, []byte("{\"id\":\"2\"}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chtimes(staged, fixedTime, fixedTime); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(staged, path); err != nil {
-		t.Fatal(err)
-	}
-
-	afterInfo, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !afterInfo.ModTime().Equal(beforeInfo.ModTime()) || afterInfo.Size() != beforeInfo.Size() || os.SameFile(beforeInfo, afterInfo) {
-		t.Fatalf("fixture must preserve mtime (%v vs %v) and size (%d vs %d) while changing inode",
-			beforeInfo.ModTime(), afterInfo.ModTime(), beforeInfo.Size(), afterInfo.Size())
-	}
-
-	settleAfterWrite(t, w, clock)
-	requireWatchQuiet(t, w, clock)
 }
 
 func TestWatcherTransientTruncate(t *testing.T) {

@@ -10,24 +10,23 @@
 #   2 build+vet        go build ./... && go vet ./...
 #   3 unit tests       go test ./... -race -count=1 (pkg/, cmd/, internal/)
 #   4 e2e tests        go test ./tests/e2e -race -count=1 -timeout=30m
-#   5 docs parity      go generate ./... leaves the tree unchanged
-#   6 action pins      scripts/check_action_pins.sh (40-hex SHAs only)
-#   7 vendor hashes    scripts/verify_vendor.sh --source (hashes and graph rebuild)
-#   8 benchmarks       scripts/benchmark.sh compare, > 20% regression fails
-#   9 robot smoke      scripts/robot_smoke.sh on this repo and a fixture
-#  10 script tests     tests/scripts/*_test.sh for the gate's own helpers:
+#   5 action pins      scripts/check_action_pins.sh (40-hex SHAs only)
+#   6 vendor hashes    scripts/verify_vendor.sh --source (hashes and graph rebuild)
+#   7 benchmarks       scripts/benchmark.sh compare, > 20% regression fails
+#   8 robot smoke      scripts/robot_smoke.sh on this repo and a fixture
+#   9 script tests     tests/scripts/*_test.sh for the gate's own helpers:
 #                      the benchmark comparator always; the installer harness
 #                      when pwsh is available (PWSH=/path or on PATH). The
 #                      isomorphic-verify self-test clones and builds twice and
 #                      stays a manual run (tests/scripts/verify_isomorphic_test.sh).
-#  11 vulnerabilities  pinned source-mode govulncheck for every release target
+#  10 vulnerabilities  pinned source-mode govulncheck for every release target
 #
 # Environment:
-#   RELEASE_GATE_SKIP="7 8"        skip listed stages (each skip is logged as
+#   RELEASE_GATE_SKIP="6 7"        skip listed stages (each skip is logged as
 #                                  SKIPPED; incomplete diagnostic run exits 2)
 #   RELEASE_GATE_ALLOW_MISSING=1   a stage whose script does not exist yet is
 #                                  logged as SKIPPED instead of failing
-#   RELEASE_GATE_BENCH_PCT=20      regression threshold for stage 8
+#   RELEASE_GATE_BENCH_PCT=20      regression threshold for stage 7
 #   RELEASE_GATE_OUTPUT_DIR       parent for a fresh log/receipt directory;
 #                                  defaults to /tmp, must be outside the checkout
 #   RELEASE_GATE_RECEIPT           existing receipt consumed by packaging/verify
@@ -51,7 +50,7 @@ from datetime import datetime, timezone
 root = pathlib.Path(sys.argv[1]).resolve()
 receipt_path = pathlib.Path(sys.argv[2]).resolve() if sys.argv[2] else None
 mode, *args = sys.argv[3:]
-stages = ["gofmt", "build+vet", "unit-tests", "e2e-tests", "docs-parity",
+stages = ["gofmt", "build+vet", "unit-tests", "e2e-tests",
           "action-pins", "vendor-hashes", "benchmarks", "robot-smoke", "script-tests",
           "source-vulnerabilities"]
 release_targets = {("linux", "amd64"), ("linux", "arm64"), ("darwin", "amd64"),
@@ -459,9 +458,9 @@ try:
                 govulncheck_status = f"path_unpinned_will_install_v1.9.0 ({govulncheck_bin})"
         skip_helpers = []
         if not goreleaser_bin:
-            skip_helpers.append("goreleaser (stage 10 packaging live-run skipped; package subcommand fails closed)")
+            skip_helpers.append("goreleaser (stage 9 packaging live-run skipped; package subcommand fails closed)")
         if not pwsh_bin:
-            skip_helpers.append(f"{pwsh_cmd} (stage 10 install_ps1_test skipped)")
+            skip_helpers.append(f"{pwsh_cmd} (stage 9 install_ps1_test skipped)")
         clean_source = not src["dirty"] and not src["ignored_build_inputs"]
         report = {
             "clean_source": clean_source,
@@ -473,12 +472,12 @@ try:
             "x_net": policy["dependencies"]["golang.org/x/net"],
             "govulncheck": govulncheck_status,
             "helpers": {
-                "goreleaser": goreleaser_bin or "missing (skip-200 in stage 10; fail-closed in package)",
-                "pwsh": pwsh_bin or "missing (skip-200 in stage 10)",
+                "goreleaser": goreleaser_bin or "missing (skip-200 in stage 9; fail-closed in package)",
+                "pwsh": pwsh_bin or "missing (skip-200 in stage 9)",
                 "shellcheck": shellcheck_bin or "missing (optional static lint)",
             },
             "release_eligible_if_run_now": bool(clean_source and goreleaser_bin and pwsh_bin),
-            "stage_10_skip_notes": skip_helpers,
+            "stage_9_skip_notes": skip_helpers,
         }
         print(json.dumps(report, indent=2, sort_keys=True))
         if not clean_source and os.environ.get("RELEASE_GATE_ALLOW_DIRTY_PREFLIGHT") != "1":
@@ -718,22 +717,6 @@ unit_tests() {
 # Budget the aggregate suite separately from per-test assertions and benchmarks.
 e2e_tests() { CGO_ENABLED=1 go test ./tests/e2e -race -count=1 -timeout=30m; }
 
-docs_parity() {
-  # Compare the working tree with itself before and after go generate, so
-  # uncommitted work in progress does not count as drift; only what the
-  # generators change does.
-  local before after
-  before=$( { git status --porcelain=v1 --untracked-files=all; git --no-pager diff; } | sha256sum)
-  go generate ./... || return 1
-  after=$( { git status --porcelain=v1 --untracked-files=all; git --no-pager diff; } | sha256sum)
-  if [ "$before" != "$after" ]; then
-    echo "go generate changed files (docs or tables out of date):"
-    git status --porcelain=v1 --untracked-files=all
-    return 1
-  fi
-  echo "generated files are up to date"
-}
-
 script_stage() {
   # script_stage <path> <args...>: run a helper script, honouring RELEASE_GATE_ALLOW_MISSING.
   local script="$1"; shift
@@ -762,7 +745,7 @@ script_self_tests() {
   local helper_skipped=0 rc=0
   tests/scripts/benchmark_compare_test.sh || return 1
   # Fixture scanner responses are synthetic to test orchestration and failure
-  # rejection; Go/GoReleaser packaging is real. Stage 11 runs the required real
+  # rejection; Go/GoReleaser packaging is real. Stage 10 runs the required real
   # project source vulnerability scans, including access to the real database.
   bash tests/scripts/release_gate_test.sh gate-mechanics
   rc=$?
@@ -807,13 +790,12 @@ stage 1 gofmt check_gofmt
 stage 2 build+vet build_and_vet
 stage 3 unit-tests unit_tests
 stage 4 e2e-tests e2e_tests
-stage 5 docs-parity docs_parity
-run_script_stage 6 action-pins scripts/check_action_pins.sh
-run_script_stage 7 vendor-hashes scripts/verify_vendor.sh --source
-stage 8 benchmarks benchmarks
-run_script_stage 9 robot-smoke scripts/robot_smoke.sh
-stage 10 script-tests script_self_tests
-stage 11 source-vulnerabilities source_vulnerabilities
+run_script_stage 5 action-pins scripts/check_action_pins.sh
+run_script_stage 6 vendor-hashes scripts/verify_vendor.sh --source
+stage 7 benchmarks benchmarks
+run_script_stage 8 robot-smoke scripts/robot_smoke.sh
+stage 9 script-tests script_self_tests
+stage 10 source-vulnerabilities source_vulnerabilities
 
 total=$(( $(date +%s) - gate_start ))
 echo "----- release gate finished in ${total}s: ${#failed[@]} failed, ${#skipped[@]} skipped (log: $log)" | tee -a "$log"

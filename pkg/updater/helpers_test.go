@@ -144,18 +144,18 @@ func TestValidateReleaseForUpdate(t *testing.T) {
 	newRelease := func() *Release {
 		return &Release{
 			TagName: "v99.0.0",
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0",
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0",
 			Assets: []Asset{
 				{
 					Name:               stableAssetName(),
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/" + stableAssetName(),
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/" + stableAssetName(),
 					Size:               1024,
 					Digest:             testSHA256DigestA,
 					State:              "uploaded",
 				},
 				{
 					Name:               "checksums.txt",
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/checksums.txt",
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/checksums.txt",
 					Size:               256,
 					Digest:             testSHA256DigestB,
 					State:              "uploaded",
@@ -176,7 +176,7 @@ func TestValidateReleaseForUpdate(t *testing.T) {
 		{"non-GitHub release page", func(release *Release) { release.HTMLURL = "https://example.com/release" }},
 		{"wrong release repository", func(release *Release) { release.HTMLURL = "https://github.com/other/repo/releases/tag/v99.0.0" }},
 		{"wrong release tag path", func(release *Release) {
-			release.HTMLURL = "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v98.0.0"
+			release.HTMLURL = "https://github.com/jonapich/beads_viewer/releases/tag/v98.0.0"
 		}},
 		{"missing platform asset", func(release *Release) { release.Assets = release.Assets[1:] }},
 		{"zero-sized platform asset", func(release *Release) { release.Assets[0].Size = 0 }},
@@ -186,7 +186,7 @@ func TestValidateReleaseForUpdate(t *testing.T) {
 			release.Assets[0].BrowserDownloadURL = "https://github.com/other/repo/releases/download/v99.0.0/" + stableAssetName()
 		}},
 		{"wrong platform tag path", func(release *Release) {
-			release.Assets[0].BrowserDownloadURL = "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v98.0.0/" + stableAssetName()
+			release.Assets[0].BrowserDownloadURL = "https://github.com/jonapich/beads_viewer/releases/download/v98.0.0/" + stableAssetName()
 		}},
 		{"missing platform digest", func(release *Release) { release.Assets[0].Digest = "" }},
 		{"malformed platform digest", func(release *Release) { release.Assets[0].Digest = "sha256:not-a-hash" }},
@@ -194,7 +194,7 @@ func TestValidateReleaseForUpdate(t *testing.T) {
 		{"empty checksum asset", func(release *Release) { release.Assets[1].Size = 0 }},
 		{"oversized checksum asset", func(release *Release) { release.Assets[1].Size = maxChecksumManifestBytes + 1 }},
 		{"wrong checksum tag path", func(release *Release) {
-			release.Assets[1].BrowserDownloadURL = "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v98.0.0/checksums.txt"
+			release.Assets[1].BrowserDownloadURL = "https://github.com/jonapich/beads_viewer/releases/download/v98.0.0/checksums.txt"
 		}},
 		{"missing checksum digest", func(release *Release) { release.Assets[1].Digest = "" }},
 	}
@@ -219,7 +219,7 @@ func TestValidateReleaseForUpdate(t *testing.T) {
 func TestValidateReleaseIdentityRejectsTagWhitespace(t *testing.T) {
 	release := &Release{
 		TagName: " v99.0.0 ",
-		HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/%20v99.0.0%20",
+		HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/%20v99.0.0%20",
 	}
 	if err := validateReleaseIdentity(release); err == nil {
 		t.Fatal("release tag with surrounding whitespace was accepted")
@@ -249,7 +249,7 @@ func TestCheckedPlatformAssetRequiresDigestAgreement(t *testing.T) {
 		Assets: []Asset{
 			{
 				Name:               assetName,
-				BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/" + assetName,
+				BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/" + assetName,
 				Size:               1024,
 				Digest:             testSHA256DigestA,
 				State:              "uploaded",

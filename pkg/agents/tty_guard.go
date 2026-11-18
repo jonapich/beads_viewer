@@ -64,13 +64,6 @@ var canonicalRobotFlags = []string{
 // exit before launching the interactive Bubble Tea TUI.
 var canonicalHeadlessFlags = []string{
 	"agent-brief",
-	"agents-add",
-	"agents-check",
-	"agents-dry-run",
-	"agents-force",
-	"agents-remove",
-	"agents-reset",
-	"agents-update",
 	"baseline-info",
 	"check-drift",
 	"check-update",
@@ -85,7 +78,6 @@ var canonicalHeadlessFlags = []string{
 	"feedback-ignore",
 	"feedback-reset",
 	"feedback-show",
-	"generate-docs",
 	"help",
 	"hooks-info",
 	"init-drift",
@@ -129,15 +121,6 @@ var nonInteractiveSubcommandSet = map[string]struct{}{
 	"triage": {}, "upgrade": {}, "version": {}, "what-if": {}, "whatif": {},
 }
 
-func isStructuredFormatValue(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "json", "toon":
-		return true
-	default:
-		return false
-	}
-}
-
 // CanonicalRobotFlagNames returns a sorted copy of the primary robot command
 // flag names suppressed by the early TTY guard.
 func CanonicalRobotFlagNames() []string {
@@ -173,15 +156,6 @@ func init() {
 	}
 	if env.NoBackgroundQuery.Get() == "" {
 		_ = os.Setenv(env.NoBackgroundQuery.Name, "1")
-	}
-}
-
-func isPositiveBoolFlagValue(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "true", "1", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -228,14 +202,6 @@ func shouldSuppressTTYQueries(args []string, envRobot, envTest bool) bool {
 		if arg == "-h" || arg == "-v" {
 			return true
 		}
-		if (arg == "--output" || arg == "-o" || arg == "--format" || arg == "-f") && i+1 < len(args) {
-			if isStructuredFormatValue(args[i+1]) {
-				return true
-			}
-			i++
-			continue
-		}
-
 		flagToken := strings.TrimLeft(arg, "-")
 		flagName := flagToken
 		flagVal := ""
@@ -264,20 +230,6 @@ func shouldSuppressTTYQueries(args []string, envRobot, envTest bool) bool {
 				continue
 			}
 			return true
-		}
-		switch lowerName {
-		case "json", "toon":
-			// Both positive and negated boolean forms (--json=false, --toon=false,
-			// --json=0, --toon=0) rewrite to structured JSON robot output rather
-			// than launching the TUI, so TTY queries must be suppressed for all
-			// valid boolean alias forms.
-			if !hasEq || isPositiveBoolFlagValue(flagVal) || isNegatedBoolFlagValue(flagVal) {
-				return true
-			}
-		case "format", "f", "output", "o":
-			if hasEq && isStructuredFormatValue(flagVal) {
-				return true
-			}
 		}
 	}
 

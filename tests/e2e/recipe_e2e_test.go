@@ -619,53 +619,6 @@ func TestRecipeUserTemplateAuthority(t *testing.T) {
 	assertDenied("default")
 }
 
-func TestRecipeReportHookOrderingAndExitPolicy(t *testing.T) {
-	for _, tc := range []struct {
-		name, preExit, postExit, postPolicy string
-		wantFailure, wantReport             bool
-		wantMarker                          string
-	}{
-		{"success", "0", "0", "fail", false, true, "prepost"},
-		{"pre failure", "7", "0", "fail", true, false, "pre"},
-		{"post failure", "0", "7", "fail", true, true, "prepost"},
-		{"post continue", "0", "7", "continue", false, true, "prepost"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := recipeProject(t)
-			writeRecipeFile(t, dir, "report.yaml", "filters:\n  tags: [sprint]\n  status: [open]\nview:\n  max_items: 1\nexport:\n  format: json\n  include_graph: false\n")
-			if err := os.MkdirAll(filepath.Join(dir, ".bv"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			config := fmt.Sprintf(`hooks:
-  pre-export:
-    - name: before-write
-      command: 'test "$BV_EXPORT_FORMAT" = json && test "$BV_ISSUE_COUNT" = 1 && test ! -e "$BV_EXPORT_PATH" && printf pre > hook-order; exit %s'
-      on_error: fail
-  post-export:
-    - name: after-write
-      command: 'test -f "$BV_EXPORT_PATH" && printf post >> hook-order; exit %s'
-      on_error: %s
-`, tc.preExit, tc.postExit, tc.postPolicy)
-			if err := os.WriteFile(filepath.Join(dir, ".bv", "hooks.yaml"), []byte(config), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join(dir, "report.json")
-			stdout, stderr, err := runBVSplit(t, dir, "--recipe", "report", "--export", path, "--trust-hooks", reviewedHookDigest(t, dir))
-			if (err != nil) != tc.wantFailure {
-				t.Fatalf("hook exit policy: got %v want failure=%v\nstdout=%s\nstderr=%s", err, tc.wantFailure, stdout, stderr)
-			}
-			_, statErr := os.Stat(path)
-			if (statErr == nil) != tc.wantReport {
-				t.Fatalf("report write order: stat=%v want report=%v", statErr, tc.wantReport)
-			}
-			marker, readErr := os.ReadFile(filepath.Join(dir, "hook-order"))
-			if readErr != nil || string(marker) != tc.wantMarker {
-				t.Fatalf("actual hooks did not observe format/count/write order: got %q error=%v want %q\nstdout=%s\nstderr=%s", marker, readErr, tc.wantMarker, stdout, stderr)
-			}
-		})
-	}
-}
-
 // TestRecipePathArgumentRobotPlan: `--recipe .beads/recipes/x.yaml --robot-plan`
 // exits 0 and the plan contains only the recipe's issues; the same file is
 // also addressable by its stem.

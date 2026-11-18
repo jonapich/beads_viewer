@@ -43,6 +43,7 @@ func withThemeConfig(t *testing.T, body string) string {
 		t.Fatalf("write config.yaml: %v", err)
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 	return home
@@ -80,7 +81,9 @@ func TestLoadThemeFromUserConfig(t *testing.T) {
 	}
 
 	// No config file at all.
-	t.Setenv("HOME", t.TempDir())
+	emptyHome := t.TempDir()
+	t.Setenv("HOME", emptyHome)
+	t.Setenv("USERPROFILE", emptyHome)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 	if v, ok := loadThemeFromUserConfig(); ok {
@@ -113,7 +116,9 @@ func TestLoadBackgroundModeFromUserConfig(t *testing.T) {
 	}
 
 	t.Run("missing file", func(t *testing.T) {
-		t.Setenv("HOME", t.TempDir())
+		emptyHome := t.TempDir()
+		t.Setenv("HOME", emptyHome)
+		t.Setenv("USERPROFILE", emptyHome)
 		t.Setenv("XDG_CONFIG_HOME", "")
 		t.Setenv("BV_NO_SAVED_CONFIG", "")
 		if got, found := loadBackgroundModeFromUserConfig(); got || found {
@@ -168,7 +173,9 @@ func TestEffectiveThemePreference(t *testing.T) {
 	}
 
 	// Nothing anywhere: empty (auto-detect).
-	t.Setenv("HOME", t.TempDir())
+	emptyHome := t.TempDir()
+	t.Setenv("HOME", emptyHome)
+	t.Setenv("USERPROFILE", emptyHome)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 	t.Setenv("BV_THEME", "")

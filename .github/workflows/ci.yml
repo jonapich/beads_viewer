@@ -26,13 +26,13 @@ jobs:
       run: bash scripts/release_gate.sh verify-toolchain
         
     # The release gate is the single source of truth for "is this shippable":
-    # gofmt, build+vet, unit tests with -race, e2e with -race, docs parity,
+    # gofmt, build+vet, unit tests with -race, e2e with -race,
     # action pins, vendor hashes, robot smoke. Local releases run the same
-    # script, so CI and a developer's machine cannot disagree. Stage 8
+    # script, so CI and a developer's machine cannot disagree. Stage 7
     # (benchmark comparison) needs benchstat and a refreshed baseline and is
     # skipped here until that lands.
     - name: Release gate
-      run: RELEASE_GATE_SKIP="8" RELEASE_GATE_ALLOW_MISSING=1 scripts/release_gate.sh
+      run: RELEASE_GATE_SKIP="7" RELEASE_GATE_ALLOW_MISSING=1 scripts/release_gate.sh
 
     - name: Upload release gate log
       if: always()

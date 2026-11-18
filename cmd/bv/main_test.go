@@ -422,7 +422,7 @@ func TestRobotFlagsOutputJSON(t *testing.T) {
 	}
 
 	// Build a temporary bv binary using the repo module
-	bin := filepath.Join(tmpDir, "bv")
+	bin := filepath.Join(tmpDir, exeName("bv"))
 	build := exec.Command("go", "build", "-C", repoRoot(t), "-o", bin, "./cmd/bv")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("failed to build bv: %v\n%s", err, out)
@@ -473,7 +473,6 @@ func TestRobotCPUProfileFinalizedBeforeExit(t *testing.T) {
 			exe,
 			"--cpu-profile", profilePath,
 			"--robot-insights",
-			"--format=json",
 		)
 		if err != nil {
 			t.Fatalf("profiled robot command failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
@@ -508,7 +507,6 @@ func TestRobotCPUProfileFinalizedBeforeExit(t *testing.T) {
 			exe,
 			"--cpu-profile", profileDir,
 			"--robot-insights",
-			"--format=json",
 		)
 		if err == nil {
 			t.Fatalf("invalid CPU profile destination unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
@@ -541,21 +539,21 @@ func TestCLIFlagCompatibility(t *testing.T) {
 	}
 
 	t.Run("double-dash robot flag", func(t *testing.T) {
-		out := run("--robot-next", "--format", "json")
+		out := run("--robot-next")
 		if !json.Valid([]byte(out)) {
 			t.Fatalf("expected JSON output for long flags, got %q", out)
 		}
 	})
 
 	t.Run("single-dash compatibility", func(t *testing.T) {
-		out := run("-robot-next", "-format", "json")
+		out := run("-robot-next")
 		if !json.Valid([]byte(out)) {
 			t.Fatalf("expected JSON output for single-dash long flags, got %q", out)
 		}
 	})
 
 	t.Run("short aliases", func(t *testing.T) {
-		out := run("--robot-insights", "-l", "backend", "-f", "json")
+		out := run("--robot-insights", "-l", "backend")
 		if !json.Valid([]byte(out)) {
 			t.Fatalf("expected JSON output for short aliases, got %q", out)
 		}
@@ -568,9 +566,7 @@ func TestCLIFlagCompatibility(t *testing.T) {
 			"Search & Filters:",
 			"Robot & Planning Flags:",
 			"Export & Reporting:",
-			"Agent File Management:",
 			"--robot-capabilities",
-			"-f, --format",
 			"-l, --label",
 			"-r, --recipe",
 		} {
@@ -598,10 +594,10 @@ func TestUnknownFlagErrorSuggestsNearestFlag(t *testing.T) {
 	}{
 		{
 			name: "robot flag typo",
-			args: []string{"--robot-triag", "--json"},
+			args: []string{"--robot-triag"},
 			want: []string{
 				"unknown flag: --robot-triag",
-				"Did you mean `bv --robot-triage --json`?",
+				"Did you mean `bv --robot-triage`?",
 				"bv --robot-help",
 			},
 		},
@@ -729,38 +725,38 @@ func TestUnknownCommandErrorSuggestsNearestCommand(t *testing.T) {
 	}{
 		{
 			name: "canonical robot command typo",
-			args: []string{"robot-triag", "--json"},
+			args: []string{"robot-triag"},
 			want: []string{
 				`unknown command "robot-triag" for "bv"`,
-				"Did you mean `bv robot-triage --json`?",
-				"Canonical flag form: `bv --robot-triage --format json`.",
-				"bv robot-capabilities --json",
+				"Did you mean `bv robot-triage`?",
+				"Canonical flag form: `bv --robot-triage`.",
+				"bv robot-capabilities",
 			},
 		},
 		{
 			name: "canonical value command typo preserves args",
-			args: []string{"robot-relatd", "A", "--json"},
+			args: []string{"robot-relatd", "A"},
 			want: []string{
 				`unknown command "robot-relatd" for "bv"`,
-				"Did you mean `bv robot-related A --json`?",
-				"Canonical flag form: `bv --robot-related A --format json`.",
+				"Did you mean `bv robot-related A`?",
+				"Canonical flag form: `bv --robot-related A`.",
 			},
 		},
 		{
 			name: "canonical value command typo quotes shell metacharacters",
-			args: []string{"robot-relatd", "A>B", "--json"},
+			args: []string{"robot-relatd", "A>B"},
 			want: []string{
 				`unknown command "robot-relatd" for "bv"`,
-				"Did you mean `bv robot-related 'A>B' --json`?",
-				"Canonical flag form: `bv --robot-related 'A>B' --format json`.",
+				"Did you mean `bv robot-related 'A>B'`?",
+				"Canonical flag form: `bv --robot-related 'A>B'`.",
 			},
 		},
 		{
 			name: "agent alias typo preserves args",
-			args: []string{"schem", "triage", "--json"},
+			args: []string{"schem", "triage"},
 			want: []string{
 				`unknown command "schem" for "bv"`,
-				"Did you mean `bv schema triage --json`?",
+				"Did you mean `bv schema triage`?",
 			},
 		},
 	}
@@ -816,144 +812,94 @@ func TestAgentIntentArgRewrite(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "json defaults to triage",
-			args: []string{"--json"},
-			want: []string{"--robot-triage", "--format", "json"},
-		},
-		{
-			name: "json false still avoids tui",
-			args: []string{"--json=false"},
-			want: []string{"--robot-triage", "--format=json"},
-		},
-		{
-			name: "toon defaults to triage",
-			args: []string{"--toon"},
-			want: []string{"--robot-triage", "--format", "toon"},
-		},
-		{
-			name: "toon false keeps structured output without forcing toon",
-			args: []string{"--toon=false"},
-			want: []string{"--robot-triage", "--format=json"},
-		},
-		{
-			name: "output toon defaults to triage",
-			args: []string{"--output=toon"},
-			want: []string{"--robot-triage", "--format=toon"},
-		},
-		{
 			name: "triage subcommand",
-			args: []string{"triage", "--json", "--name", "backend", "--limit", "3"},
-			want: []string{"--robot-triage", "--format", "json", "--label", "backend", "--robot-max-results", "3"},
+			args: []string{"triage", "--name", "backend", "--limit", "3"},
+			want: []string{"--robot-triage", "--label", "backend", "--robot-max-results", "3"},
 		},
 		{
 			name: "canonical robot command name",
-			args: []string{"robot-triage", "--json"},
-			want: []string{"--robot-triage", "--format", "json"},
+			args: []string{"robot-triage"},
+			want: []string{"--robot-triage"},
 		},
 		{
-			name: "canonical robot help with json becomes docs",
-			args: []string{"robot-help", "--json"},
-			want: []string{"--robot-docs", "guide", "--format", "json"},
+			name: "canonical robot help command name",
+			args: []string{"robot-help"},
+			want: []string{"--robot-help"},
 		},
 		{
 			name: "canonical grouped triage command name",
-			args: []string{"robot-triage-by-track", "--json", "--limit=2"},
-			want: []string{"--robot-triage-by-track", "--format", "json", "--robot-max-results=2"},
+			args: []string{"robot-triage-by-track", "--limit=2"},
+			want: []string{"--robot-triage-by-track", "--robot-max-results=2"},
 		},
 		{
 			name: "schema subcommand",
-			args: []string{"schema", "triage", "--json"},
-			want: []string{"--robot-schema", "--schema-command", "robot-triage", "--format", "json"},
+			args: []string{"schema", "triage"},
+			want: []string{"--robot-schema", "--schema-command", "robot-triage"},
 		},
 		{
 			name: "canonical schema command name",
-			args: []string{"robot-schema", "triage", "--json"},
-			want: []string{"--robot-schema", "--schema-command", "robot-triage", "--format", "json"},
-		},
-		{
-			name: "schema accepts output alias before command",
-			args: []string{"schema", "--json", "triage"},
-			want: []string{"--robot-schema", "--schema-command", "robot-triage", "--format", "json"},
+			args: []string{"robot-schema", "triage"},
+			want: []string{"--robot-schema", "--schema-command", "robot-triage"},
 		},
 		{
 			name: "schema normalizes mixed case command name",
-			args: []string{"schema", "Robot-Triage", "--json"},
-			want: []string{"--robot-schema", "--schema-command", "robot-triage", "--format", "json"},
+			args: []string{"schema", "Robot-Triage"},
+			want: []string{"--robot-schema", "--schema-command", "robot-triage"},
 		},
 		{
 			name: "search subcommand",
-			args: []string{"search", "login", "oauth", "--json", "--limit=5"},
-			want: []string{"--search", "login oauth", "--robot-search", "--format", "json", "--search-limit=5"},
+			args: []string{"search", "login", "oauth", "--limit=5"},
+			want: []string{"--search", "login oauth", "--robot-search", "--search-limit=5"},
 		},
 		{
 			name: "search accepts limit before query",
-			args: []string{"search", "--limit", "5", "login", "oauth", "--json"},
-			want: []string{"--search", "login oauth", "--robot-search", "--search-limit", "5", "--format", "json"},
-		},
-		{
-			name: "search accepts output alias between query terms",
-			args: []string{"search", "login", "--json", "oauth"},
-			want: []string{"--search", "login oauth", "--robot-search", "--format", "json"},
+			args: []string{"search", "--limit", "5", "login", "oauth"},
+			want: []string{"--search", "login oauth", "--robot-search", "--search-limit", "5"},
 		},
 		{
 			name: "canonical search command name",
-			args: []string{"robot-search", "login", "oauth", "--json", "--limit", "5"},
-			want: []string{"--search", "login oauth", "--robot-search", "--format", "json", "--search-limit", "5"},
+			args: []string{"robot-search", "login", "oauth", "--limit", "5"},
+			want: []string{"--search", "login oauth", "--robot-search", "--search-limit", "5"},
 		},
 		{
 			name: "graph format positional",
-			args: []string{"graph", "mermaid", "--output", "json"},
-			want: []string{"--robot-graph", "--graph-format", "mermaid", "--format", "json"},
+			args: []string{"graph", "mermaid"},
+			want: []string{"--robot-graph", "--graph-format", "mermaid"},
 		},
 		{
 			name: "canonical graph command name",
-			args: []string{"robot-graph", "mermaid", "--json"},
-			want: []string{"--robot-graph", "--graph-format", "mermaid", "--format", "json"},
-		},
-		{
-			name: "graph accepts output alias before format",
-			args: []string{"graph", "--json", "mermaid"},
-			want: []string{"--robot-graph", "--graph-format", "mermaid", "--format", "json"},
-		},
-		{
-			name: "related accepts output alias before target",
-			args: []string{"related", "--json", "bv-123"},
-			want: []string{"--robot-related", "bv-123", "--format", "json"},
+			args: []string{"robot-graph", "mermaid"},
+			want: []string{"--robot-graph", "--graph-format", "mermaid"},
 		},
 		{
 			name: "canonical value command name",
-			args: []string{"robot-related", "bv-123", "--json", "--limit=2"},
-			want: []string{"--robot-related", "bv-123", "--format", "json", "--related-max-results=2"},
+			args: []string{"robot-related", "bv-123", "--limit=2"},
+			want: []string{"--robot-related", "bv-123", "--related-max-results=2"},
 		},
 		{
-			name: "missing value command keeps required flag after output alias",
-			args: []string{"robot-related", "--json"},
-			want: []string{"--format", "json", "--robot-related"},
+			name: "missing value command keeps required flag",
+			args: []string{"robot-related"},
+			want: []string{"--robot-related"},
 		},
 		{
 			name: "missing value command keeps required flag after native options",
-			args: []string{"robot-confirm-correlation", "--correlation-by", "agent", "--json"},
-			want: []string{"--correlation-by", "agent", "--format", "json", "--robot-confirm-correlation"},
+			args: []string{"robot-confirm-correlation", "--correlation-by", "agent"},
+			want: []string{"--correlation-by", "agent", "--robot-confirm-correlation"},
 		},
 		{
 			name: "canonical diff command name",
-			args: []string{"robot-diff", "HEAD~1", "--json"},
-			want: []string{"--robot-diff", "--diff-since", "HEAD~1", "--format", "json"},
+			args: []string{"robot-diff", "HEAD~1"},
+			want: []string{"--robot-diff", "--diff-since", "HEAD~1"},
 		},
 		{
 			name: "canonical drift command name includes required check",
-			args: []string{"robot-drift", "--json"},
-			want: []string{"--check-drift", "--robot-drift", "--format", "json"},
-		},
-		{
-			name: "docs accepts output alias before topic",
-			args: []string{"docs", "--json", "guide"},
-			want: []string{"--robot-docs", "guide", "--format", "json"},
+			args: []string{"robot-drift"},
+			want: []string{"--check-drift", "--robot-drift"},
 		},
 		{
 			name: "canonical docs command name",
-			args: []string{"robot-docs", "guide", "--json"},
-			want: []string{"--robot-docs", "guide", "--format", "json"},
+			args: []string{"robot-docs", "guide"},
+			want: []string{"--robot-docs", "guide"},
 		},
 		{
 			name: "upgrade maps to --update",
@@ -984,11 +930,6 @@ func TestAgentIntentArgRewrite(t *testing.T) {
 			name: "upgrade --dry-run maps to --update-dry-run",
 			args: []string{"upgrade", "--dry-run"},
 			want: []string{"--update-dry-run"},
-		},
-		{
-			name: "update dry-run stays non-robot with structured-output alias",
-			args: []string{"--update-dry-run", "--json"},
-			want: []string{"--update-dry-run", "--format", "json"},
 		},
 		{
 			name: "upgrade --rollback maps to --rollback",
@@ -1045,7 +986,7 @@ func TestReadUpdateConfirmation(t *testing.T) {
 func TestAgentIntentValueCommandMissingTargetFailsBeforeTUI(t *testing.T) {
 	exe := buildTestBinary(t)
 
-	stdout, stderr, err := runCommandWithTimeout(t, t.TempDir(), exe, "robot-related", "--json")
+	stdout, stderr, err := runCommandWithTimeout(t, t.TempDir(), exe, "robot-related")
 	if err == nil {
 		t.Fatalf("expected missing value command to fail\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -1065,7 +1006,7 @@ func TestAgentIntentValueCommandMissingTargetFailsBeforeTUI(t *testing.T) {
 	}
 }
 
-func TestAgentIntentAliasesOutputJSON(t *testing.T) {
+func TestAgentIntentAliasesEmitJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	beads := `{"id":"A","title":"Root","status":"open","priority":1,"issue_type":"task","labels":["backend"]}
 {"id":"B","title":"Blocked","status":"blocked","priority":2,"issue_type":"task","dependencies":[{"depends_on_id":"A","type":"blocks"}]}`
@@ -1078,26 +1019,18 @@ func TestAgentIntentAliasesOutputJSON(t *testing.T) {
 
 	exe := buildTestBinary(t)
 	for _, args := range [][]string{
-		{"--json"},
-		{"--robot-help", "--json"},
-		{"--robot-help", "--format", "json"},
-		{"robot-help", "--json"},
-		{"robot-triage", "--json"},
-		{"triage", "--json"},
-		{"robot-capabilities", "--json"},
-		{"capabilities", "--json"},
-		{"robot-docs", "guide", "--json"},
-		{"docs", "guide", "--json"},
-		{"docs", "--json", "guide"},
-		{"robot-schema", "triage", "--json"},
-		{"schema", "triage", "--json"},
-		{"schema", "--json", "triage"},
-		{"schema", "Robot-Triage", "--json"},
-		{"robot-graph", "mermaid", "--json"},
-		{"graph", "--json", "mermaid"},
-		{"--name", "backend", "--json"},
-		{"--json=false"},
-		{"--toon=false"},
+		{"robot-triage"},
+		{"triage"},
+		{"triage", "--name", "backend"},
+		{"robot-capabilities"},
+		{"capabilities"},
+		{"robot-docs", "guide"},
+		{"docs", "guide"},
+		{"robot-schema", "triage"},
+		{"schema", "triage"},
+		{"schema", "Robot-Triage"},
+		{"robot-graph", "mermaid"},
+		{"graph", "mermaid"},
 	} {
 		stdout, stderr, err := runCommandWithTimeout(t, tmpDir, exe, args...)
 		if err != nil {
@@ -1147,17 +1080,17 @@ func TestRobotCapabilitiesManifest(t *testing.T) {
 			t.Fatalf("capabilities missing command %q", name)
 		}
 	}
-	requireString(t, seen["robot-help"]["preferred_invocation"].(string), "bv robot-help --json")
-	requireString(t, seen["robot-triage"]["preferred_invocation"].(string), "bv robot-triage --json")
-	requireContainsString(t, seen["robot-triage"]["accepted_invocations"].([]string), "bv --robot-triage --format json")
-	requireContainsString(t, seen["robot-related"]["accepted_invocations"].([]string), "bv robot-related ISSUE_ID --json")
+	requireString(t, seen["robot-help"]["preferred_invocation"].(string), "bv robot-help")
+	requireString(t, seen["robot-triage"]["preferred_invocation"].(string), "bv robot-triage")
+	requireContainsString(t, seen["robot-triage"]["accepted_invocations"].([]string), "bv --robot-triage")
+	requireContainsString(t, seen["robot-related"]["accepted_invocations"].([]string), "bv robot-related ISSUE_ID")
 	if seen["robot-related"]["needs_git"] != true {
 		t.Fatalf("robot-related needs_git = %v, want true", seen["robot-related"]["needs_git"])
 	}
 	if seen["robot-correlation-stats"]["needs_git"] != false {
 		t.Fatalf("robot-correlation-stats needs_git = %v, want false", seen["robot-correlation-stats"]["needs_git"])
 	}
-	if seen["robot-sprint-show"]["preferred_invocation"] != "bv robot-sprint-show SPRINT_ID --json" {
+	if seen["robot-sprint-show"]["preferred_invocation"] != "bv robot-sprint-show SPRINT_ID" {
 		t.Fatalf("robot-sprint-show preferred_invocation = %v, want SPRINT_ID example", seen["robot-sprint-show"]["preferred_invocation"])
 	}
 	if seen["robot-sprint-show"]["needs_sprint"] != true {
@@ -1179,11 +1112,11 @@ func TestRobotCapabilitiesManifest(t *testing.T) {
 		t.Fatalf("robot-explain-correlation mutates_state = %v, want false", seen["robot-explain-correlation"]["mutates_state"])
 	}
 	requireContainsString(t, seen["robot-forecast"]["params"].([]string), "--forecast-sprint SPRINT_ID")
-	requireString(t, seen["robot-confirm-correlation"]["preferred_invocation"].(string), "bv robot-confirm-correlation deadbeef:ISSUE_ID --correlation-by agent --json")
-	requireString(t, seen["robot-search"]["preferred_invocation"].(string), `bv robot-search "login oauth" --json`)
-	requireContainsString(t, seen["robot-search"]["accepted_invocations"].([]string), `bv --search "login oauth" --robot-search --format json`)
-	requireString(t, seen["robot-diff"]["preferred_invocation"].(string), "bv robot-diff HEAD~1 --json")
-	requireContainsString(t, seen["robot-diff"]["accepted_invocations"].([]string), "bv --robot-diff --diff-since HEAD~1 --format json")
+	requireString(t, seen["robot-confirm-correlation"]["preferred_invocation"].(string), "bv robot-confirm-correlation deadbeef:ISSUE_ID --correlation-by agent")
+	requireString(t, seen["robot-search"]["preferred_invocation"].(string), `bv robot-search "login oauth"`)
+	requireContainsString(t, seen["robot-search"]["accepted_invocations"].([]string), `bv --search "login oauth" --robot-search`)
+	requireString(t, seen["robot-diff"]["preferred_invocation"].(string), "bv robot-diff HEAD~1")
+	requireContainsString(t, seen["robot-diff"]["accepted_invocations"].([]string), "bv --robot-diff --diff-since HEAD~1")
 	for _, command := range commands {
 		for _, key := range []string{"flag", "preferred_invocation"} {
 			value, _ := command[key].(string)
@@ -1232,8 +1165,8 @@ func TestRobotDocsPreferSafeAgentCommandExamples(t *testing.T) {
 	if !ok {
 		t.Fatalf("quickstart has unexpected type %T", guide["quickstart"])
 	}
-	requireContainsString(t, quickstart, "bv robot-triage --json           # Full triage with recommendations")
-	requireContainsString(t, quickstart, "bv robot-capabilities --json     # Machine-readable command manifest")
+	requireContainsString(t, quickstart, "bv robot-triage           # Full triage with recommendations")
+	requireContainsString(t, quickstart, "bv robot-capabilities     # Machine-readable command manifest")
 	dataSource, ok := guide["data_source"].(string)
 	if !ok {
 		t.Fatalf("data_source has unexpected type %T", guide["data_source"])
@@ -1255,12 +1188,11 @@ func TestRobotDocsPreferSafeAgentCommandExamples(t *testing.T) {
 			t.Fatalf("robot docs example auto-executes shell output: %s", command)
 		}
 	}
-	requireContainsString(t, commands, "bv robot-next --json | jq -r '.claim_command'")
-	requireContainsString(t, commands, `bv robot-search "authentication" --json`)
-	requireContainsString(t, commands, "BV_OUTPUT_FORMAT=toon bv robot-triage")
+	requireContainsString(t, commands, "bv robot-next | jq -r '.claim_command'")
+	requireContainsString(t, commands, `bv robot-search "authentication"`)
 	for _, command := range commands {
-		if strings.Contains(command, "BV_OUTPUT_FORMAT=toon") && strings.Contains(command, "--json") {
-			t.Fatalf("env default example is overridden by --json: %s", command)
+		if strings.Contains(strings.ToLower(command), "toon") {
+			t.Fatalf("robot docs example references removed TOON format: %s", command)
 		}
 	}
 }
@@ -1268,6 +1200,9 @@ func TestRobotDocsPreferSafeAgentCommandExamples(t *testing.T) {
 func TestRobotSchemaCoversDocumentedRobotCommands(t *testing.T) {
 	schemas := generateRobotSchemas()
 	for name := range robotCommandDocs() {
+		if name == "robot-help" {
+			continue // plain-text output, no JSON schema
+		}
 		if _, ok := schemas.Commands[name]; !ok {
 			t.Fatalf("schema missing documented command %q", name)
 		}
@@ -1317,7 +1252,7 @@ func TestRobotSchemaCommandSchemaMatchesHandlerOutputs(t *testing.T) {
 			t.Fatalf("robot-schema schema missing property %q", name)
 		}
 	}
-	for _, stale := range []string{"output_format", "version"} {
+	for _, stale := range []string{"version"} {
 		if properties[stale] != nil {
 			t.Fatalf("robot-schema schema still exposes stale generic property %q", stale)
 		}
@@ -1332,7 +1267,6 @@ func TestRobotDocsSchemaMatchesTopicOutputs(t *testing.T) {
 	properties := requireRobotSchemaProperties(t, schemas, "robot-docs")
 	for _, name := range []string{
 		"generated_at",
-		"output_format",
 		"version",
 		"topic",
 		"guide",
@@ -1354,26 +1288,11 @@ func TestRobotDocsSchemaMatchesTopicOutputs(t *testing.T) {
 	}
 }
 
-func TestRobotHelpSchemaMatchesStructuredHelpAlias(t *testing.T) {
-	schemas := generateRobotSchemas()
-	properties := requireRobotSchemaProperties(t, schemas, "robot-help")
-	for _, name := range []string{"generated_at", "output_format", "version", "topic", "guide"} {
-		if properties[name] == nil {
-			t.Fatalf("robot-help schema missing property %q", name)
-		}
-	}
-	for _, stale := range []string{"data_hash", "commands", "examples", "environment_variables", "exit_codes"} {
-		if properties[stale] != nil {
-			t.Fatalf("robot-help schema still exposes stale or unrelated property %q", stale)
-		}
-	}
-}
-
 func TestRobotSearchSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-search")
 	for _, name := range []string{
-		"generated_at", "data_hash", "output_format", "version",
+		"generated_at", "data_hash", "version",
 		"query", "provider", "model", "dim", "index_path", "index",
 		"loaded", "limit", "mode", "preset", "weights", "results", "usage_hints",
 	} {
@@ -1398,7 +1317,7 @@ func TestRobotHistorySchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-history")
 	for _, name := range []string{
-		"generated_at", "data_hash", "output_format", "version",
+		"generated_at", "data_hash", "version",
 		"git_range", "latest_commit_sha", "stats", "histories", "commit_index",
 	} {
 		if properties[name] == nil {
@@ -1411,7 +1330,7 @@ func TestRobotCorrelationStatsSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-correlation-stats")
 	for _, name := range []string{
-		"generated_at", "output_format", "version",
+		"generated_at", "version",
 		"total_feedback", "confirmed", "rejected", "ignored",
 		"accuracy_rate", "avg_confirm_conf", "avg_reject_conf",
 	} {
@@ -1448,7 +1367,7 @@ func TestRobotCorrelationStatsOutputIncludesEnvelope(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("robot-correlation-stats JSON: %v\n%s", err, out)
 	}
-	for _, name := range []string{"generated_at", "output_format", "version", "total_feedback", "confirmed", "rejected", "ignored"} {
+	for _, name := range []string{"generated_at", "version", "total_feedback", "confirmed", "rejected", "ignored"} {
 		if payload[name] == nil {
 			t.Fatalf("robot-correlation-stats output missing %q: %#v", name, payload)
 		}
@@ -1462,7 +1381,7 @@ func TestRobotOrphansSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-orphans")
 	for _, name := range []string{
-		"generated_at", "data_hash", "output_format", "version",
+		"generated_at", "data_hash", "version",
 		"git_range", "stats", "candidates", "by_bead",
 	} {
 		if properties[name] == nil {
@@ -1590,7 +1509,7 @@ func TestRobotFileWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.command, func(t *testing.T) {
 			properties := requireRobotSchemaProperties(t, schemas, tc.command)
-			for _, name := range []string{"generated_at", "data_hash", "output_format", "version"} {
+			for _, name := range []string{"generated_at", "data_hash", "version"} {
 				if properties[name] == nil {
 					t.Fatalf("%s schema missing envelope property %q", tc.command, name)
 				}
@@ -1648,7 +1567,7 @@ func TestRobotRelationshipWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 
 	relatedProps := requireRobotSchemaProperties(t, schemas, "robot-related")
 	for _, name := range []string{
-		"generated_at", "data_hash", "output_format", "version",
+		"generated_at", "data_hash", "version",
 		"target_bead_id", "target_title", "file_overlap", "commit_overlap",
 		"dependency_cluster", "concurrent", "total_related",
 	} {
@@ -1668,7 +1587,7 @@ func TestRobotRelationshipWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 	}
 
 	blockerProps := requireRobotSchemaProperties(t, schemas, "robot-blocker-chain")
-	for _, name := range []string{"generated_at", "data_hash", "output_format", "version", "result"} {
+	for _, name := range []string{"generated_at", "data_hash", "version", "result"} {
 		if blockerProps[name] == nil {
 			t.Fatalf("robot-blocker-chain schema missing top-level property %q", name)
 		}
@@ -1691,7 +1610,7 @@ func TestRobotRelationshipWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 	}
 
 	whatIfProps := requireRobotSchemaProperties(t, schemas, "robot-whatif")
-	for _, name := range []string{"generated_at", "data_hash", "output_format", "version", "result"} {
+	for _, name := range []string{"generated_at", "data_hash", "version", "result"} {
 		if whatIfProps[name] == nil {
 			t.Fatalf("robot-whatif schema missing top-level property %q", name)
 		}
@@ -1711,7 +1630,7 @@ func TestRobotRelationshipWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 
 	networkProps := requireRobotSchemaProperties(t, schemas, "robot-impact-network")
 	for _, name := range []string{
-		"generated_at", "data_hash", "output_format", "version",
+		"generated_at", "data_hash", "version",
 		"bead_id", "depth", "network", "stats", "top_clusters", "top_connected",
 	} {
 		if networkProps[name] == nil {
@@ -1736,7 +1655,7 @@ func TestRobotRelationshipWorkflowSchemasMatchHandlerOutputs(t *testing.T) {
 	}
 
 	causalityProps := requireRobotSchemaProperties(t, schemas, "robot-causality")
-	for _, name := range []string{"generated_at", "data_hash", "output_format", "version", "chain", "insights"} {
+	for _, name := range []string{"generated_at", "data_hash", "version", "chain", "insights"} {
 		if causalityProps[name] == nil {
 			t.Fatalf("robot-causality schema missing top-level property %q", name)
 		}
@@ -2165,7 +2084,7 @@ func TestRobotGroupedTriageSchemasMatchHandlerOutput(t *testing.T) {
 					t.Fatalf("%s schema missing top-level property %q", tc.command, name)
 				}
 			}
-			for _, stale := range []string{"output_format", "version"} {
+			for _, stale := range []string{"version"} {
 				if properties[stale] != nil {
 					t.Fatalf("%s schema still exposes stale generic property %q", tc.command, stale)
 				}
@@ -2253,7 +2172,7 @@ func TestRobotForecastSchemaMatchesHandlerEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatalf("robot-forecast properties has unexpected type %T", schema["properties"])
 	}
-	for _, name := range []string{"agents", "filters", "forecast_count", "forecasts", "summary", "output_format", "version"} {
+	for _, name := range []string{"agents", "filters", "forecast_count", "forecasts", "summary", "version"} {
 		if properties[name] == nil {
 			t.Fatalf("robot-forecast schema missing top-level property %q", name)
 		}
@@ -2285,7 +2204,7 @@ func TestRobotBurndownSchemaMatchesHandlerEnvelope(t *testing.T) {
 		t.Fatalf("robot-burndown properties has unexpected type %T", schema["properties"])
 	}
 	for _, name := range []string{
-		"output_format", "version", "sprint_name", "start_date", "end_date",
+		"version", "sprint_name", "start_date", "end_date",
 		"total_days", "elapsed_days", "remaining_days",
 		"total_issues", "completed_issues", "remaining_issues",
 		"ideal_burn_rate", "actual_burn_rate", "projected_complete",
@@ -2345,39 +2264,6 @@ func TestRobotBurndownSchemaMatchesHandlerEnvelope(t *testing.T) {
 	}
 }
 
-func TestRobotGraphSchemaMatchesExportResult(t *testing.T) {
-	schemas := generateRobotSchemas()
-	schema := schemas.Commands["robot-graph"]
-	properties, ok := schema["properties"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("robot-graph properties has unexpected type %T", schema["properties"])
-	}
-	for _, name := range []string{"format", "graph", "nodes", "edges", "filters_applied", "explanation", "data_hash", "adjacency"} {
-		if properties[name] == nil {
-			t.Fatalf("robot-graph schema missing top-level property %q", name)
-		}
-	}
-	for _, stale := range []string{"generated_at", "stats"} {
-		if properties[stale] != nil {
-			t.Fatalf("robot-graph schema still exposes stale top-level property %q", stale)
-		}
-	}
-
-	explanation, ok := properties["explanation"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("explanation property has unexpected type %T", properties["explanation"])
-	}
-	explanationProperties, ok := explanation["properties"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("explanation nested properties has unexpected type %T", explanation["properties"])
-	}
-	for _, name := range []string{"what", "how_to_render", "when_to_use"} {
-		if explanationProperties[name] == nil {
-			t.Fatalf("robot-graph explanation schema missing %q", name)
-		}
-	}
-}
-
 func TestRobotSuggestSchemaMatchesOutputShape(t *testing.T) {
 	schemas := generateRobotSchemas()
 	schema := schemas.Commands["robot-suggest"]
@@ -2426,68 +2312,6 @@ func TestRobotSuggestSchemaMatchesOutputShape(t *testing.T) {
 	}
 }
 
-func TestRobotLabelSchemasMatchHandlerOutputs(t *testing.T) {
-	schemas := generateRobotSchemas()
-
-	healthProps := requireRobotSchemaProperties(t, schemas, "robot-label-health")
-	for _, name := range []string{"analysis_config", "results", "usage_hints"} {
-		if healthProps[name] == nil {
-			t.Fatalf("robot-label-health schema missing top-level property %q", name)
-		}
-	}
-	for _, stale := range []string{"output_format", "version"} {
-		if healthProps[stale] != nil {
-			t.Fatalf("robot-label-health schema still exposes stale top-level property %q", stale)
-		}
-	}
-	healthResultProps := requireNestedSchemaProperties(t, healthProps["results"], "robot-label-health results")
-	for _, name := range []string{"total_labels", "healthy_count", "warning_count", "critical_count", "labels", "summaries", "attention_needed"} {
-		if healthResultProps[name] == nil {
-			t.Fatalf("robot-label-health results schema missing %q", name)
-		}
-	}
-
-	flowProps := requireRobotSchemaProperties(t, schemas, "robot-label-flow")
-	for _, name := range []string{"flow", "blockage_cascade", "analysis_config", "usage_hints"} {
-		if flowProps[name] == nil {
-			t.Fatalf("robot-label-flow schema missing top-level property %q", name)
-		}
-	}
-	for _, stale := range []string{"output_format", "version"} {
-		if flowProps[stale] != nil {
-			t.Fatalf("robot-label-flow schema still exposes stale top-level property %q", stale)
-		}
-	}
-	flowNestedProps := requireNestedSchemaProperties(t, flowProps["flow"], "robot-label-flow flow")
-	for _, name := range []string{"labels", "flow_matrix", "dependencies", "critical_paths", "bottleneck_labels", "total_cross_label_deps"} {
-		if flowNestedProps[name] == nil {
-			t.Fatalf("robot-label-flow nested schema missing %q", name)
-		}
-	}
-
-	attentionProps := requireRobotSchemaProperties(t, schemas, "robot-label-attention")
-	for _, name := range []string{"limit", "total_labels", "labels", "usage_hints"} {
-		if attentionProps[name] == nil {
-			t.Fatalf("robot-label-attention schema missing top-level property %q", name)
-		}
-	}
-	for _, stale := range []string{"output_format", "version"} {
-		if attentionProps[stale] != nil {
-			t.Fatalf("robot-label-attention schema still exposes stale top-level property %q", stale)
-		}
-	}
-	labelsProp, ok := attentionProps["labels"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("robot-label-attention labels has unexpected type %T", attentionProps["labels"])
-	}
-	labelItemProps := requireNestedSchemaProperties(t, labelsProp["items"], "robot-label-attention label item")
-	for _, name := range []string{"rank", "label", "attention_score", "normalized_score", "reason", "open_count", "blocked_count", "stale_count", "pagerank_sum", "velocity_factor"} {
-		if labelItemProps[name] == nil {
-			t.Fatalf("robot-label-attention label schema missing %q", name)
-		}
-	}
-}
-
 func TestRobotPrioritySchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-priority")
@@ -2518,7 +2342,7 @@ func TestRobotPrioritySchemaMatchesHandlerOutput(t *testing.T) {
 func TestRobotAlertsSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-alerts")
-	for _, name := range []string{"output_format", "version", "alerts", "summary", "usage_hints"} {
+	for _, name := range []string{"version", "alerts", "summary", "usage_hints"} {
 		if properties[name] == nil {
 			t.Fatalf("robot-alerts schema missing top-level property %q", name)
 		}
@@ -2546,7 +2370,7 @@ func TestRobotAlertsSchemaMatchesHandlerOutput(t *testing.T) {
 func TestRobotRecipesSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-recipes")
-	for _, name := range []string{"generated_at", "output_format", "version", "recipes"} {
+	for _, name := range []string{"generated_at", "version", "recipes"} {
 		if properties[name] == nil {
 			t.Fatalf("robot-recipes schema missing top-level property %q", name)
 		}
@@ -2580,7 +2404,7 @@ func TestRobotRecipesOutputIncludesEnvelope(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("robot-recipes JSON: %v\n%s", err, out)
 	}
-	for _, name := range []string{"generated_at", "output_format", "version", "recipes"} {
+	for _, name := range []string{"generated_at", "version", "recipes"} {
 		if payload[name] == nil {
 			t.Fatalf("robot-recipes output missing %q: %#v", name, payload)
 		}
@@ -2593,7 +2417,7 @@ func TestRobotRecipesOutputIncludesEnvelope(t *testing.T) {
 func TestRobotMetricsSchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-metrics")
-	for _, name := range []string{"generated_at", "data_hash", "output_format", "version", "timing", "cache", "memory"} {
+	for _, name := range []string{"generated_at", "data_hash", "version", "timing", "cache", "memory"} {
 		if properties[name] == nil {
 			t.Fatalf("robot-metrics schema missing top-level property %q", name)
 		}
@@ -2643,7 +2467,7 @@ func TestRobotMetricsOutputIncludesEnvelope(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("robot-metrics JSON: %v\n%s", err, out)
 	}
-	for _, name := range []string{"generated_at", "data_hash", "output_format", "version", "memory"} {
+	for _, name := range []string{"generated_at", "data_hash", "version", "memory"} {
 		if payload[name] == nil {
 			t.Fatalf("robot-metrics output missing %q: %#v", name, payload)
 		}
@@ -2657,7 +2481,7 @@ func TestRobotSprintSchemasMatchHandlerOutputs(t *testing.T) {
 	schemas := generateRobotSchemas()
 
 	listProps := requireRobotSchemaProperties(t, schemas, "robot-sprint-list")
-	for _, name := range []string{"output_format", "version", "sprint_count", "sprints"} {
+	for _, name := range []string{"version", "sprint_count", "sprints"} {
 		if listProps[name] == nil {
 			t.Fatalf("robot-sprint-list schema missing top-level property %q", name)
 		}
@@ -2674,7 +2498,7 @@ func TestRobotSprintSchemasMatchHandlerOutputs(t *testing.T) {
 	}
 
 	showProps := requireRobotSchemaProperties(t, schemas, "robot-sprint-show")
-	for _, name := range []string{"output_format", "version", "sprint"} {
+	for _, name := range []string{"version", "sprint"} {
 		if showProps[name] == nil {
 			t.Fatalf("robot-sprint-show schema missing top-level property %q", name)
 		}
@@ -2691,7 +2515,7 @@ func TestRobotCapacitySchemaMatchesHandlerOutput(t *testing.T) {
 	schemas := generateRobotSchemas()
 	properties := requireRobotSchemaProperties(t, schemas, "robot-capacity")
 	for _, name := range []string{
-		"output_format", "version", "agents", "label", "open_issue_count",
+		"version", "agents", "label", "open_issue_count",
 		"total_minutes", "total_days", "serial_minutes", "parallel_minutes",
 		"parallelizable_pct", "estimated_days", "critical_path_length",
 		"critical_path", "actionable_count", "actionable", "bottlenecks",
@@ -2751,18 +2575,18 @@ func TestModifierFlagValidation(t *testing.T) {
 			wantMessages: []string{
 				"Error: --robot-diff requires --diff-since",
 				"Try one of:",
-				"`bv robot-diff HEAD~1 --json`",
-				"`bv --robot-diff --diff-since HEAD~1 --format json`",
+				"`bv robot-diff HEAD~1`",
+				"`bv --robot-diff --diff-since HEAD~1`",
 			},
 		},
 		{
 			name: "robot search requires search query",
-			args: []string{"robot-search", "--json"},
+			args: []string{"robot-search"},
 			wantMessages: []string{
 				"Error: --robot-search requires --search",
 				"Try one of:",
-				"`bv robot-search \"login oauth\" --json`",
-				"`bv --search \"login oauth\" --robot-search --format json`",
+				"`bv robot-search \"login oauth\"`",
+				"`bv --search \"login oauth\" --robot-search`",
 			},
 		},
 		{
@@ -2770,7 +2594,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--graph-format", "mermaid"},
 			wantMessages: []string{
 				"Error: --graph-format requires --robot-graph",
-				"Try: `bv robot-graph mermaid --json`.",
+				"Try: `bv robot-graph mermaid`.",
 			},
 		},
 		{
@@ -2778,7 +2602,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--robot-drift"},
 			wantMessages: []string{
 				"Error: --robot-drift requires --check-drift",
-				"Try: `bv --check-drift --robot-drift --format json`.",
+				"Try: `bv --check-drift --robot-drift`.",
 			},
 		},
 		{
@@ -2786,7 +2610,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--schema-command", "robot-triage"},
 			wantMessages: []string{
 				"Error: --schema-command requires --robot-schema",
-				"Try: `bv robot-schema triage --json`.",
+				"Try: `bv robot-schema triage`.",
 			},
 		},
 		{
@@ -2802,7 +2626,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--history-since", "30 days ago"},
 			wantMessages: []string{
 				"Error: --history-since requires one of --robot-history, --bead-history, --robot-causality or --robot-commit",
-				"Try: `bv robot-history --history-since \"30 days ago\" --json`.",
+				"Try: `bv robot-history --history-since \"30 days ago\"`.",
 			},
 		},
 		{
@@ -2810,7 +2634,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--agents", "3"},
 			wantMessages: []string{
 				"Error: --agents requires --robot-capacity",
-				"Try: `bv robot-capacity --agents 3 --json`.",
+				"Try: `bv robot-capacity --agents 3`.",
 			},
 		},
 		{
@@ -2820,8 +2644,8 @@ func TestModifierFlagValidation(t *testing.T) {
 			wantMessages: []string{
 				"Error: --robot-by-label requires --robot-priority",
 				"Try one of:",
-				"`bv robot-priority --robot-by-label backend --json`",
-				"`bv robot-triage --label backend --json`",
+				"`bv robot-priority --robot-by-label backend`",
+				"`bv robot-triage --label backend`",
 			},
 		},
 		{
@@ -2830,7 +2654,7 @@ func TestModifierFlagValidation(t *testing.T) {
 			args: []string{"--robot-by-assignee", "alice"},
 			wantMessages: []string{
 				"Error: --robot-by-assignee requires --robot-priority",
-				"Try: `bv robot-priority --robot-by-assignee alice --json`.",
+				"Try: `bv robot-priority --robot-by-assignee alice`.",
 			},
 		},
 	}
@@ -3337,7 +3161,7 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		if _, ok := docs[name]; !ok {
 			t.Errorf("primary robot command %q missing from robotCommandDocs()", name)
 		}
-		if schemas.Commands[name] == nil {
+		if schemas.Commands[name] == nil && name != "robot-help" { // robot-help emits plain text
 			t.Errorf("primary robot command %q missing from RobotSchemas.Commands", name)
 		}
 	}
@@ -3345,7 +3169,7 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		if !primary[name] {
 			t.Errorf("documented robot command %q missing from primaryRobotFlagNames()", name)
 		}
-		if schemas.Commands[name] == nil {
+		if schemas.Commands[name] == nil && name != "robot-help" {
 			t.Errorf("documented robot command %q missing from RobotSchemas.Commands", name)
 		}
 	}
@@ -3454,7 +3278,7 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 	}
 
 	invocations := map[string][]string{
-		"robot-help":                {"--robot-help", "--format", "json"},
+		"robot-help":                {"--robot-help"},
 		"robot-capabilities":        {"--robot-capabilities"},
 		"robot-docs":                {"--robot-docs", "guide"},
 		"robot-schema":              {"--robot-schema"},
@@ -3507,6 +3331,14 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		args, ok := invocations[cmdName]
 		if !ok {
 			t.Fatalf("TestRobotRegistry_TotalContract missing live CLI invocation for registered command %q", cmdName)
+		}
+		if cmdName == "robot-help" {
+			// Plain-text help: no JSON schema to validate against.
+			out, stderr, err := runCommandWithTimeout(t, tmpDir, exe, args...)
+			if err != nil || strings.TrimSpace(out) == "" {
+				t.Fatalf("live invocation %v (%s) failed: %v\nstdout:\n%s\nstderr:\n%s", args, cmdName, err, out, stderr)
+			}
+			continue
 		}
 		cmdSchema := liveSchemas.Commands[cmdName]
 		if cmdSchema == nil {
@@ -3748,63 +3580,6 @@ func TestRobotDriftRevivesIssueLevelAlertsAndTriageMaxResults(t *testing.T) {
 	}
 }
 
-func TestAgentsCLIMutatesUnderBVRobotAndSupportsDryRun(t *testing.T) {
-	exe := buildTestBinary(t)
-	tmpDir := t.TempDir()
-	writeTestBeadsFixture(t, tmpDir)
-
-	runRobotEnv := func(args ...string) (string, string, error) {
-		t.Helper()
-		cmd := exec.Command(exe, args...)
-		cmd.Dir = tmpDir
-		cmd.Env = append(os.Environ(), "BV_ROBOT=1", "BV_NO_BROWSER=1", "BV_TEST_MODE=1")
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		return stdout.String(), stderr.String(), err
-	}
-
-	dryOut, dryErrStr, err := runRobotEnv("--agents-add", "--agents-dry-run")
-	if err != nil {
-		t.Fatalf("BV_ROBOT=1 --agents-add --agents-dry-run failed: %v\nstdout:\n%s\nstderr:\n%s", err, dryOut, dryErrStr)
-	}
-	if _, statErr := os.Stat(filepath.Join(tmpDir, "AGENTS.md")); !os.IsNotExist(statErr) {
-		t.Fatalf("--agents-dry-run unexpectedly created AGENTS.md: %v", statErr)
-	}
-
-	addOut, addErrStr, err := runRobotEnv("--agents-add")
-	if err != nil {
-		t.Fatalf("BV_ROBOT=1 --agents-add failed: %v\nstdout:\n%s\nstderr:\n%s", err, addOut, addErrStr)
-	}
-	content, err := os.ReadFile(filepath.Join(tmpDir, "AGENTS.md"))
-	if err != nil {
-		t.Fatalf("AGENTS.md was not written under BV_ROBOT=1 --agents-add: %v", err)
-	}
-	if !agents.ContainsBlurb(string(content)) {
-		t.Fatalf("AGENTS.md missing agent blurb after --agents-add:\n%s", string(content))
-	}
-	var receipt map[string]any
-	if err := json.Unmarshal([]byte(addOut), &receipt); err != nil {
-		t.Fatalf("expected JSON receipt from BV_ROBOT=1 --agents-add, got: %v\n%s", err, addOut)
-	}
-	if receipt["action"] != "add" || receipt["modified"] != true {
-		t.Fatalf("unexpected --agents-add receipt: %#v", receipt)
-	}
-
-	remOut, remErrStr, err := runRobotEnv("--agents-remove")
-	if err != nil {
-		t.Fatalf("BV_ROBOT=1 --agents-remove failed: %v\nstdout:\n%s\nstderr:\n%s", err, remOut, remErrStr)
-	}
-	afterRemove, err := os.ReadFile(filepath.Join(tmpDir, "AGENTS.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if agents.ContainsBlurb(string(afterRemove)) {
-		t.Fatalf("AGENTS.md still contains blurb after BV_ROBOT=1 --agents-remove")
-	}
-}
-
 func TestBeadHistoryAndCorrelationActionEnvelopes(t *testing.T) {
 	exe := buildTestBinary(t)
 	repo := t.TempDir()
@@ -3985,1483 +3760,6 @@ func TestSubdirectoryProjectContextParity(t *testing.T) {
 	}
 }
 
-func TestBriefOutputsRefuseSymlinkTargets(t *testing.T) {
-	exe := buildTestBinary(t)
-	tmpDir := t.TempDir()
-	writeTestBeadsFixture(t, tmpDir)
-
-	victim := filepath.Join(tmpDir, "victim.txt")
-	if err := os.WriteFile(victim, []byte("DO NOT OVERWRITE"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	symlinkBrief := filepath.Join(tmpDir, "brief-link.md")
-	if err := os.Symlink(victim, symlinkBrief); err != nil {
-		t.Fatal(err)
-	}
-
-	if out, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--priority-brief", symlinkBrief); err == nil {
-		t.Fatalf("expected --priority-brief to refuse symlink target; stdout:\n%s\nstderr:\n%s", out, stderr)
-	}
-	victimBytes, err := os.ReadFile(victim)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(victimBytes) != "DO NOT OVERWRITE" {
-		t.Fatalf("symlink victim was modified: %q", string(victimBytes))
-	}
-
-	victimDir := filepath.Join(tmpDir, "victim-dir")
-	if err := os.MkdirAll(victimDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	symlinkDir := filepath.Join(tmpDir, "bundle-link")
-	if err := os.Symlink(victimDir, symlinkDir); err != nil {
-		t.Fatal(err)
-	}
-	if out, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--agent-brief", symlinkDir); err == nil {
-		t.Fatalf("expected --agent-brief to refuse symlink directory; stdout:\n%s\nstderr:\n%s", out, stderr)
-	}
-}
-
-func TestRobotWhatIfAndWave6CLIWiring(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	exe := buildTestBinary(t)
-	tmpDir := t.TempDir()
-
-	// Initialize a tiny git repo so baseline/pages git_hash stamping is exercised against real git.
-	for _, gitArgs := range [][]string{
-		{"init", "-b", "main"},
-		{"config", "user.name", "Test User"},
-		{"config", "user.email", "test@example.invalid"},
-		{"config", "commit.gpgsign", "false"},
-	} {
-		cmd := exec.Command("git", gitArgs...)
-		cmd.Dir = tmpDir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v failed: %v\n%s", gitArgs, err, out)
-		}
-	}
-
-	beadsDir := filepath.Join(tmpDir, ".beads")
-	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	issuesContent := strings.Join([]string{
-		`{"id":"root-1","title":"Unblock backend","status":"open","priority":1,"issue_type":"task","labels":["core"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:00Z"}`,
-		`{"id":"back-1","title":"Backend API","status":"open","priority":1,"issue_type":"task","labels":["backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:00Z","dependencies":[{"issue_id":"back-1","depends_on_id":"root-1","type":"blocks"}]}`,
-		`{"id":"track-2","title":"Independent frontend","status":"open","priority":2,"issue_type":"task","labels":["frontend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:00Z"}`,
-		`{"id":"done-1","title":"Closed task","status":"closed","priority":2,"issue_type":"task","created_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-02T00:00:00Z","closed_at":"2026-10-02T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(beadsDir, "issues.jsonl"), []byte(issuesContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, gitArgs := range [][]string{
-		{"add", ".beads/issues.jsonl"},
-		{"commit", "-m", "seed issues"},
-	} {
-		cmd := exec.Command("git", gitArgs...)
-		cmd.Dir = tmpDir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v failed: %v\n%s", gitArgs, err, out)
-		}
-	}
-	revOut, err := exec.Command("git", "-C", tmpDir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("git rev-parse HEAD: %v", err)
-	}
-	headSHA := strings.TrimSpace(string(revOut))
-
-	// 1. --robot-whatif and `bv whatif <id> --json` intent alias
-	stdout, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "whatif", "root-1", "--json")
-	if err != nil {
-		t.Fatalf("bv whatif root-1 --json failed: %v\nstderr: %s", err, stderr)
-	}
-	var whatIfResp struct {
-		Result struct {
-			IssueID string `json:"issue_id"`
-			Delta   struct {
-				DirectUnblocks    int      `json:"direct_unblocks"`
-				UnblockedIssueIDs []string `json:"unblocked_issue_ids"`
-			} `json:"delta"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &whatIfResp); err != nil {
-		t.Fatalf("unmarshal robot-whatif: %v\nstdout: %s", err, stdout)
-	}
-	if whatIfResp.Result.IssueID != "root-1" || whatIfResp.Result.Delta.DirectUnblocks != 1 ||
-		len(whatIfResp.Result.Delta.UnblockedIssueIDs) != 1 || whatIfResp.Result.Delta.UnblockedIssueIDs[0] != "back-1" {
-		t.Fatalf("unexpected robot-whatif output: %s", stdout)
-	}
-
-	// Closed issue -> 0 unblocks; missing issue -> exit 1.
-	closedOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-whatif", "done-1")
-	if err != nil {
-		t.Fatalf("--robot-whatif done-1 failed: %v\nstderr: %s", err, stderr)
-	}
-	if !strings.Contains(closedOut, `"direct_unblocks": 0`) && !strings.Contains(closedOut, `"direct_unblocks":0`) {
-		t.Fatalf("expected 0 direct_unblocks for closed issue, got: %s", closedOut)
-	}
-	if _, missingStderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-whatif", "missing-999"); err == nil || !strings.Contains(missingStderr, "Issue not found: missing-999") {
-		t.Fatalf("expected exit 1 + Issue not found for missing issue; err=%v stderr=%s", err, missingStderr)
-	}
-
-	// 2. --robot-triage-by-track / --robot-triage-by-label --robot-max-results 1 --brief preserves full group recommendations across all actionable items
-	briefOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-triage-by-track", "--robot-max-results", "1", "--brief")
-	if err != nil {
-		t.Fatalf("--robot-triage-by-track --brief failed: %v\nstderr: %s", err, stderr)
-	}
-	var briefPayload struct {
-		Recommendations        []json.RawMessage `json:"recommendations"`
-		RecommendationsByTrack []struct {
-			TrackID         string            `json:"track_id"`
-			Recommendations []json.RawMessage `json:"recommendations"`
-		} `json:"recommendations_by_track"`
-	}
-	if err := json.Unmarshal([]byte(briefOut), &briefPayload); err != nil {
-		t.Fatalf("unmarshal brief triage: %v\n%s", err, briefOut)
-	}
-	if len(briefPayload.Recommendations) != 1 || len(briefPayload.RecommendationsByTrack) != 1 || len(briefPayload.RecommendationsByTrack[0].Recommendations) != 2 {
-		t.Fatalf("expected 1 top recommendation and 1 track containing both actionable items in brief output, got recs=%d tracks=%d\n%s",
-			len(briefPayload.Recommendations), len(briefPayload.RecommendationsByTrack), briefOut)
-	}
-
-	briefLabelOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-triage-by-label", "--robot-max-results", "1", "--brief")
-	if err != nil {
-		t.Fatalf("--robot-triage-by-label --brief failed: %v\nstderr: %s", err, stderr)
-	}
-	var briefLabelPayload struct {
-		Recommendations        []json.RawMessage `json:"recommendations"`
-		RecommendationsByLabel []json.RawMessage `json:"recommendations_by_label"`
-	}
-	if err := json.Unmarshal([]byte(briefLabelOut), &briefLabelPayload); err != nil {
-		t.Fatalf("unmarshal brief label triage: %v\n%s", err, briefLabelOut)
-	}
-	if len(briefLabelPayload.Recommendations) != 1 || len(briefLabelPayload.RecommendationsByLabel) != 2 {
-		t.Fatalf("expected 1 top recommendation and 2 label groups in brief output, got recs=%d labels=%d\n%s",
-			len(briefLabelPayload.Recommendations), len(briefLabelPayload.RecommendationsByLabel), briefLabelOut)
-	}
-
-	// 3. Feedback mutual exclusion + subdirectory invocation + structured format output
-	subDir := filepath.Join(tmpDir, "nested", "subdir")
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if _, fbStderr, err := runCommandWithTimeout(t, subDir, exe, "--feedback-accept", "root-1", "--feedback-ignore", "track-2"); err == nil || !strings.Contains(fbStderr, "cannot be used together") {
-		t.Fatalf("expected mutual exclusion error for simultaneous --feedback-accept and --feedback-ignore; err=%v stderr=%s", err, fbStderr)
-	}
-	fbOut, stderr, err := runCommandWithTimeout(t, subDir, exe, "--feedback-accept", "root-1", "--format", "json")
-	if err != nil {
-		t.Fatalf("--feedback-accept from subdir failed: %v\nstderr: %s", err, stderr)
-	}
-	if !strings.Contains(fbOut, `"action"`) || !strings.Contains(fbOut, `"accept"`) || !strings.Contains(fbOut, `"generated_at"`) {
-		t.Fatalf("expected structured RobotEnvelope JSON from --feedback-accept --format json, got:\n%s", fbOut)
-	}
-
-	// 4. --save-baseline from subdir captures git commit SHA from projectDir
-	if _, stderr, err := runCommandWithTimeout(t, subDir, exe, "--save-baseline", "from-subdir"); err != nil {
-		t.Fatalf("--save-baseline from subdir failed: %v\nstderr: %s", err, stderr)
-	}
-	baselineBytes, err := os.ReadFile(filepath.Join(tmpDir, ".bv", "baseline.json"))
-	if err != nil {
-		t.Fatalf("read baseline.json: %v", err)
-	}
-	if !strings.Contains(string(baselineBytes), headSHA) {
-		t.Fatalf("baseline.json missing git commit %s when saved from subdir:\n%s", headSHA, baselineBytes)
-	}
-
-	// 5. --export-pages --pages-title --pages-subtitle stamps git_hash, renders subtitle, and reports readiness-blocked count in README.md
-	pagesOut := filepath.Join(tmpDir, "pages-out")
-	if _, stderr, err := runCommandWithTimeout(t, subDir, exe, "--export-pages", pagesOut, "--pages-title", "Wave 6 Title", "--pages-subtitle", "Sprint <Alpha> & Co"); err != nil {
-		t.Fatalf("--export-pages failed: %v\nstderr: %s", err, stderr)
-	}
-	indexHTML, err := os.ReadFile(filepath.Join(pagesOut, "index.html"))
-	if err != nil {
-		t.Fatalf("read index.html: %v", err)
-	}
-	if !strings.Contains(string(indexHTML), "Wave 6 Title") || !strings.Contains(string(indexHTML), "Sprint &lt;Alpha&gt; &amp; Co") {
-		t.Fatalf("exported index.html missing title or escaped subtitle:\n%s", indexHTML[:min(2000, len(indexHTML))])
-	}
-	metaBytes, err := os.ReadFile(filepath.Join(pagesOut, "data", "meta.json"))
-	if err != nil {
-		t.Fatalf("read data/meta.json: %v", err)
-	}
-	if !strings.Contains(string(metaBytes), headSHA) {
-		t.Fatalf("exported data/meta.json missing git_hash %s:\n%s", headSHA, metaBytes)
-	}
-	readmeBytes, err := os.ReadFile(filepath.Join(pagesOut, "README.md"))
-	if err != nil {
-		t.Fatalf("read exported README.md: %v", err)
-	}
-	if !strings.Contains(string(readmeBytes), "**1** blocked") {
-		t.Fatalf("exported README.md should report 1 readiness-blocked issue (back-1), got:\n%s", readmeBytes)
-	}
-
-	// 6. --export-graph --label backend preserves 1-hop cross-label blocker edge (root-1 -> back-1)
-	graphHTMLPath := filepath.Join(tmpDir, "backend-graph.html")
-	graphStdout, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--export-graph", graphHTMLPath, "--label", "backend")
-	if err != nil {
-		t.Fatalf("--export-graph --label backend failed: %v\nstderr: %s", err, stderr)
-	}
-	if !strings.Contains(graphStdout, "1 edges") {
-		t.Fatalf("expected --export-graph --label backend to preserve 1-hop blocker edge, got stdout: %s", graphStdout)
-	}
-
-	// 7. Live --robot-schema & --robot-docs parity for --brief grouped triage and triage.alerts
-	schemaOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-schema")
-	if err != nil {
-		t.Fatalf("--robot-schema failed: %v\nstderr: %s", err, stderr)
-	}
-	var liveSchemas struct {
-		Envelope struct {
-			Properties map[string]json.RawMessage `json:"properties"`
-		} `json:"envelope"`
-		Commands map[string]struct {
-			Properties map[string]json.RawMessage `json:"properties"`
-			Required   []string                   `json:"required"`
-			OneOf      []struct {
-				Required []string `json:"required"`
-			} `json:"oneOf"`
-		} `json:"commands"`
-	}
-	if err := json.Unmarshal([]byte(schemaOut), &liveSchemas); err != nil {
-		t.Fatalf("unmarshal --robot-schema: %v", err)
-	}
-	var triageProp struct {
-		Properties map[string]json.RawMessage `json:"properties"`
-	}
-	if err := json.Unmarshal(liveSchemas.Commands["robot-triage"].Properties["triage"], &triageProp); err != nil {
-		t.Fatalf("unmarshal robot-triage.properties.triage: %v", err)
-	}
-	if _, ok := triageProp.Properties["alerts"]; !ok {
-		t.Fatalf("robot-triage schema missing triage.properties.alerts")
-	}
-
-	briefPlainOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-triage", "--brief")
-	if err != nil {
-		t.Fatalf("--robot-triage --brief failed: %v\nstderr: %s", err, stderr)
-	}
-	for cmdName, rawPayload := range map[string]string{
-		"robot-triage":          briefPlainOut,
-		"robot-triage-by-track": briefOut,
-		"robot-triage-by-label": briefLabelOut,
-	} {
-		cmdSchema, ok := liveSchemas.Commands[cmdName]
-		if !ok {
-			t.Fatalf("missing schema for %s", cmdName)
-		}
-		var obj map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(rawPayload), &obj); err != nil {
-			t.Fatalf("unmarshal %s payload: %v", cmdName, err)
-		}
-		for k := range obj {
-			_, inCmd := cmdSchema.Properties[k]
-			_, inEnv := liveSchemas.Envelope.Properties[k]
-			if !inCmd && !inEnv {
-				t.Fatalf("%s --brief emitted undeclared top-level key %q (absent from both command properties and envelope.properties)", cmdName, k)
-			}
-		}
-		if len(cmdSchema.OneOf) == 0 {
-			t.Fatalf("%s schema missing oneOf branch for --brief", cmdName)
-		}
-		matchedBranch := false
-		for _, branch := range cmdSchema.OneOf {
-			allPresent := true
-			for _, req := range branch.Required {
-				if _, present := obj[req]; !present {
-					allPresent = false
-					break
-				}
-			}
-			if allPresent {
-				matchedBranch = true
-				break
-			}
-		}
-		if !matchedBranch {
-			t.Fatalf("%s --brief payload failed all oneOf required branches: %+v", cmdName, cmdSchema.OneOf)
-		}
-	}
-
-	docsOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-docs", "commands")
-	if err != nil {
-		t.Fatalf("--robot-docs commands failed: %v\nstderr: %s", err, stderr)
-	}
-	for _, want := range []string{"--brief", "--robot-max-results"} {
-		if strings.Count(docsOut, want) < 3 {
-			t.Fatalf("expected --robot-docs commands to document %s on robot-triage and both grouped variants:\n%s", want, docsOut)
-		}
-	}
-
-	// 8. Git-commit History staleness parity across --robot-triage, --priority-brief, --agent-brief, --export-pages, and --emit-script:
-	// All open issues have JSONL updated_at 2026-10-01 (>14d old), so a fresh git commit referencing them must suppress false stale alerts everywhere.
-	if err := os.WriteFile(filepath.Join(tmpDir, "work.txt"), []byte("active work\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, gitArgs := range [][]string{
-		{"add", "work.txt"},
-		{"commit", "-m", "feat: fresh progress on root-1, back-1, and track-2"},
-	} {
-		cmd := exec.Command("git", gitArgs...)
-		cmd.Dir = tmpDir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v failed: %v\n%s", gitArgs, err, out)
-		}
-	}
-
-	triageWithCommitOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-triage")
-	if err != nil {
-		t.Fatalf("--robot-triage after commit failed: %v\nstderr: %s", err, stderr)
-	}
-	if strings.Contains(triageWithCommitOut, `"type": "stale"`) || strings.Contains(triageWithCommitOut, `"type":"stale"`) {
-		t.Fatalf("expected git commit to suppress stale alert in --robot-triage:\n%s", triageWithCommitOut)
-	}
-
-	prioBriefFile := filepath.Join(tmpDir, "prio-brief.md")
-	if _, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--priority-brief", prioBriefFile); err != nil {
-		t.Fatalf("--priority-brief failed: %v\nstderr: %s", err, stderr)
-	}
-	prioBriefBytes, err := os.ReadFile(prioBriefFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(prioBriefBytes), "**stale**") {
-		t.Fatalf("--priority-brief emitted false stale alert despite fresh git commit:\n%s", prioBriefBytes)
-	}
-
-	agentBriefDir := filepath.Join(tmpDir, "agent-brief-out")
-	if _, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--agent-brief", agentBriefDir); err != nil {
-		t.Fatalf("--agent-brief failed: %v\nstderr: %s", err, stderr)
-	}
-	agentBriefMD, err := os.ReadFile(filepath.Join(agentBriefDir, "brief.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(agentBriefMD), "**stale**") {
-		t.Fatalf("--agent-brief brief.md emitted false stale alert despite fresh git commit:\n%s", agentBriefMD)
-	}
-	agentTriageJSON, err := os.ReadFile(filepath.Join(agentBriefDir, "triage.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(agentTriageJSON), `"type": "stale"`) || !strings.Contains(string(agentTriageJSON), `"history_status": "ok"`) {
-		t.Fatalf("--agent-brief triage.json missing git history staleness parity:\n%s", agentTriageJSON)
-	}
-
-	pagesOut2 := filepath.Join(tmpDir, "pages-out-no-tt")
-	if _, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--export-pages", pagesOut2, "--pages-include-history=false"); err != nil {
-		t.Fatalf("--export-pages (no history bundle) failed: %v\nstderr: %s", err, stderr)
-	}
-	pagesTriageJSON, err := os.ReadFile(filepath.Join(pagesOut2, "data", "triage.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(pagesTriageJSON), `"type": "stale"`) || !strings.Contains(string(pagesTriageJSON), `"history_status": "ok"`) {
-		t.Fatalf("--export-pages data/triage.json emitted false stale alert despite fresh git commit:\n%s", pagesTriageJSON)
-	}
-
-	if scriptOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--emit-script"); err != nil || !strings.Contains(scriptOut, "root-1") {
-		t.Fatalf("--emit-script after commit failed: err=%v stderr=%s out=%s", err, stderr, scriptOut)
-	}
-}
-
-func TestWave8CLIRobotHooksWorkspaceAndScopingParity(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	exe := buildTestBinary(t)
-
-	// 1. Single-repo fixture: search-weights auto-hybrid, transitive cross-label blocker chain,
-	// externally-gated capacity chain + case-insensitive --capacity-label, no-baseline cycle alerts,
-	// canonical --suggest-type + scoping + --robot-max-results, --agents-reset, hooks, and export-pages non-blocking deps.
-	repoDir := t.TempDir()
-	beadsDir := filepath.Join(repoDir, ".beads")
-	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	singleJSONL := strings.Join([]string{
-		`{"id":"ops-root","title":"Ops root blocker","status":"open","priority":1,"issue_type":"task","labels":["ops"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z"}`,
-		`{"id":"web-mid","title":"Frontend middle blocker","status":"open","priority":1,"issue_type":"task","labels":["frontend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"web-mid","depends_on_id":"ops-root","type":"blocks"}]}`,
-		`{"id":"api-leaf","title":"Backend leaf task oauth login","status":"open","priority":1,"issue_type":"task","labels":["Backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"api-leaf","depends_on_id":"web-mid","type":"blocks"}]}`,
-		`{"id":"api-leaf-2","title":"Backend downstream task oauth login","status":"open","priority":2,"issue_type":"task","labels":["Backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"api-leaf-2","depends_on_id":"api-leaf","type":"blocks"},{"issue_id":"api-leaf-2","depends_on_id":"ops-root","type":"related"}]}`,
-		`{"id":"api-ready-1","title":"Ready backend item 1","status":"open","priority":1,"issue_type":"task","labels":["Backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z"}`,
-		`{"id":"api-ready-2","title":"Ready backend item 2","status":"open","priority":2,"issue_type":"task","labels":["Backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z"}`,
-		`{"id":"cyc-1","title":"Cycle node 1","status":"open","priority":2,"issue_type":"task","labels":["cyc"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"cyc-1","depends_on_id":"cyc-2","type":"blocks"}]}`,
-		`{"id":"cyc-2","title":"Cycle node 2","status":"open","priority":2,"issue_type":"task","labels":["cyc"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"cyc-2","depends_on_id":"cyc-1","type":"blocks"}]}`,
-		`{"id":"gone-tomb","title":"Deleted tombstone","status":"tombstone","priority":3,"issue_type":"task","labels":["Backend"],"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z"}`,
-	}, "\n") + "\n"
-	issuesFile := filepath.Join(beadsDir, "issues.jsonl")
-	if err := os.WriteFile(issuesFile, []byte(singleJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// 1a. --search-weights auto-promotes hybrid mode; explicit --search-mode text fails cleanly.
-	fullWeights := `{"text":0.4,"pagerank":0.2,"status":0.15,"impact":0.1,"priority":0.1,"recency":0.05}`
-	searchOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--search", "oauth login", "--search-weights", fullWeights, "--robot-search")
-	if err != nil {
-		t.Fatalf("--search-weights auto-hybrid failed: %v\nstderr: %s", err, stderr)
-	}
-	var searchPayload struct {
-		Mode string `json:"mode"`
-	}
-	if err := json.Unmarshal([]byte(searchOut), &searchPayload); err != nil || searchPayload.Mode != "hybrid" {
-		t.Fatalf("expected --search-weights to auto-promote hybrid mode, got err=%v payload=%+v\nraw=%s", err, searchPayload, searchOut)
-	}
-	if _, _, err := runCommandWithTimeout(t, repoDir, exe, "--search", "oauth", "--search-mode", "text", "--search-weights", fullWeights, "--robot-search"); err == nil {
-		t.Fatal("expected --search-mode text with --search-weights to fail")
-	}
-
-	// 1b. Transitive cross-label --robot-blocker-chain reaches ops-root even when scoped to --label Backend.
-	chainOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-blocker-chain", "api-leaf", "--label", "Backend")
-	if err != nil {
-		t.Fatalf("--robot-blocker-chain failed: %v\nstderr: %s", err, stderr)
-	}
-	var chainPayload struct {
-		Result struct {
-			IsBlocked    bool `json:"is_blocked"`
-			RootBlockers []struct {
-				ID string `json:"id"`
-			} `json:"root_blockers"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal([]byte(chainOut), &chainPayload); err != nil {
-		t.Fatalf("decode blocker chain: %v\n%s", err, chainOut)
-	}
-	if !chainPayload.Result.IsBlocked || len(chainPayload.Result.RootBlockers) != 1 || chainPayload.Result.RootBlockers[0].ID != "ops-root" {
-		t.Fatalf("expected transitive root blocker ops-root under --label Backend, got %+v", chainPayload.Result)
-	}
-
-	// 1c. --robot-capacity case-insensitive --capacity-label + externally-gated serial chain.
-	// Create an isolated gated label chain (gated-1 -> gated-2, where gated-1 is blocked by ops-root).
-	gatedJSONL := singleJSONL + strings.Join([]string{
-		`{"id":"gated-1","title":"Gated 1","status":"open","priority":1,"issue_type":"task","labels":["GatedTeam"],"estimated_minutes":60,"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"gated-1","depends_on_id":"ops-root","type":"blocks"}]}`,
-		`{"id":"gated-2","title":"Gated 2","status":"open","priority":2,"issue_type":"task","labels":["GatedTeam"],"estimated_minutes":60,"created_at":"2026-10-01T00:00:00Z","updated_at":"2026-11-10T00:00:00Z","dependencies":[{"issue_id":"gated-2","depends_on_id":"gated-1","type":"blocks"}]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(issuesFile, []byte(gatedJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	capOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-capacity", "--capacity-label", "gatedteam")
-	if err != nil {
-		t.Fatalf("--robot-capacity failed: %v\nstderr: %s", err, stderr)
-	}
-	var capPayload struct {
-		OpenIssueCount  int      `json:"open_issue_count"`
-		ActionableCount int      `json:"actionable_count"`
-		SerialMinutes   int      `json:"serial_minutes"`
-		CriticalPath    []string `json:"critical_path"`
-	}
-	if err := json.Unmarshal([]byte(capOut), &capPayload); err != nil {
-		t.Fatalf("decode capacity: %v\n%s", err, capOut)
-	}
-	if capPayload.OpenIssueCount != 2 || capPayload.ActionableCount != 0 || capPayload.SerialMinutes <= 0 || len(capPayload.CriticalPath) != 2 {
-		t.Fatalf("expected case-insensitive gatedteam capacity with non-zero 2-hop serial chain, got %+v", capPayload)
-	}
-
-	// 1d. --robot-alerts without baseline emits new_cycle on cyc-1<->cyc-2 (capped by --robot-max-results 1),
-	// suppresses out-of-scope cycles under --label Backend, and suppresses baseline cycles after --save-baseline.
-	alertsOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-alerts", "--robot-max-results", "1")
-	if err != nil {
-		t.Fatalf("--robot-alerts failed: %v\nstderr: %s", err, stderr)
-	}
-	var alertsPayload struct {
-		Alerts []struct {
-			Type string `json:"type"`
-		} `json:"alerts"`
-	}
-	if err := json.Unmarshal([]byte(alertsOut), &alertsPayload); err != nil || len(alertsPayload.Alerts) != 1 || alertsPayload.Alerts[0].Type != "new_cycle" {
-		t.Fatalf("expected 1 new_cycle alert without baseline under --robot-max-results 1, got err=%v payload=%+v\nraw=%s", err, alertsPayload, alertsOut)
-	}
-	scopedAlertsOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-alerts", "--alert-type=new_cycle", "--label", "Backend")
-	if err != nil {
-		t.Fatalf("scoped --robot-alerts failed: %v\nstderr: %s", err, stderr)
-	}
-	var scopedAlertsPayload struct {
-		Alerts []struct {
-			Type string `json:"type"`
-		} `json:"alerts"`
-	}
-	if err := json.Unmarshal([]byte(scopedAlertsOut), &scopedAlertsPayload); err != nil || len(scopedAlertsPayload.Alerts) != 0 {
-		t.Fatalf("expected 0 new_cycle alerts under --label Backend, got err=%v payload=%+v", err, scopedAlertsPayload)
-	}
-	if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--save-baseline", "initial"); err != nil {
-		t.Fatalf("--save-baseline failed: %v\nstderr: %s", err, stderr)
-	}
-	postBLAlertsOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-alerts", "--alert-type=new_cycle")
-	if err != nil {
-		t.Fatalf("post-baseline --robot-alerts failed: %v\nstderr: %s", err, stderr)
-	}
-	var postBLAlertsPayload struct {
-		Alerts []struct {
-			Type string `json:"type"`
-		} `json:"alerts"`
-	}
-	if err := json.Unmarshal([]byte(postBLAlertsOut), &postBLAlertsPayload); err != nil || len(postBLAlertsPayload.Alerts) != 0 {
-		t.Fatalf("expected 0 new_cycle alerts after saving baseline, got err=%v payload=%+v", err, postBLAlertsPayload)
-	}
-
-	// 1e. --robot-suggest canonical type + --label scoping + --robot-max-results.
-	sugOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-suggest", "--suggest-type", "cycle_warning", "--label", "Backend")
-	if err != nil {
-		t.Fatalf("--robot-suggest failed: %v\nstderr: %s", err, stderr)
-	}
-	if strings.Contains(sugOut, `"cyc-1"`) {
-		t.Fatalf("--robot-suggest --label Backend leaked out-of-scope cyc-1:\n%s", sugOut)
-	}
-	sugCycOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-suggest", "--suggest-type", "cycle_warning", "--label", "cyc", "--robot-max-results", "1")
-	if err != nil || !strings.Contains(sugCycOut, `"cyc-1"`) {
-		t.Fatalf("expected cycle_warning for cyc-1 under --label cyc: err=%v stderr=%s out=%s", err, stderr, sugCycOut)
-	}
-
-	// 1f. --robot-plan --robot-max-results caps total items across tracks.
-	planOut, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--robot-plan", "--robot-max-results", "2")
-	if err != nil {
-		t.Fatalf("--robot-plan failed: %v\nstderr: %s", err, stderr)
-	}
-	var planPayload struct {
-		Plan struct {
-			Tracks []struct {
-				Items []json.RawMessage `json:"items"`
-			} `json:"tracks"`
-		} `json:"plan"`
-	}
-	if err := json.Unmarshal([]byte(planOut), &planPayload); err != nil {
-		t.Fatalf("decode plan: %v", err)
-	}
-	totalPlanItems := 0
-	for _, tr := range planPayload.Plan.Tracks {
-		totalPlanItems += len(tr.Items)
-	}
-	if totalPlanItems != 2 {
-		t.Fatalf("expected --robot-plan --robot-max-results 2 to cap items at 2, got %d", totalPlanItems)
-	}
-
-	// 1g. --agents-reset clears declined preference.
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(fakeHome, ".config"))
-	t.Setenv("BV_NO_SAVED_CONFIG", "")
-	if err := agents.RecordDecline(repoDir, true); err != nil {
-		t.Fatalf("RecordDecline: %v", err)
-	}
-	if agents.ShouldPromptForAgentFile(repoDir) {
-		t.Fatal("expected ShouldPromptForAgentFile=false after RecordDecline")
-	}
-	if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--agents-reset"); err != nil {
-		t.Fatalf("--agents-reset failed: %v\nstderr: %s", err, stderr)
-	}
-	if !agents.ShouldPromptForAgentFile(repoDir) {
-		t.Fatal("expected --agents-reset to clear saved preference so ShouldPromptForAgentFile=true")
-	}
-
-	// 1h. reloadSingleRepoForUI preserves --label scoping and readiness across reloads.
-	loadedRes, err := reloadSingleRepoForUI(context.Background(), datasource.DataSource{Type: datasource.SourceTypeJSONLLocal, Path: issuesFile}, "Backend", "")
-	if err != nil {
-		t.Fatalf("reloadSingleRepoForUI: %v", err)
-	}
-	if !loadedRes.CandidateIDs["api-leaf"] || loadedRes.CandidateIDs["ops-root"] {
-		t.Fatalf("reloadSingleRepoForUI CandidateIDs mismatch: %v", loadedRes.CandidateIDs)
-	}
-	if loadedRes.Authority == nil || loadedRes.Authority.Ready("api-leaf", time.Now()) {
-		t.Fatalf("reloadSingleRepoForUI lost full-source readiness gate on api-leaf")
-	}
-
-	// 1i. --agent-brief insights.json + helpers.md jq parity, --export-pages non-blocking deps + tombstone exclusion, and hooks enforcement.
-	briefDir := filepath.Join(repoDir, "brief-bundle")
-	if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--agent-brief", briefDir); err != nil {
-		t.Fatalf("--agent-brief failed: %v\nstderr: %s", err, stderr)
-	}
-	insightsBytes, err := os.ReadFile(filepath.Join(briefDir, "insights.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, wantKey := range []string{`"full_stats"`, `"pagerank"`, `"Velocity"`, `"Bottlenecks"`} {
-		if !strings.Contains(string(insightsBytes), wantKey) {
-			t.Fatalf("agent-brief insights.json missing %s:\n%s", wantKey, insightsBytes)
-		}
-	}
-	helpersBytes, err := os.ReadFile(filepath.Join(briefDir, "helpers.md"))
-	if err != nil || strings.Contains(string(helpersBytes), ".top_pagerank") {
-		t.Fatalf("helpers.md still contains broken .top_pagerank query: err=%v\n%s", err, helpersBytes)
-	}
-
-	pagesDir := filepath.Join(repoDir, "pages-bundle")
-	if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--export-pages", pagesDir, "--pages-include-closed=false", "--pages-include-history=false"); err != nil {
-		t.Fatalf("--export-pages failed: %v\nstderr: %s", err, stderr)
-	}
-	exportDB, err := sql.Open("sqlite", filepath.Join(pagesDir, "beads.sqlite3"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer exportDB.Close()
-	var tombCount, relatedCount int
-	if err := exportDB.QueryRow(`SELECT COUNT(*) FROM issues WHERE id = 'gone-tomb'`).Scan(&tombCount); err != nil || tombCount != 0 {
-		t.Fatalf("tombstone leaked into beads.sqlite3 when --pages-include-closed=false: count=%d err=%v", tombCount, err)
-	}
-	if err := exportDB.QueryRow(`SELECT COUNT(*) FROM dependencies WHERE issue_id = 'api-leaf-2' AND depends_on_id = 'ops-root' AND type = 'related'`).Scan(&relatedCount); err != nil || relatedCount != 1 {
-		t.Fatalf("non-blocking 'related' dependency stripped from beads.sqlite3: count=%d err=%v", relatedCount, err)
-	}
-
-	if runtime.GOOS != "windows" {
-		bvCfgDir := filepath.Join(repoDir, ".bv")
-		if err := os.MkdirAll(bvCfgDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		hookLog := filepath.Join(repoDir, "hook.log")
-		hooksYAML := fmt.Sprintf("hooks:\n  pre-export:\n    - command: \"printf 'pre:%%s\\n' \\\"$BV_EXPORT_FORMAT\\\" >> %s\"\n      on_error: fail\n  post-export:\n    - command: \"printf 'post:%%s\\n' \\\"$BV_EXPORT_PATH\\\" >> %s\"\n", hookLog, hookLog)
-		if err := os.WriteFile(filepath.Join(bvCfgDir, "hooks.yaml"), []byte(hooksYAML), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		hookDigest := func(dir string, extraArgs ...string) string {
-			args := append(append([]string{}, extraArgs...), "--hooks-info")
-			out, hStderr, hErr := runCommandWithTimeout(t, dir, exe, args...)
-			if hErr != nil {
-				t.Fatalf("--hooks-info failed: %v\nstderr: %s", hErr, hStderr)
-			}
-			var info struct {
-				Digest string           `json:"digest"`
-				Hooks  map[string][]any `json:"hooks"`
-			}
-			if err := json.Unmarshal([]byte(out), &info); err != nil || info.Digest == "" {
-				t.Fatalf("decode --hooks-info: err=%v out=%s", err, out)
-			}
-			return info.Digest
-		}
-		digest1 := hookDigest(repoDir)
-		graphFile := filepath.Join(repoDir, "g.dot")
-		if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--export-graph", graphFile, "--trust-hooks", digest1); err != nil {
-			t.Fatalf("--export-graph --trust-hooks failed: %v\nstderr: %s", err, stderr)
-		}
-		pbFile := filepath.Join(repoDir, "pb.md")
-		if _, stderr, err := runCommandWithTimeout(t, repoDir, exe, "--priority-brief", pbFile, "--trust-hooks", digest1); err != nil {
-			t.Fatalf("--priority-brief --trust-hooks failed: %v\nstderr: %s", err, stderr)
-		}
-		logged, err := os.ReadFile(hookLog)
-		if err != nil || !strings.Contains(string(logged), "pre:dot") || !strings.Contains(string(logged), "pre:markdown") || !strings.Contains(string(logged), "post:"+pbFile) {
-			t.Fatalf("expected pre/post hooks to run for --export-graph and --priority-brief, got err=%v log=%q", err, string(logged))
-		}
-
-		// Failing pre-export hook must abort --agent-brief BEFORE creating the output directory.
-		failHooksYAML := "hooks:\n  pre-export:\n    - command: \"exit 1\"\n      on_error: fail\n"
-		if err := os.WriteFile(filepath.Join(bvCfgDir, "hooks.yaml"), []byte(failHooksYAML), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		digestFail := hookDigest(repoDir)
-		abortedBriefDir := filepath.Join(repoDir, "aborted-brief")
-		if _, _, err := runCommandWithTimeout(t, repoDir, exe, "--agent-brief", abortedBriefDir, "--trust-hooks", digestFail); err == nil {
-			t.Fatal("expected failing pre-export hook to abort --agent-brief")
-		}
-		if _, statErr := os.Stat(abortedBriefDir); !os.IsNotExist(statErr) {
-			t.Fatalf("failing pre-export hook created %s prematurely", abortedBriefDir)
-		}
-	}
-
-	// 2. Multi-repo --workspace git correlation end-to-end (history, bead-history, file-beads, orphans, feedback, stats, export-pages history.json, hooks-info).
-	wsRoot := t.TempDir()
-	initGitRepo := func(dir, prefix, localID, codeFile, commitMsg string) string {
-		if err := os.MkdirAll(filepath.Join(dir, ".beads"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		runGit := func(args ...string) string {
-			cmd := exec.Command("git", args...)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(),
-				"GIT_AUTHOR_NAME=Alice", "GIT_AUTHOR_EMAIL=alice@example.com",
-				"GIT_COMMITTER_NAME=Alice", "GIT_COMMITTER_EMAIL=alice@example.com",
-			)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
-			}
-			return strings.TrimSpace(string(out))
-		}
-		runGit("init", "-q", "-b", "main")
-		issueLine := fmt.Sprintf(`{"id":"%s","title":"%s feature","status":"in_progress","priority":1,"issue_type":"feature","assignee":"Alice","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z"}`+"\n", localID, prefix)
-		if err := os.WriteFile(filepath.Join(dir, ".beads", "issues.jsonl"), []byte(issueLine), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		runGit("add", ".beads/issues.jsonl")
-		runGit("commit", "-q", "-m", "track "+localID)
-		if err := os.WriteFile(filepath.Join(dir, codeFile), []byte("package main\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		runGit("add", codeFile)
-		runGit("commit", "-q", "-m", commitMsg)
-		return runGit("rev-parse", "HEAD")
-	}
-
-	apiSHA := initGitRepo(filepath.Join(wsRoot, "api"), "API", "101", "handler.go", "feat: implement 101 handler")
-	_ = initGitRepo(filepath.Join(wsRoot, "web"), "WEB", "202", "ui.tsx", "feat: implement 202 view")
-
-	wsBvDir := filepath.Join(wsRoot, ".bv")
-	if err := os.MkdirAll(wsBvDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	wsConfig := filepath.Join(wsBvDir, "workspace.yaml")
-	wsYAML := "name: multi\nrepos:\n  - name: api\n    path: api\n    prefix: api-\n  - name: web\n    path: web\n    prefix: web-\ndiscovery:\n  enabled: false\n"
-	if err := os.WriteFile(wsConfig, []byte(wsYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(wsBvDir, "hooks.yaml"), []byte("hooks:\n  pre-export:\n    - command: \"true\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// --hooks-info --workspace resolves workspace .bv/hooks.yaml even when run from an empty CWD.
-	emptyCWD := t.TempDir()
-	hooksInfoOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--hooks-info")
-	var wsHookInfo struct {
-		Digest string           `json:"digest"`
-		Hooks  map[string][]any `json:"hooks"`
-	}
-	if err != nil || json.Unmarshal([]byte(hooksInfoOut), &wsHookInfo) != nil || wsHookInfo.Digest == "" || len(wsHookInfo.Hooks["pre-export"]) != 1 {
-		t.Fatalf("--hooks-info --workspace failed to load workspace hooks: err=%v stderr=%s out=%s", err, stderr, hooksInfoOut)
-	}
-
-	wsHistOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-history")
-	if err != nil {
-		t.Fatalf("--workspace --robot-history failed: %v\nstderr: %s", err, stderr)
-	}
-	if !strings.Contains(wsHistOut, `"api-101"`) || !strings.Contains(wsHistOut, `"web-202"`) {
-		t.Fatalf("expected both api-101 and web-202 in --workspace --robot-history:\n%s", wsHistOut)
-	}
-
-	// --robot-history --min-confidence 0.99 recomputes TotalCommits / MethodDistribution cleanly.
-	wsHighConfOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-history", "--min-confidence", "0.99")
-	if err != nil {
-		t.Fatalf("--workspace --robot-history --min-confidence failed: %v\nstderr: %s", err, stderr)
-	}
-	var highConfPayload struct {
-		Stats correlation.HistoryStats `json:"stats"`
-	}
-	if err := json.Unmarshal([]byte(wsHighConfOut), &highConfPayload); err != nil {
-		t.Fatalf("decode high-conf history: %v", err)
-	}
-	if highConfPayload.Stats.BeadsWithCommits == 0 && highConfPayload.Stats.TotalCommits != 0 {
-		t.Fatalf("TotalCommits not recomputed after --min-confidence filter: %+v", highConfPayload.Stats)
-	}
-
-	// --workspace --robot-file-beads works for both qualified api/handler.go and bare handler.go.
-	for _, q := range []string{"api/handler.go", "handler.go"} {
-		fbOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-file-beads", q)
-		if err != nil || !strings.Contains(fbOut, `"api-101"`) {
-			t.Fatalf("--workspace --robot-file-beads %s failed: err=%v stderr=%s out=%s", q, err, stderr, fbOut)
-		}
-	}
-
-	// --workspace --robot-confirm-correlation + --robot-explain-correlation + --robot-correlation-stats.
-	if _, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-confirm-correlation", apiSHA+":api-101", "--correlation-reason", "verified in test"); err != nil {
-		t.Fatalf("--workspace --robot-confirm-correlation failed: %v\nstderr: %s", err, stderr)
-	}
-	expOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-explain-correlation", apiSHA+":api-101")
-	if err != nil || !strings.Contains(expOut, "confirmed by feedback") {
-		t.Fatalf("--workspace --robot-explain-correlation missing stored feedback: err=%v stderr=%s out=%s", err, stderr, expOut)
-	}
-	statsOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-correlation-stats")
-	if err != nil || !strings.Contains(statsOut, `"confirmed": 1`) && !strings.Contains(statsOut, `"confirmed":1`) {
-		t.Fatalf("--workspace --robot-correlation-stats missing confirmed count: err=%v stderr=%s out=%s", err, stderr, statsOut)
-	}
-
-	// --workspace --export-pages produces non-empty data/history.json!
-	wsPagesDir := filepath.Join(wsRoot, "ws-pages")
-	if _, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--export-pages", wsPagesDir, "--trust-hooks", wsHookInfo.Digest); err != nil {
-		t.Fatalf("--workspace --export-pages failed: %v\nstderr: %s", err, stderr)
-	}
-	wsHistJSON, err := os.ReadFile(filepath.Join(wsPagesDir, "data", "history.json"))
-	if err != nil || !strings.Contains(string(wsHistJSON), `"commits"`) || !strings.Contains(string(wsHistJSON), `"api-101"`) || !strings.Contains(string(wsHistJSON), `"web-202"`) {
-		t.Fatalf("expected --workspace --export-pages to emit populated data/history.json with both member repos, got err=%v body=%s", err, string(wsHistJSON))
-	}
-
-	// --workspace glob --robot-file-beads "*.go" and bare --robot-impact handler.go resolve prefixed files.
-	globFBOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-file-beads", "*.go")
-	if err != nil || !strings.Contains(globFBOut, `"api-101"`) {
-		t.Fatalf("--workspace --robot-file-beads *.go failed: err=%v stderr=%s out=%s", err, stderr, globFBOut)
-	}
-	impactOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-impact", "handler.go")
-	if err != nil || !strings.Contains(impactOut, `"api-101"`) {
-		t.Fatalf("--workspace --robot-impact handler.go failed: err=%v stderr=%s out=%s", err, stderr, impactOut)
-	}
-
-	// --workspace sprint commands aggregate member sprints, qualify bead IDs, and disambiguate colliding sprint IDs.
-	apiSprint := `{"id":"sprint-1","name":"Sprint 1","start_date":"2026-11-01T00:00:00Z","end_date":"2026-11-30T00:00:00Z","bead_ids":["101"]}` + "\n"
-	webSprint := `{"id":"sprint-1","name":"Sprint 1","start_date":"2026-11-01T00:00:00Z","end_date":"2026-11-30T00:00:00Z","bead_ids":["202"]}` + "\n" +
-		`{"id":"web-only","name":"Web Unique","start_date":"2026-11-01T00:00:00Z","end_date":"2026-11-30T00:00:00Z","bead_ids":["202"]}` + "\n"
-	if err := os.WriteFile(filepath.Join(wsRoot, "api", ".beads", "sprints.jsonl"), []byte(apiSprint), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(wsRoot, "web", ".beads", "sprints.jsonl"), []byte(webSprint), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	wsSprintsOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-sprint-list")
-	if err != nil || !strings.Contains(wsSprintsOut, `"api:sprint-1"`) || !strings.Contains(wsSprintsOut, `"web:sprint-1"`) || !strings.Contains(wsSprintsOut, `"api-101"`) || !strings.Contains(wsSprintsOut, `"web-202"`) {
-		t.Fatalf("--workspace --robot-sprint-list failed to aggregate/qualify sprints: err=%v stderr=%s out=%s", err, stderr, wsSprintsOut)
-	}
-	wsSprintShowOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-sprint-show", "api:sprint-1")
-	if err != nil || !strings.Contains(wsSprintShowOut, `"api-101"`) {
-		t.Fatalf("--workspace --robot-sprint-show api:sprint-1 failed: err=%v stderr=%s out=%s", err, stderr, wsSprintShowOut)
-	}
-	wsUniqueSprintOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-sprint-show", "web-only")
-	if err != nil || !strings.Contains(wsUniqueSprintOut, `"web-202"`) {
-		t.Fatalf("--workspace --robot-sprint-show web-only failed: err=%v stderr=%s out=%s", err, stderr, wsUniqueSprintOut)
-	}
-
-	// 3. Round 1 adversarial regressions:
-	//    - Pinned open P0 is withheld from --robot-next and alters data_hash vs unpinned
-	//    - --robot-alerts without .bv/baseline.json emits new_cycle
-	//    - --robot-diff --diff-since counts dependency-blocked open issues
-	//    - --limit works in flag-mode for --robot-search, --robot-history, and --emit-script
-	advDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(advDir, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runAdvGit := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = advDir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Alice", "GIT_AUTHOR_EMAIL=alice@example.com",
-			"GIT_COMMITTER_NAME=Alice", "GIT_COMMITTER_EMAIL=alice@example.com",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v in %s: %v\n%s", args, advDir, err, out)
-		}
-	}
-	runAdvGit("init", "-q", "-b", "main")
-	baseJSONL := strings.Join([]string{
-		`{"id":"pin-0","title":"Pinned P0 charter","status":"open","priority":0,"issue_type":"task","pinned":false,"created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z"}`,
-		`{"id":"work-2","title":"Claimable P2 feature","status":"open","priority":2,"issue_type":"task","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(advDir, ".beads", "issues.jsonl"), []byte(baseJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runAdvGit("add", ".beads/issues.jsonl")
-	runAdvGit("commit", "-q", "-m", "initial unpinned")
-
-	unpinnedNextOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--robot-next")
-	if err != nil {
-		t.Fatalf("unpinned --robot-next failed: %v\nstderr: %s", err, stderr)
-	}
-	var unpinnedNext robotNextOutput
-	if err := json.Unmarshal([]byte(unpinnedNextOut), &unpinnedNext); err != nil || unpinnedNext.DiagnosticTopPick == nil || unpinnedNext.DiagnosticTopPick.ID != "pin-0" {
-		t.Fatalf("expected unpinned P0 to win --robot-next diagnostic_top_pick, got %+v (err=%v)\nraw=%s", unpinnedNext, err, unpinnedNextOut)
-	}
-
-	pinnedAndCycleJSONL := strings.Join([]string{
-		`{"id":"pin-0","title":"Pinned P0 charter","status":"open","priority":0,"issue_type":"task","pinned":true,"created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z"}`,
-		`{"id":"work-2","title":"Claimable P2 feature","status":"open","priority":2,"issue_type":"task","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z"}`,
-		`{"id":"dep-blocked","title":"Blocked by work-2","status":"open","priority":1,"issue_type":"task","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z","dependencies":[{"issue_id":"dep-blocked","depends_on_id":"work-2","type":"blocks"}]}`,
-		`{"id":"cyc-1","title":"Cycle A","status":"open","priority":1,"issue_type":"bug","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z","dependencies":[{"issue_id":"cyc-1","depends_on_id":"cyc-2","type":"blocks"}]}`,
-		`{"id":"cyc-2","title":"Cycle B","status":"open","priority":1,"issue_type":"bug","created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-02T00:00:00Z","dependencies":[{"issue_id":"cyc-2","depends_on_id":"cyc-1","type":"blocks"}]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(advDir, ".beads", "issues.jsonl"), []byte(pinnedAndCycleJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// Verify pinned:true flips data_hash and withholds pin-0 from --robot-next + robotNextClaimablePick:
-	twoRowPinned := strings.Replace(baseJSONL, `"pinned":false`, `"pinned":true`, 1)
-	hashDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(hashDir, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(hashDir, ".beads", "issues.jsonl"), []byte(twoRowPinned), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	pinnedTwoRowOut, stderr, err := runCommandWithTimeout(t, hashDir, exe, "--robot-next")
-	if err != nil {
-		t.Fatalf("pinned 2-row --robot-next failed: %v\nstderr: %s", err, stderr)
-	}
-	var pinnedTwoRow robotNextOutput
-	if err := json.Unmarshal([]byte(pinnedTwoRowOut), &pinnedTwoRow); err != nil {
-		t.Fatalf("decode pinned 2-row --robot-next: %v", err)
-	}
-	if pinnedTwoRow.DiagnosticTopPick == nil || pinnedTwoRow.DiagnosticTopPick.ID != "work-2" {
-		t.Fatalf("expected pinned P0 to be withheld so work-2 is recommended by --robot-next, got %+v\nraw: %s", pinnedTwoRow, pinnedTwoRowOut)
-	}
-	if pinnedTwoRow.DataHash == unpinnedNext.DataHash {
-		t.Fatalf("expected pinned:true to change data_hash vs pinned:false, both were %s", pinnedTwoRow.DataHash)
-	}
-	directIssues := []model.Issue{
-		{ID: "pin-1", Status: model.StatusOpen, IssueType: model.TypeTask, Pinned: true},
-		{ID: "eph-1", Status: model.StatusOpen, IssueType: model.TypeTask, Ephemeral: true},
-		{ID: "tpl-1", Status: model.StatusOpen, IssueType: model.TypeTask, IsTemplate: true},
-		{ID: "ok-1", Status: model.StatusOpen, IssueType: model.TypeTask},
-	}
-	directPick, _, _, ok := robotNextClaimablePick([]analysis.TopPick{{ID: "pin-1"}, {ID: "eph-1"}, {ID: "tpl-1"}, {ID: "ok-1"}}, directIssues, nil, time.Now())
-	if !ok || directPick.ID != "ok-1" {
-		t.Fatalf("expected robotNextClaimablePick to reject pinned/ephemeral/template picks and select ok-1, got ok=%v pick=%+v", ok, directPick)
-	}
-
-	// --robot-alerts without .bv/baseline.json emits new_cycle for cyc-1 <-> cyc-2.
-	alertsNoBLOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--robot-alerts", "--alert-type=new_cycle")
-	if err != nil {
-		t.Fatalf("--robot-alerts without baseline failed: %v\nstderr: %s", err, stderr)
-	}
-	var alertsNoBLPayload struct {
-		Alerts []struct {
-			Type string `json:"type"`
-		} `json:"alerts"`
-	}
-	if err := json.Unmarshal([]byte(alertsNoBLOut), &alertsNoBLPayload); err != nil || len(alertsNoBLPayload.Alerts) != 1 || alertsNoBLPayload.Alerts[0].Type != "new_cycle" {
-		t.Fatalf("expected --robot-alerts without baseline to emit 1 new_cycle alert, got err=%v payload=%+v out=%s", err, alertsNoBLPayload, alertsNoBLOut)
-	}
-
-	// --robot-diff --diff-since HEAD~0 vs working tree counts dependency-blocked open issues (dep-blocked + cyc-1 + cyc-2 = 3).
-	diffOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--robot-diff", "--diff-since", "HEAD")
-	if err != nil {
-		t.Fatalf("--robot-diff --diff-since HEAD failed: %v\nstderr: %s", err, stderr)
-	}
-	var diffPayload struct {
-		Diff struct {
-			MetricDeltas struct {
-				BlockedIssues int `json:"blocked_issues"`
-			} `json:"metric_deltas"`
-		} `json:"diff"`
-	}
-	if err := json.Unmarshal([]byte(diffOut), &diffPayload); err != nil || diffPayload.Diff.MetricDeltas.BlockedIssues < 1 {
-		t.Fatalf("expected --robot-diff --diff-since HEAD to count dependency-blocked open issues (>0), got err=%v payload=%+v raw=%s", err, diffPayload, diffOut)
-	}
-
-	// Flag-mode --limit alias works on --robot-search, --robot-history, and --emit-script.
-	searchLimOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--robot-search", "--search", "Cycle", "--limit", "1")
-	if err != nil || !strings.Contains(searchLimOut, `"limit": 1`) && !strings.Contains(searchLimOut, `"limit":1`) {
-		t.Fatalf("flag-mode --robot-search --limit 1 failed: err=%v stderr=%s out=%s", err, stderr, searchLimOut)
-	}
-	histLimOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--robot-history", "--limit", "1")
-	if err != nil || !strings.Contains(histLimOut, `"limit": 1`) && !strings.Contains(histLimOut, `"limit":1`) {
-		t.Fatalf("flag-mode --robot-history --limit 1 failed: err=%v stderr=%s out=%s", err, stderr, histLimOut)
-	}
-	scriptLimOut, stderr, err := runCommandWithTimeout(t, advDir, exe, "--emit-script", "--limit", "1")
-	if err != nil || !strings.Contains(scriptLimOut, "# Top 1 recommendations") {
-		t.Fatalf("flag-mode --emit-script --limit 1 failed: err=%v stderr=%s out=%s", err, stderr, scriptLimOut)
-	}
-
-	// 5. Round 2 parity: all 6 --limit CLI/subcommand forms succeed with exit 0.
-	if err := os.WriteFile(filepath.Join(advDir, "app.go"), []byte("package app\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runAdvGit("add", "app.go", ".beads/issues.jsonl")
-	runAdvGit("commit", "-q", "-m", "feat: touch app.go for work-2")
-	for _, limArgs := range [][]string{
-		{"next", "--limit", "1", "--json"},
-		{"causality", "work-2", "--limit", "5"},
-		{"impact", "app.go", "--limit", "5"},
-		{"impact-network", "work-2", "--limit", "5"},
-		{"--robot-impact", "app.go", "--limit", "5"},
-		{"--robot-impact-network", "work-2", "--limit", "5"},
-	} {
-		if limOut, limErrStr, limErr := runCommandWithTimeout(t, advDir, exe, limArgs...); limErr != nil {
-			t.Fatalf("args %v failed: err=%v stderr=%s out=%s", limArgs, limErr, limErrStr, limOut)
-		}
-	}
-	// Nonexistent bead ID that appears in a commit message ("feat") must still fail --robot-causality cleanly.
-	if _, featErrStr, featErr := runCommandWithTimeout(t, advDir, exe, "--robot-causality", "feat"); featErr == nil || !strings.Contains(featErrStr, "Bead not found") {
-		t.Fatalf("expected nonexistent word 'feat' to fail --robot-causality with Bead not found, got err=%v stderr=%s", featErr, featErrStr)
-	}
-
-	// 6. --robot-suggest --suggest-type stale exits 1 with explicit guidance instead of a silent empty result.
-	if _, staleErrStr, staleErr := runCommandWithTimeout(t, advDir, exe, "--robot-suggest", "--suggest-type", "stale"); staleErr == nil || !strings.Contains(staleErrStr, "--robot-alerts --alert-type=stale_issue") {
-		t.Fatalf("expected --suggest-type stale to exit 1 with alert-type hint, got err=%v stderr=%s", staleErr, staleErrStr)
-	}
-
-	// 7. Deleted & tombstoned beads remain queryable in --bead-history and --robot-causality (single-repo & workspace).
-	tombLine := `{"id":"101","title":"Legacy auth","status":"tombstone","priority":2,"issue_type":"task"}` + "\n"
-	if err := os.WriteFile(filepath.Join(wsRoot, "api", ".beads", "issues.jsonl"), []byte(tombLine), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, gitArgs := range [][]string{
-		{"-C", filepath.Join(wsRoot, "api"), "add", ".beads/issues.jsonl"},
-		{"-C", filepath.Join(wsRoot, "api"), "commit", "-q", "-m", "tombstone 101"},
-	} {
-		cmd := exec.Command("git", gitArgs...)
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Alice", "GIT_AUTHOR_EMAIL=alice@example.com",
-			"GIT_COMMITTER_NAME=Alice", "GIT_COMMITTER_EMAIL=alice@example.com",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", gitArgs, err, out)
-		}
-	}
-	// Single-repo tombstoned 101
-	srHistOut, stderr, err := runCommandWithTimeout(t, filepath.Join(wsRoot, "api"), exe, "--bead-history", "101", "--robot-history")
-	if err != nil || !strings.Contains(srHistOut, `"101"`) || !strings.Contains(srHistOut, `"Legacy auth"`) {
-		t.Fatalf("single-repo tombstoned --bead-history 101 failed: err=%v stderr=%s out=%s", err, stderr, srHistOut)
-	}
-	srCausOut, stderr, err := runCommandWithTimeout(t, filepath.Join(wsRoot, "api"), exe, "--robot-causality", "101")
-	if err != nil || !strings.Contains(srCausOut, `"101"`) {
-		t.Fatalf("single-repo tombstoned --robot-causality 101 failed: err=%v stderr=%s out=%s", err, stderr, srCausOut)
-	}
-	// Workspace tombstoned api-101
-	wsTombHistOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--bead-history", "api-101", "--robot-history")
-	if err != nil || !strings.Contains(wsTombHistOut, `"api-101"`) || !strings.Contains(wsTombHistOut, `"Legacy auth"`) {
-		t.Fatalf("workspace tombstoned --bead-history api-101 failed: err=%v stderr=%s out=%s", err, stderr, wsTombHistOut)
-	}
-	wsTombCausOut, stderr, err := runCommandWithTimeout(t, emptyCWD, exe, "--workspace", wsConfig, "--robot-causality", "api-101")
-	if err != nil || !strings.Contains(wsTombCausOut, `"api-101"`) {
-		t.Fatalf("workspace tombstoned --robot-causality api-101 failed: err=%v stderr=%s out=%s", err, stderr, wsTombCausOut)
-	}
-
-	// 8. Multi-.beads monorepo workspace correlation, orphans, and root-repo/--repo sprint scoping (Config A & Config B).
-	monoDir := t.TempDir()
-	runGitMono := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = monoDir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Test",
-			"GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=Test",
-			"GIT_COMMITTER_EMAIL=test@example.com",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	runGitMono("init", "-q")
-	for _, dir := range []string{
-		filepath.Join(monoDir, ".beads"),
-		filepath.Join(monoDir, "services", "api", ".beads"),
-		filepath.Join(monoDir, "services", "web", ".beads"),
-		filepath.Join(monoDir, ".bv"),
-	} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	sprintStart := time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339)
-	sprintEnd := time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339)
-	if err := os.WriteFile(filepath.Join(monoDir, ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"Root issue","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, ".beads", "sprints.jsonl"), []byte(fmt.Sprintf(`{"id":"s1","name":"Sprint 1","start_date":%q,"end_date":%q,"bead_ids":["1"]}`+"\n", sprintStart, sprintEnd)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "api", ".beads", "issues.jsonl"), []byte(
-		`{"id":"1","title":"API auth","status":"in_progress","priority":1,"issue_type":"task"}`+"\n"+
-			`{"id":"2","title":"API rate limit","status":"open","priority":2,"issue_type":"task"}`+"\n",
-	), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "api", ".beads", "sprints.jsonl"), []byte(fmt.Sprintf(`{"id":"s1","name":"Sprint 1","start_date":%q,"end_date":%q,"bead_ids":["1"]}`+"\n", sprintStart, sprintEnd)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "web", ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"Web shell","status":"in_progress","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "api", "srv.go"), []byte("package api\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "web", "app.tsx"), []byte("export const x = 1;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitMono("add", ".")
-	runGitMono("commit", "-q", "-m", "initial monorepo stores and code")
-
-	// Expand api sprint s1 scope to add bead "2" so --robot-burndown exercises computeSprintScopeChangesForContext.
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "api", ".beads", "sprints.jsonl"), []byte(fmt.Sprintf(`{"id":"s1","name":"Sprint 1","start_date":%q,"end_date":%q,"bead_ids":["1","2"]}`+"\n", sprintStart, sprintEnd)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "web", "orphan.tsx"), []byte("export const y = 2;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitMono("add", ".")
-	runGitMono("commit", "-q", "-m", "fix: unlinked web tweak and api sprint scope update")
-
-	// Also commit a root .beads/sprints.jsonl change paired with services/web/orphan.tsx
-	// to verify --repo root --robot-orphans ignores tracker files when scoping code commits ([BUG R4-2C]).
-	if err := os.WriteFile(filepath.Join(monoDir, ".beads", "sprints.jsonl"), []byte(fmt.Sprintf(`{"id":"s1","name":"Sprint 1 v2","start_date":%q,"end_date":%q,"bead_ids":["1"]}`+"\n", sprintStart, sprintEnd)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoDir, "services", "web", "orphan.tsx"), []byte("export const y = 3;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitMono("add", ".beads/sprints.jsonl", "services/web/orphan.tsx")
-	runGitMono("commit", "-q", "-m", "fix: web orphan tweak alongside root sprint metadata")
-
-	wsCfgA := filepath.Join(monoDir, ".bv", "ws-a.yaml")
-	wsYAMLA := "name: mono-a\nrepos:\n  - name: root\n    path: .\n    prefix: root-\n  - name: api\n    path: .\n    beads_path: services/api/.beads\n    prefix: api-\n  - name: web\n    path: .\n    beads_path: services/web/.beads\n    prefix: web-\ndiscovery:\n  enabled: false\n"
-	if err := os.WriteFile(wsCfgA, []byte(wsYAMLA), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	wsCfgB := filepath.Join(monoDir, ".bv", "ws-b.yaml")
-	wsYAMLB := "name: mono-b\nrepos:\n  - name: root\n    path: .\n    prefix: root-\n  - name: api\n    path: services/api\n    prefix: api-\n  - name: web\n    path: services/web\n    prefix: web-\ndiscovery:\n  enabled: false\n"
-	if err := os.WriteFile(wsCfgB, []byte(wsYAMLB), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, cfgPath := range []string{wsCfgA, wsCfgB} {
-		mHistOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--robot-history")
-		if err != nil || !strings.Contains(mHistOut, `"api-1"`) || !strings.Contains(mHistOut, `"web-1"`) {
-			t.Fatalf("monorepo (%s) --robot-history failed: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, mHistOut)
-		}
-		mOrphOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--robot-orphans")
-		if err != nil || !strings.Contains(mOrphOut, `"stats"`) {
-			t.Fatalf("monorepo (%s) --robot-orphans failed: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, mOrphOut)
-		}
-		// [BUG R4-2C]: --repo root and --repo api must NOT be contaminated by web code commits that also touched .beads/sprints.jsonl or services/api/.beads/sprints.jsonl.
-		rootOrphOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--repo", "root", "--robot-orphans", "--orphans-min-score", "0")
-		if err != nil || strings.Contains(rootOrphOut, "orphan.tsx") {
-			t.Fatalf("monorepo (%s) --repo root --robot-orphans leaked web orphan.tsx: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, rootOrphOut)
-		}
-		var rootOrphRep correlation.OrphanReport
-		if err := json.Unmarshal([]byte(rootOrphOut), &rootOrphRep); err != nil || rootOrphRep.Stats.TotalCommits != 0 || rootOrphRep.Stats.OrphanCount != 0 {
-			t.Fatalf("monorepo (%s) --repo root --robot-orphans expected TotalCommits=0 OrphanCount=0, got err=%v stats=%+v", filepath.Base(cfgPath), err, rootOrphRep.Stats)
-		}
-		apiOrphOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--repo", "api", "--robot-orphans", "--orphans-min-score", "0")
-		if err != nil || strings.Contains(apiOrphOut, "orphan.tsx") {
-			t.Fatalf("monorepo (%s) --repo api --robot-orphans leaked web orphan.tsx: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, apiOrphOut)
-		}
-		// Root-repo sprint BeadIDs qualified ("root-1") and colliding sprint IDs disambiguated ("root:s1", "api:s1").
-		spListOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--robot-sprint-list")
-		if err != nil || !strings.Contains(spListOut, `"root-1"`) || !strings.Contains(spListOut, `"root:s1"`) || !strings.Contains(spListOut, `"api:s1"`) {
-			t.Fatalf("monorepo (%s) --robot-sprint-list root qualification/disambiguation failed: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, spListOut)
-		}
-		// --repo api scopes sprints to api ONLY (no root-1).
-		spApiOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--repo", "api", "--robot-sprint-list")
-		if err != nil || strings.Contains(spApiOut, `"root-1"`) || !strings.Contains(spApiOut, `"api-1"`) {
-			t.Fatalf("monorepo (%s) --repo api --robot-sprint-list failed to scope sprints: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, spApiOut)
-		}
-		// --robot-burndown api:s1 emits qualified ScopeChanges ("api-2").
-		burnOut, stderr, err := runCommandWithTimeout(t, monoDir, exe, "--workspace", cfgPath, "--robot-burndown", "api:s1")
-		if err != nil || !strings.Contains(burnOut, `"api-2"`) {
-			t.Fatalf("monorepo (%s) --robot-burndown api:s1 missing qualified scope change api-2: err=%v stderr=%s out=%s", filepath.Base(cfgPath), err, stderr, burnOut)
-		}
-	}
-
-	// 9. Round 3 CLI/workspace/scoping regressions:
-	//    - Single-repo BEADS_DIR=<custom-tracker> without <repo>/.beads on --robot-history, --robot-orphans, --export-pages, --export-graph
-	//    - newScopedSnapshotForCLI / --robot-diff ActionableCount > 0 and parked/deferred excluded from BlockedCount
-	//    - Config-A monorepo without root .beads: feedback store routing, --repo scoping on history/orphans/stats,
-	//      qualified explicit alias matching ("feat(api-1)"), colliding bd-1 subtree disambiguation, deleted native "api-99",
-	//      and --export-pages history.json generation.
-	runWithEnv := func(dir string, extraEnv []string, args ...string) (string, string, error) {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, exe, args...)
-		cmd.Dir = dir
-		cmd.Env = append(append(os.Environ(), "BV_NO_BROWSER=1", "BV_TEST_MODE=1"), extraEnv...)
-		var stdout, stderrBuf bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderrBuf
-		runErr := cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Fatalf("command %v timed out\nstdout:\n%s\nstderr:\n%s", args, stdout.String(), stderrBuf.String())
-		}
-		return stdout.String(), stderrBuf.String(), runErr
-	}
-
-	// 9a. Single-repo custom BEADS_DIR (no .beads directory at repo root)
-	customRepo := t.TempDir()
-	runGitCustom := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = customRepo
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Custom", "GIT_AUTHOR_EMAIL=custom@example.com",
-			"GIT_COMMITTER_NAME=Custom", "GIT_COMMITTER_EMAIL=custom@example.com",
-		)
-		out, gitErr := cmd.CombinedOutput()
-		if gitErr != nil {
-			t.Fatalf("git %v: %v\n%s", args, gitErr, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	runGitCustom("init", "-q", "-b", "main")
-	customTrackerDir := filepath.Join(customRepo, "custom-tracker")
-	if err := os.MkdirAll(customTrackerDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(customTrackerDir, "issues.jsonl"), []byte(`{"id":"cust-1","title":"Custom tracker task","status":"in_progress","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCustom("add", "custom-tracker/issues.jsonl")
-	runGitCustom("commit", "-q", "-m", "track cust-1 in custom-tracker")
-	if err := os.WriteFile(filepath.Join(customRepo, "svc.go"), []byte("package svc\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCustom("add", "svc.go")
-	runGitCustom("commit", "-q", "-m", "feat(cust-1): implement svc")
-	if err := os.WriteFile(filepath.Join(customRepo, "orphan.go"), []byte("package svc\nvar orphan = 1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCustom("add", "orphan.go")
-	runGitCustom("commit", "-q", "-m", "chore: unlinked orphan tweak")
-
-	customEnv := []string{"BEADS_DIR=" + customTrackerDir}
-	custHistOut, stderr, err := runWithEnv(customRepo, customEnv, "--robot-history")
-	if err != nil || !strings.Contains(custHistOut, `"cust-1"`) || !strings.Contains(custHistOut, `"svc.go"`) || strings.Contains(custHistOut, `"custom-tracker/issues.jsonl"`) {
-		t.Fatalf("BEADS_DIR --robot-history failed or leaked tracker file: err=%v stderr=%s out=%s", err, stderr, custHistOut)
-	}
-	custOrphOut, stderr, err := runWithEnv(customRepo, customEnv, "--robot-orphans", "--orphans-min-score", "0")
-	if err != nil {
-		t.Fatalf("BEADS_DIR --robot-orphans failed: err=%v stderr=%s", err, stderr)
-	}
-	var custOrphPayload correlation.OrphanReport
-	if err := json.Unmarshal([]byte(custOrphOut), &custOrphPayload); err != nil || custOrphPayload.Stats.OrphanCount != 1 || custOrphPayload.Stats.BeadsOnlyCommits < 1 {
-		t.Fatalf("expected BEADS_DIR --robot-orphans OrphanCount=1 and BeadsOnlyCommits>=1, got err=%v stats=%+v raw=%s", err, custOrphPayload.Stats, custOrphOut)
-	}
-	custPagesDir := filepath.Join(customRepo, "pages-out")
-	if _, stderr, err := runWithEnv(customRepo, customEnv, "--export-pages", custPagesDir); err != nil {
-		t.Fatalf("BEADS_DIR --export-pages failed: %v\nstderr: %s", err, stderr)
-	}
-	if custPagesHist, readErr := os.ReadFile(filepath.Join(custPagesDir, "data", "history.json")); readErr != nil || !strings.Contains(string(custPagesHist), `"cust-1"`) {
-		t.Fatalf("expected BEADS_DIR --export-pages data/history.json to contain cust-1, err=%v body=%s", readErr, string(custPagesHist))
-	}
-	custGraphHTML := filepath.Join(customRepo, "graph-out.html")
-	if _, stderr, err := runWithEnv(customRepo, customEnv, "--export-graph", custGraphHTML); err != nil {
-		t.Fatalf("BEADS_DIR --export-graph html failed: %v\nstderr: %s", err, stderr)
-	}
-
-	// 9b. newScopedSnapshotForCLI & --robot-diff ActionableCount / BlockedCount accuracy
-	futureDefer := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
-	snapIssues := []model.Issue{
-		{ID: "act-1", Title: "Actionable", Status: model.StatusOpen, Priority: 1, IssueType: model.TypeTask},
-		{ID: "park-pin", Title: "Pinned open", Status: model.StatusOpen, Priority: 1, IssueType: model.TypeTask, Pinned: true},
-		{ID: "park-def", Title: "Deferred status", Status: model.StatusDeferred, Priority: 1, IssueType: model.TypeTask},
-		{ID: "fut-def", Title: "Future defer_until", Status: model.StatusOpen, Priority: 1, IssueType: model.TypeTask, DeferUntil: &futureDefer},
-		{
-			ID: "blk-1", Title: "Dependency blocked", Status: model.StatusOpen, Priority: 2, IssueType: model.TypeTask,
-			Dependencies: []*model.Dependency{{IssueID: "blk-1", DependsOnID: "act-1", Type: model.DepBlocks}},
-		},
-	}
-	refSnapTime := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
-	scopedSnap := newScopedSnapshotForCLI(snapIssues, nil, nil, refSnapTime, "HEAD", false)
-	refSnap := analysis.NewSnapshotAt(snapIssues, refSnapTime, "HEAD")
-	if scopedSnap.ActionableCount != 1 || scopedSnap.BlockedCount != 1 || scopedSnap.OpenCount != 5 {
-		t.Fatalf("expected newScopedSnapshotForCLI ActionableCount=1, BlockedCount=1, OpenCount=5; got actionable=%d blocked=%d open=%d",
-			scopedSnap.ActionableCount, scopedSnap.BlockedCount, scopedSnap.OpenCount)
-	}
-	if scopedSnap.ActionableCount != refSnap.ActionableCount || scopedSnap.BlockedCount != refSnap.BlockedCount || scopedSnap.OpenCount != refSnap.OpenCount || scopedSnap.ClosedCount != refSnap.ClosedCount {
-		t.Fatalf("newScopedSnapshotForCLI count mismatch vs NewSnapshotAt: scoped=%+v ref=%+v", scopedSnap, refSnap)
-	}
-
-	// 9c. Config-A monorepo WITHOUT root .beads
-	monoNoRoot := t.TempDir()
-	monoClock := time.Date(2026, 11, 14, 1, 0, 0, 0, time.UTC)
-	runGitNoRoot := func(args ...string) string {
-		t.Helper()
-		monoClock = monoClock.Add(time.Minute)
-		ts := monoClock.Format(time.RFC3339)
-		cmd := exec.Command("git", args...)
-		cmd.Dir = monoNoRoot
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Mono", "GIT_AUTHOR_EMAIL=mono@example.com",
-			"GIT_COMMITTER_NAME=Mono", "GIT_COMMITTER_EMAIL=mono@example.com",
-			"GIT_AUTHOR_DATE="+ts, "GIT_COMMITTER_DATE="+ts,
-		)
-		out, gitErr := cmd.CombinedOutput()
-		if gitErr != nil {
-			t.Fatalf("git %v: %v\n%s", args, gitErr, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	runGitNoRoot("init", "-q", "-b", "main")
-	for _, d := range []string{
-		filepath.Join(monoNoRoot, "services", "api", ".beads"),
-		filepath.Join(monoNoRoot, "services", "web", ".beads"),
-		filepath.Join(monoNoRoot, ".bv"),
-	} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	apiJSONLInitial := strings.Join([]string{
-		`{"id":"1","title":"API unprefixed","status":"in_progress","priority":1,"issue_type":"task"}`,
-		`{"id":"bd-1","title":"API colliding","status":"in_progress","priority":1,"issue_type":"task"}`,
-		`{"id":"api-99","title":"Natively prefixed deleted later","status":"open","priority":2,"issue_type":"task"}`,
-	}, "\n") + "\n"
-	webJSONLInitial := strings.Join([]string{
-		`{"id":"1","title":"Web unprefixed","status":"in_progress","priority":1,"issue_type":"task"}`,
-		`{"id":"bd-1","title":"Web colliding","status":"in_progress","priority":1,"issue_type":"task"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "api", ".beads", "issues.jsonl"), []byte(apiJSONLInitial), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "web", ".beads", "issues.jsonl"), []byte(webJSONLInitial), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", ".")
-	runGitNoRoot("commit", "-q", "-m", "init config-a stores without root .beads")
-
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "api", "auth.go"), []byte("package api\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", "services/api/auth.go")
-	runGitNoRoot("commit", "-q", "-m", "feat(api-1): implement qualified explicit match")
-	shaQualExplicit := runGitNoRoot("rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "api", "bd.go"), []byte("package api\nvar bd = 1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", "services/api/bd.go")
-	runGitNoRoot("commit", "-q", "-m", "fix(bd-1): fix api colliding bead")
-	shaSubtreeDisambig := runGitNoRoot("rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "api", "legacy.go"), []byte("package api\nvar leg = 1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", "services/api/legacy.go")
-	runGitNoRoot("commit", "-q", "-m", "feat(api-99): touch before delete")
-	shaApi99 := runGitNoRoot("rev-parse", "HEAD")
-
-	// Delete api-99 from services/api/.beads/issues.jsonl
-	apiJSONLAfterDelete := strings.Join([]string{
-		`{"id":"1","title":"API unprefixed","status":"in_progress","priority":1,"issue_type":"task"}`,
-		`{"id":"bd-1","title":"API colliding","status":"in_progress","priority":1,"issue_type":"task"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "api", ".beads", "issues.jsonl"), []byte(apiJSONLAfterDelete), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", "services/api/.beads/issues.jsonl")
-	runGitNoRoot("commit", "-q", "-m", "remove api-99 from active tracker")
-
-	if err := os.WriteFile(filepath.Join(monoNoRoot, "services", "web", "unlinked.tsx"), []byte("export const unlinked = true;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitNoRoot("add", "services/web/unlinked.tsx")
-	runGitNoRoot("commit", "-q", "-m", "fix: web unlinked tweak")
-
-	wsNoRootCfg := filepath.Join(monoNoRoot, ".bv", "ws-noroot.yaml")
-	wsNoRootYAML := "name: mono-noroot\nrepos:\n  - name: api\n    path: .\n    beads_path: services/api/.beads\n    prefix: api-\n  - name: web\n    path: .\n    beads_path: services/web/.beads\n    prefix: web-\ndiscovery:\n  enabled: false\n"
-	if err := os.WriteFile(wsNoRootCfg, []byte(wsNoRootYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	nrHistOut, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--robot-history")
-	if err != nil {
-		t.Fatalf("mono-noroot --robot-history failed: %v\nstderr: %s", err, stderr)
-	}
-	var nrReport correlation.HistoryReport
-	if err := json.Unmarshal([]byte(nrHistOut), &nrReport); err != nil {
-		t.Fatalf("decode mono-noroot --robot-history: %v", err)
-	}
-	if len(nrReport.Histories["api-1"].Commits) != 1 || nrReport.Histories["api-1"].Commits[0].SHA != shaQualExplicit {
-		t.Fatalf("expected feat(api-1) to explicitly match api-1 (%s), got %+v", shaQualExplicit, nrReport.Histories["api-1"].Commits)
-	}
-	if len(nrReport.Histories["api-bd-1"].Commits) != 1 || nrReport.Histories["api-bd-1"].Commits[0].SHA != shaSubtreeDisambig {
-		t.Fatalf("expected fix(bd-1) in services/api/bd.go to match api-bd-1 (%s), got %+v", shaSubtreeDisambig, nrReport.Histories["api-bd-1"].Commits)
-	}
-	if len(nrReport.Histories["web-bd-1"].Commits) != 0 {
-		t.Fatalf("expected fix(bd-1) in services/api/bd.go NOT to contaminate web-bd-1, got %+v", nrReport.Histories["web-bd-1"].Commits)
-	}
-
-	// --repo api scopes --robot-history and --robot-orphans cleanly.
-	nrApiHistOut, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--repo", "api", "--robot-history")
-	if err != nil || !strings.Contains(nrApiHistOut, `"api-1"`) || strings.Contains(nrApiHistOut, `"web-1"`) || strings.Contains(nrApiHistOut, `"web-bd-1"`) {
-		t.Fatalf("mono-noroot --repo api --robot-history failed scoping: err=%v stderr=%s out=%s", err, stderr, nrApiHistOut)
-	}
-	nrApiOrphOut, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--repo", "api", "--robot-orphans", "--orphans-min-score", "0")
-	if err != nil || strings.Contains(nrApiOrphOut, "unlinked.tsx") {
-		t.Fatalf("mono-noroot --repo api --robot-orphans leaked web orphan unlinked.tsx: err=%v stderr=%s out=%s", err, stderr, nrApiOrphOut)
-	}
-	nrWebOrphOut, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--repo", "web", "--robot-orphans", "--orphans-min-score", "0")
-	if err != nil || !strings.Contains(nrWebOrphOut, "unlinked.tsx") || strings.Contains(nrWebOrphOut, "legacy.go") {
-		t.Fatalf("mono-noroot --repo web --robot-orphans missed web orphan unlinked.tsx or leaked api legacy.go: err=%v stderr=%s out=%s", err, stderr, nrWebOrphOut)
-	}
-	var nrWebOrphPayload correlation.OrphanReport
-	if err := json.Unmarshal([]byte(nrWebOrphOut), &nrWebOrphPayload); err != nil || nrWebOrphPayload.Stats.OrphanCount != 1 {
-		t.Fatalf("expected --repo web --robot-orphans OrphanCount=1, got err=%v stats=%+v", err, nrWebOrphPayload.Stats)
-	}
-
-	// Config-A feedback routes to services/api/.beads/feedback.json (without creating root .beads) and respects --repo on stats.
-	if _, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--robot-confirm-correlation", shaQualExplicit+":api-1", "--correlation-reason", "config-a check"); err != nil {
-		t.Fatalf("mono-noroot --robot-confirm-correlation failed: %v\nstderr: %s", err, stderr)
-	}
-	if _, statErr := os.Stat(filepath.Join(monoNoRoot, "services", "api", ".beads", correlation.FeedbackFileName)); statErr != nil {
-		t.Fatalf("expected %s at services/api/.beads/%s: %v", correlation.FeedbackFileName, correlation.FeedbackFileName, statErr)
-	}
-	if _, rootBeadsErr := os.Stat(filepath.Join(monoNoRoot, ".beads")); !os.IsNotExist(rootBeadsErr) {
-		t.Fatalf("expected no root .beads directory to be created in Config-A workspace, got err=%v", rootBeadsErr)
-	}
-	nrExpOut, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--robot-explain-correlation", shaQualExplicit+":api-1")
-	if err != nil || !strings.Contains(nrExpOut, "confirmed by feedback") {
-		t.Fatalf("mono-noroot --robot-explain-correlation missing stored feedback: err=%v stderr=%s out=%s", err, stderr, nrExpOut)
-	}
-	nrApiStats, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--repo", "api", "--robot-correlation-stats")
-	if err != nil || (!strings.Contains(nrApiStats, `"confirmed": 1`) && !strings.Contains(nrApiStats, `"confirmed":1`)) {
-		t.Fatalf("mono-noroot --repo api --robot-correlation-stats missing confirmed=1: err=%v stderr=%s out=%s", err, stderr, nrApiStats)
-	}
-	nrWebStats, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--repo", "web", "--robot-correlation-stats")
-	if err != nil || (!strings.Contains(nrWebStats, `"confirmed": 0`) && !strings.Contains(nrWebStats, `"confirmed":0`)) {
-		t.Fatalf("mono-noroot --repo web --robot-correlation-stats leaked api feedback: err=%v stderr=%s out=%s", err, stderr, nrWebStats)
-	}
-
-	// Deleted natively-prefixed api-99 resolves on --bead-history and --robot-causality.
-	del99Hist, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--bead-history", "api-99", "--robot-history")
-	if err != nil || !strings.Contains(del99Hist, `"Natively prefixed deleted later"`) || !strings.Contains(del99Hist, shaApi99) {
-		t.Fatalf("deleted native api-99 --bead-history failed: err=%v stderr=%s out=%s", err, stderr, del99Hist)
-	}
-	del99Caus, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--robot-causality", "api-99")
-	if err != nil || !strings.Contains(del99Caus, `"api-99"`) {
-		t.Fatalf("deleted native api-99 --robot-causality failed: err=%v stderr=%s out=%s", err, stderr, del99Caus)
-	}
-
-	// Config-A --export-pages without root .beads generates data/history.json!
-	nrPagesDir := filepath.Join(monoNoRoot, "pages-noroot")
-	if _, stderr, err := runWithEnv(monoNoRoot, nil, "--workspace", wsNoRootCfg, "--export-pages", nrPagesDir); err != nil {
-		t.Fatalf("mono-noroot --export-pages failed: %v\nstderr: %s", err, stderr)
-	}
-	if nrPagesHist, readErr := os.ReadFile(filepath.Join(nrPagesDir, "data", "history.json")); readErr != nil || !strings.Contains(string(nrPagesHist), `"api-1"`) {
-		t.Fatalf("mono-noroot --export-pages missing data/history.json or api-1: err=%v body=%s", readErr, string(nrPagesHist))
-	}
-
-	// 9d. [BUG R4-2A] BV_CACHE_DIR `--label` -> unscoped `--robot-history` must not poison Layer-2 head_artifact_cache.
-	cacheIsoRepo := t.TempDir()
-	runGitCacheIso := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = cacheIsoRepo
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Cache", "GIT_AUTHOR_EMAIL=cache@example.com",
-			"GIT_COMMITTER_NAME=Cache", "GIT_COMMITTER_EMAIL=cache@example.com",
-		)
-		if out, gitErr := cmd.CombinedOutput(); gitErr != nil {
-			t.Fatalf("git %v: %v\n%s", args, gitErr, out)
-		}
-	}
-	runGitCacheIso("init", "-q", "-b", "main")
-	if err := os.MkdirAll(filepath.Join(cacheIsoRepo, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cacheIsoJSONL := strings.Join([]string{
-		`{"id":"fe-1","title":"Frontend item","status":"open","priority":1,"issue_type":"task","labels":["frontend"]}`,
-		`{"id":"bv-b9c8","title":"Backend hash item","status":"open","priority":1,"issue_type":"task","labels":["backend"]}`,
-		`{"id":"42","title":"Numeric item","status":"open","priority":2,"issue_type":"task","labels":["backend"]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(cacheIsoRepo, ".beads", "issues.jsonl"), []byte(cacheIsoJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCacheIso("add", ".beads/issues.jsonl")
-	runGitCacheIso("commit", "-q", "-m", "seed cache isolation beads")
-	if err := os.WriteFile(filepath.Join(cacheIsoRepo, "fe.ts"), []byte("export const fe = 1;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCacheIso("add", "fe.ts")
-	runGitCacheIso("commit", "-q", "-m", "feat(fe-1): add frontend widget")
-	if err := os.WriteFile(filepath.Join(cacheIsoRepo, "be.go"), []byte("package be\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCacheIso("add", "be.go")
-	runGitCacheIso("commit", "-q", "-m", "fix(bv-b9c8): resolve backend hash bead")
-	if err := os.WriteFile(filepath.Join(cacheIsoRepo, "num.go"), []byte("package be\nvar n = 42\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitCacheIso("add", "num.go")
-	runGitCacheIso("commit", "-q", "-m", "feat [42]: implement numeric bead")
-
-	sharedCacheEnv := []string{"BV_CACHE_DIR=" + t.TempDir()}
-	narrowOut, stderr, err := runWithEnv(cacheIsoRepo, sharedCacheEnv, "--label", "frontend", "--history-limit", "5", "--robot-history")
-	if err != nil || !strings.Contains(narrowOut, `"fe-1"`) {
-		t.Fatalf("narrow --label frontend --robot-history failed: err=%v stderr=%s out=%s", err, stderr, narrowOut)
-	}
-	broadOut, stderr, err := runWithEnv(cacheIsoRepo, sharedCacheEnv, "--history-limit", "5", "--robot-history")
-	if err != nil {
-		t.Fatalf("broad --robot-history failed: err=%v stderr=%s", err, stderr)
-	}
-	var broadHist correlation.HistoryReport
-	if err := json.Unmarshal([]byte(broadOut), &broadHist); err != nil {
-		t.Fatalf("decode broad --robot-history: %v", err)
-	}
-	if len(broadHist.Histories["bv-b9c8"].Commits) != 1 || len(broadHist.Histories["42"].Commits) != 1 {
-		t.Fatalf("Layer-2 head_artifact_cache poisoned broad --robot-history after --label frontend: bv-b9c8=%+v 42=%+v",
-			broadHist.Histories["bv-b9c8"].Commits, broadHist.Histories["42"].Commits)
-	}
-}
-
 // TestMain isolates HOME and XDG_CONFIG_HOME for every cmd/bv test (and the
 // bv binaries they exec, which inherit the environment) so nothing can write
 // into the real ~/.config/bv (H3). The teardown fails the package if the real
@@ -5521,253 +3819,15 @@ func fingerprintConfigDir(configDir string) string {
 	return out
 }
 
-func TestRobotCommitLookupAndScoping(t *testing.T) {
-	exe := buildTestBinary(t)
-	tmpDir := t.TempDir()
-	beadsDir := filepath.Join(tmpDir, ".beads")
-	srcDir := filepath.Join(tmpDir, "src")
-	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	runGit := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = tmpDir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Tester",
-			"GIT_AUTHOR_EMAIL=tester@example.com",
-			"GIT_COMMITTER_NAME=Tester",
-			"GIT_COMMITTER_EMAIL=tester@example.com",
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, string(out))
-		}
-		return strings.TrimSpace(string(out))
-	}
-
-	runGit("init", "-b", "main")
-	issuesJSONL := strings.Join([]string{
-		`{"id":"bv-1","title":"Auth login pipeline","status":"open","priority":1,"issue_type":"task","labels":["auth"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"bv-2","title":"Billing webhook handler","status":"open","priority":2,"issue_type":"task","labels":["billing"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(beadsDir, "issues.jsonl"), []byte(issuesJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "orphan.go"), []byte("package src\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".")
-	runGit("commit", "-m", "chore: unrelated bootstrap commit")
-	orphanSHA := runGit("rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(srcDir, "auth.go"), []byte("package src\nfunc Login() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".")
-	runGit("commit", "-m", "feat: implement bv-1 and bv-2 flows")
-	linkedSHA := runGit("rev-parse", "HEAD")
-
-	// 1. Linked commit lookup via agent intent alias `bv commit HEAD --json`
-	out, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "commit", "HEAD", "--json")
-	if err != nil {
-		t.Fatalf("bv commit HEAD --json failed: %v\nstdout:\n%s\nstderr:\n%s", err, out, stderr)
-	}
-	var linked struct {
-		CommitSHA    string `json:"commit_sha"`
-		IsOrphan     bool   `json:"is_orphan"`
-		Author       string `json:"author"`
-		RelatedBeads []struct {
-			BeadID string `json:"bead_id"`
-		} `json:"related_beads"`
-	}
-	if err := json.Unmarshal([]byte(out), &linked); err != nil {
-		t.Fatalf("unmarshal commit lookup: %v\n%s", err, out)
-	}
-	if linked.CommitSHA != linkedSHA {
-		t.Fatalf("commit_sha = %q, want %q", linked.CommitSHA, linkedSHA)
-	}
-	if linked.IsOrphan {
-		t.Fatalf("expected linked commit is_orphan=false, got true")
-	}
-	if len(linked.RelatedBeads) != 2 {
-		t.Fatalf("related_beads len = %d, want 2: %+v", len(linked.RelatedBeads), linked.RelatedBeads)
-	}
-
-	// 2. --label auth and --robot-max-results 1 scope/cap related_beads
-	scopedOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", linkedSHA[:8], "--label", "auth")
-	if err != nil {
-		t.Fatalf("--robot-commit --label auth failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var scoped struct {
-		IsOrphan     bool `json:"is_orphan"`
-		RelatedBeads []struct {
-			BeadID string `json:"bead_id"`
-		} `json:"related_beads"`
-	}
-	if err := json.Unmarshal([]byte(scopedOut), &scoped); err != nil {
-		t.Fatalf("unmarshal scoped commit lookup: %v", err)
-	}
-	if len(scoped.RelatedBeads) != 1 || scoped.RelatedBeads[0].BeadID != "bv-1" || scoped.IsOrphan {
-		t.Fatalf("unexpected --label auth related_beads: %+v", scoped)
-	}
-
-	// 3. Orphan commit returns commit metadata from git and is_orphan=true
-	orphanOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", orphanSHA)
-	if err != nil {
-		t.Fatalf("--robot-commit orphan failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var orphanRes struct {
-		CommitSHA string `json:"commit_sha"`
-		Message   string `json:"message"`
-		IsOrphan  bool   `json:"is_orphan"`
-	}
-	if err := json.Unmarshal([]byte(orphanOut), &orphanRes); err != nil {
-		t.Fatalf("unmarshal orphan commit lookup: %v", err)
-	}
-	if !orphanRes.IsOrphan || orphanRes.CommitSHA != orphanSHA || !strings.Contains(orphanRes.Message, "bootstrap") {
-		t.Fatalf("unexpected orphan commit result: %+v", orphanRes)
-	}
-
-	// 4. Commit outside --history-limit 1 still correlates via 1-commit fallback,
-	//    .beads/-only sync commit reports is_orphan=false & beads_only=true,
-	//    --label mismatch preserves is_orphan=false with filtered_out_count > 0,
-	//    and genuine code orphan rescues probable_beads.
-	syncIssuesJSONL := strings.Join([]string{
-		`{"id":"bv-1","title":"Auth login pipeline","status":"in_progress","priority":1,"issue_type":"task","labels":["auth"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-03T00:00:00Z"}`,
-		`{"id":"bv-2","title":"Billing webhook handler","status":"open","priority":2,"issue_type":"task","labels":["billing"],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-03T00:00:00Z"}`,
-		`{"id":"bv-tomb","title":"Deleted legacy task","status":"tombstone","priority":3,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-03T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(beadsDir, "issues.jsonl"), []byte(syncIssuesJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".beads/issues.jsonl")
-	runGit("commit", "-m", "chore: sync beads tracker")
-	beadsOnlySHA := runGit("rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(srcDir, "tomb.go"), []byte("package src\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".")
-	runGit("commit", "-m", "chore(bv-tomb): archive legacy tombstoned flow")
-	tombSHA := runGit("rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(srcDir, "auth.go"), []byte("package src\nfunc Login() { /* auth login pipeline v2 */ }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", "src/auth.go")
-	runGit("commit", "-m", "fix auth login pipeline session handling")
-	rescuedOrphanSHA := runGit("rev-parse", "HEAD")
-
-	// 4a. linkedSHA is older than --history-limit 1, yet still resolves bv-1 & bv-2!
-	outsideOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", linkedSHA, "--history-limit", "1")
-	if err != nil {
-		t.Fatalf("--robot-commit outside --history-limit 1 failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var outsideRes struct {
-		IsOrphan     bool `json:"is_orphan"`
-		RelatedBeads []struct {
-			BeadID string `json:"bead_id"`
-		} `json:"related_beads"`
-	}
-	if err := json.Unmarshal([]byte(outsideOut), &outsideRes); err != nil {
-		t.Fatalf("unmarshal outside-window commit lookup: %v", err)
-	}
-	if outsideRes.IsOrphan || len(outsideRes.RelatedBeads) != 2 {
-		t.Fatalf("expected outside-window linked commit to retain 2 related_beads & is_orphan=false, got %+v", outsideRes)
-	}
-
-	// 4b. --label unmatched preserves is_orphan=false and records filtered_out_count=2
-	mismatchOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", linkedSHA, "--label", "nonexistent")
-	if err != nil {
-		t.Fatalf("--robot-commit --label nonexistent failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var mismatchRes struct {
-		IsOrphan         bool  `json:"is_orphan"`
-		FilteredOutCount int   `json:"filtered_out_count"`
-		RelatedBeads     []any `json:"related_beads"`
-	}
-	if err := json.Unmarshal([]byte(mismatchOut), &mismatchRes); err != nil {
-		t.Fatalf("unmarshal label-mismatch commit lookup: %v", err)
-	}
-	if mismatchRes.IsOrphan || mismatchRes.FilteredOutCount != 2 || len(mismatchRes.RelatedBeads) != 0 {
-		t.Fatalf("expected is_orphan=false, filtered_out_count=2 on label mismatch, got %+v", mismatchRes)
-	}
-
-	// 4c. .beads/-only sync commit is NOT an orphan (beads_only=true, is_orphan=false)
-	beadsOnlyOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", beadsOnlySHA)
-	if err != nil {
-		t.Fatalf("--robot-commit beads-only failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var beadsOnlyRes struct {
-		IsOrphan  bool `json:"is_orphan"`
-		BeadsOnly bool `json:"beads_only"`
-	}
-	if err := json.Unmarshal([]byte(beadsOnlyOut), &beadsOnlyRes); err != nil {
-		t.Fatalf("unmarshal beads-only commit lookup: %v", err)
-	}
-	if beadsOnlyRes.IsOrphan || !beadsOnlyRes.BeadsOnly {
-		t.Fatalf("expected beads-only commit to report is_orphan=false & beads_only=true, got %+v", beadsOnlyRes)
-	}
-
-	// 4d. Commit referencing a tombstoned bead is NOT misclassified as an orphan
-	tombOut, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", tombSHA)
-	if err != nil {
-		t.Fatalf("--robot-commit tombstoned bead failed: %v\nstderr:\n%s", err, stderr)
-	}
-	var tombRes struct {
-		IsOrphan     bool `json:"is_orphan"`
-		RelatedBeads []struct {
-			BeadID string `json:"bead_id"`
-		} `json:"related_beads"`
-	}
-	if err := json.Unmarshal([]byte(tombOut), &tombRes); err != nil {
-		t.Fatalf("unmarshal tombstoned commit lookup: %v", err)
-	}
-	if tombRes.IsOrphan || len(tombRes.RelatedBeads) != 1 || tombRes.RelatedBeads[0].BeadID != "bv-tomb" {
-		t.Fatalf("expected tombstoned bead commit to correlate to bv-tomb with is_orphan=false, got %+v", tombRes)
-	}
-
-	// 4e. Genuine code orphan touching auth.go rescues probable_beads (bv-1) and BV_ROBOT=1 bv commit <sha> works without --json
-	rescueCmd := exec.Command(exe, "commit", rescuedOrphanSHA)
-	rescueCmd.Dir = tmpDir
-	rescueCmd.Env = append(os.Environ(), "BV_ROBOT=1", "BV_NO_BROWSER=1", "BV_TEST_MODE=1")
-	rescueBytes, err := rescueCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("BV_ROBOT=1 bv commit failed: %v\n%s", err, string(rescueBytes))
-	}
-	var rescueRes struct {
-		IsOrphan         bool `json:"is_orphan"`
-		OrphanCandidates []struct {
-			BeadID string `json:"bead_id"`
-		} `json:"orphan_candidates"`
-	}
-	if err := json.Unmarshal(rescueBytes, &rescueRes); err != nil {
-		t.Fatalf("unmarshal BV_ROBOT=1 commit lookup: %v\n%s", err, string(rescueBytes))
-	}
-	if !rescueRes.IsOrphan || len(rescueRes.OrphanCandidates) == 0 || rescueRes.OrphanCandidates[0].BeadID != "bv-1" {
-		t.Fatalf("expected orphan rescue to suggest bv-1, got %+v", rescueRes)
-	}
-
-	// 5. Unknown commit exits non-zero with clear stderr
-	if _, badStderr, badErr := runCommandWithTimeout(t, tmpDir, exe, "--robot-commit", "deadbeefdeadbeef"); badErr == nil || !strings.Contains(badStderr, "Commit not found") {
-		t.Fatalf("expected Commit not found error, got err=%v stderr=%q", badErr, badStderr)
-	}
-}
-
 func TestInitDriftBootstrapAndOverwriteGuard(t *testing.T) {
 	exe := buildTestBinary(t)
 	tmpDir := t.TempDir()
 	writeTestBeadsFixture(t, tmpDir)
 
-	// --json alias works with --init-drift without being hijacked into --robot-triage
-	out, stderr, err := runCommandWithTimeout(t, tmpDir, exe, "--init-drift", "--json")
+	// BV_ROBOT=1 makes --init-drift emit a structured receipt
+	out, stderr, err := runCommandWithEnv(t, tmpDir, []string{"BV_ROBOT=1"}, exe, "--init-drift")
 	if err != nil {
-		t.Fatalf("--init-drift --format json failed: %v\nstdout:\n%s\nstderr:\n%s", err, out, stderr)
+		t.Fatalf("BV_ROBOT=1 --init-drift failed: %v\nstdout:\n%s\nstderr:\n%s", err, out, stderr)
 	}
 	var created map[string]any
 	if err := json.Unmarshal([]byte(out), &created); err != nil {
@@ -5787,7 +3847,7 @@ func TestInitDriftBootstrapAndOverwriteGuard(t *testing.T) {
 	}
 
 	// Overwrites cleanly with --yes
-	out2, stderr2, err2 := runCommandWithTimeout(t, tmpDir, exe, "--init-drift", "--yes", "--format", "json")
+	out2, stderr2, err2 := runCommandWithEnv(t, tmpDir, []string{"BV_ROBOT=1"}, exe, "--init-drift", "--yes")
 	if err2 != nil {
 		t.Fatalf("--init-drift --yes failed: %v\nstdout:\n%s\nstderr:\n%s", err2, out2, stderr2)
 	}
@@ -6683,7 +4743,7 @@ func TestWave12RobotContractsAndScoping(t *testing.T) {
 		"robot-burndown", "robot-sprint-list", "robot-commit",
 	} {
 		props := requireRobotSchemaProperties(t, schemas, cmdName)
-		for _, field := range []string{"output_format", "version"} {
+		for _, field := range []string{"version"} {
 			if props[field] == nil {
 				t.Fatalf("command %q schema missing %q", cmdName, field)
 			}
@@ -6943,46 +5003,7 @@ func TestWave12RobotContractsAndScoping(t *testing.T) {
 		t.Fatalf("expected --robot-triage-by-track --brief to omit full recommendation breakdown:\n%s", briefTrackOut)
 	}
 
-	// 4. --agents-check --format json without --robot-* + preference persistence on --agents-add / --agents-remove
-	agentsDir := t.TempDir()
-	isoHome := t.TempDir()
-	isoXDG := filepath.Join(isoHome, ".config")
-	agentsEnv := []string{
-		"HOME=" + isoHome,
-		"XDG_CONFIG_HOME=" + isoXDG,
-		"BV_NO_SAVED_CONFIG=",
-	}
-	checkFmtOut, stderr, err := runCommandWithEnv(t, agentsDir, agentsEnv, exe, "--agents-check", "--format", "json")
-	if err != nil {
-		t.Fatalf("--agents-check --format json failed: %v\nstderr: %s", err, stderr)
-	}
-	var checkFmtPayload map[string]any
-	if err := json.Unmarshal([]byte(checkFmtOut), &checkFmtPayload); err != nil {
-		t.Fatalf("expected JSON from --agents-check --format json, got:\n%s\nerr: %v", checkFmtOut, err)
-	}
-	if checkFmtPayload["action"] != "check" {
-		t.Fatalf("expected action=check, got %#v", checkFmtPayload)
-	}
-
-	if _, stderr, err := runCommandWithEnv(t, agentsDir, agentsEnv, exe, "--agents-add", "--agents-force", "--format", "json"); err != nil {
-		t.Fatalf("--agents-add --agents-force --format json failed: %v\nstderr: %s", err, stderr)
-	}
-	t.Setenv("HOME", isoHome)
-	t.Setenv("XDG_CONFIG_HOME", isoXDG)
-	t.Setenv("BV_NO_SAVED_CONFIG", "")
-	prefAfterAdd, err := agents.LoadAgentPromptPreference(agentsDir)
-	if err != nil || prefAfterAdd == nil || prefAfterAdd.BlurbVersionAdded != agents.BlurbVersion {
-		t.Fatalf("expected BlurbVersionAdded=%d after --agents-add, got pref=%+v err=%v", agents.BlurbVersion, prefAfterAdd, err)
-	}
-	if _, stderr, err := runCommandWithEnv(t, agentsDir, agentsEnv, exe, "--agents-remove", "--agents-force", "--format", "json"); err != nil {
-		t.Fatalf("--agents-remove --agents-force --format json failed: %v\nstderr: %s", err, stderr)
-	}
-	prefAfterRemove, err := agents.LoadAgentPromptPreference(agentsDir)
-	if err != nil || prefAfterRemove == nil || !prefAfterRemove.DontAskAgain {
-		t.Fatalf("expected DontAskAgain=true after --agents-remove, got pref=%+v err=%v", prefAfterRemove, err)
-	}
-
-	// 5. --export-group-by status & --export-format html with recipe metrics
+	// 4. --export-group-by status & --export-format html with recipe metrics
 	groupedMDPath := filepath.Join(histRepo, "grouped.md")
 	if _, stderr, err := runCommandWithTimeout(t, histRepo, exe, "--export-md", groupedMDPath, "--export-group-by", "status", "--no-hooks"); err != nil {
 		t.Fatalf("--export-md --export-group-by status failed: %v\nstderr: %s", err, stderr)
@@ -7075,34 +5096,34 @@ func TestWave12RobotContractsAndScoping(t *testing.T) {
 
 func TestWave13Round1AuditRemediations_CLI(t *testing.T) {
 	// 1. [D-3] CLI normalization edge cases: separate-token value flags whose values match
-	// primary non-robot names, --search/--diff-since with --json, negated bool flags, and single-dash -robot-plan / -agents=add.
+	// primary non-robot names, negated bool flags, and single-dash -robot-plan / -check-update.
 	for _, tc := range []struct {
 		args []string
 		want []string
 	}{
 		{
-			args: []string{"--label", "export", "--json"},
-			want: []string{"--robot-triage", "--label", "export", "--format", "json"},
+			args: []string{"--label", "export"},
+			want: []string{"--label", "export"},
 		},
 		{
-			args: []string{"--recipe", "stats", "--json"},
-			want: []string{"--robot-triage", "--recipe", "stats", "--format", "json"},
+			args: []string{"--recipe", "stats"},
+			want: []string{"--recipe", "stats"},
 		},
 		{
-			args: []string{"--as-of", "baseline-info", "--json"},
-			want: []string{"--robot-triage", "--as-of", "baseline-info", "--format", "json"},
+			args: []string{"--as-of", "baseline-info"},
+			want: []string{"--as-of", "baseline-info"},
 		},
 		{
-			args: []string{"--search", "version", "--json"},
-			want: []string{"--robot-search", "--search", "version", "--format", "json"},
+			args: []string{"--search", "version"},
+			want: []string{"--search", "version"},
 		},
 		{
-			args: []string{"--diff-since", "HEAD~1", "--json"},
-			want: []string{"--robot-diff", "--diff-since", "HEAD~1", "--format", "json"},
+			args: []string{"--diff-since", "HEAD~1"},
+			want: []string{"--diff-since", "HEAD~1"},
 		},
 		{
-			args: []string{"--robot-triage=false", "--json"},
-			want: []string{"--robot-triage", "--format", "json"},
+			args: []string{"--robot-triage=false"},
+			want: []string{"--robot-triage=false"},
 		},
 	} {
 		got := rewriteAgentIntentArgs(tc.args)
@@ -7116,21 +5137,20 @@ func TestWave13Round1AuditRemediations_CLI(t *testing.T) {
 	}
 
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	fs.String("agents", "", "")
-	fs.Bool("agents-add", false, "")
-	fs.Bool("agents-force", false, "")
+	fs.Bool("check-update", false, "")
+	fs.Bool("yes", false, "")
 	fs.Bool("robot-plan", false, "")
-	singleDashPlan := rewriteSingleDashLongFlags([]string{"-robot-plan", "--json"}, fs)
+	singleDashPlan := rewriteSingleDashLongFlags([]string{"-robot-plan"}, fs)
 	normalizedPlan := rewriteSingleDashLongFlags(rewriteAgentIntentArgs(singleDashPlan), fs)
-	wantPlan := []string{"--robot-plan", "--format", "json"}
+	wantPlan := []string{"--robot-plan"}
 	if !reflect.DeepEqual(normalizedPlan, wantPlan) {
-		t.Fatalf("single-dash -robot-plan --json normalization = %v, want %v", normalizedPlan, wantPlan)
+		t.Fatalf("single-dash -robot-plan normalization = %v, want %v", normalizedPlan, wantPlan)
 	}
-	singleDash := rewriteSingleDashLongFlags([]string{"-agents-add", "-agents-force"}, fs)
-	normalizedAgents := rewriteSingleDashLongFlags(rewriteAgentIntentArgs(singleDash), fs)
-	wantAgents := []string{"--agents-add", "--agents-force"}
-	if !reflect.DeepEqual(normalizedAgents, wantAgents) {
-		t.Fatalf("single-dash -agents-add -agents-force normalization = %v, want %v", normalizedAgents, wantAgents)
+	singleDash := rewriteSingleDashLongFlags([]string{"-check-update", "-yes"}, fs)
+	normalizedFlags := rewriteSingleDashLongFlags(rewriteAgentIntentArgs(singleDash), fs)
+	wantFlags := []string{"--check-update", "--yes"}
+	if !reflect.DeepEqual(normalizedFlags, wantFlags) {
+		t.Fatalf("single-dash -check-update -yes normalization = %v, want %v", normalizedFlags, wantFlags)
 	}
 
 	// 2. [D-5] & [B-1] reloadSingleRepoAutoDiscoverForUI is silent on stderr even when JSONL contains malformed lines.
@@ -7341,37 +5361,6 @@ func TestWave13Round1AuditRemediations_CLI(t *testing.T) {
 			t.Fatalf("bv %v leaked corrupt beads.db into claim_command: %q", argv, claimCmd)
 		}
 	}
-
-	// [R2-D1] All boolean forms of --json=<bool> and --toon=<bool> (1/0/yes/no/on/off) rewrite cleanly
-	// without launching the TUI, --toon=<neg> overrides BV_OUTPUT_FORMAT=toon back to JSON, and
-	// value-taking flags (--label --json) never consume --json as a structured-output alias.
-	for _, aliasFlag := range []string{"--json=0", "--json=no", "--toon=0", "--toon=off"} {
-		aliasCmd := exec.Command(bin, aliasFlag)
-		aliasCmd.Dir = gitDir
-		aliasCmd.Env = append(append([]string(nil), cleanEnv...), "BV_OUTPUT_FORMAT=toon")
-		aliasOut, err := aliasCmd.Output()
-		if err != nil {
-			t.Fatalf("bv %s failed: %v", aliasFlag, err)
-		}
-		var aliasObj map[string]any
-		if err := json.Unmarshal(aliasOut, &aliasObj); err != nil || aliasObj["data_hash"] == nil {
-			t.Fatalf("expected bv %s to emit valid robot triage JSON, got: %s", aliasFlag, string(aliasOut))
-		}
-	}
-	if got := rewriteAgentIntentArgs([]string{"--label", "--json"}); len(got) != 2 || got[0] != "--label" || got[1] != "--json" {
-		t.Fatalf("expected --label --json to preserve label value untouched, got %v", got)
-	}
-	toonOverrideCmd := exec.Command(bin, "--robot-next", "--toon=0")
-	toonOverrideCmd.Dir = gitDir
-	toonOverrideCmd.Env = append(append([]string(nil), cleanEnv...), "BV_OUTPUT_FORMAT=toon")
-	toonOverrideOut, err := toonOverrideCmd.Output()
-	if err != nil {
-		t.Fatalf("bv --robot-next --toon=0 failed: %v", err)
-	}
-	var nextObj map[string]any
-	if err := json.Unmarshal(toonOverrideOut, &nextObj); err != nil {
-		t.Fatalf("expected --robot-next --toon=0 to override BV_OUTPUT_FORMAT=toon to valid JSON, got: %s", string(toonOverrideOut))
-	}
 }
 
 func TestResolvePagesSource_NeverCrawlsHomeOrUnrelatedReposOnEmptyProject(t *testing.T) {
@@ -7427,833 +5416,5 @@ func TestResolvePagesSource_NeverCrawlsHomeOrUnrelatedReposOnEmptyProject(t *tes
 	}
 	if filepath.Clean(src.BeadsDir) != filepath.Clean(activeBeads) {
 		t.Fatalf("expected active beads dir %s, got %s", activeBeads, src.BeadsDir)
-	}
-}
-
-func TestWave14TrackD_ScopingCapacityIgnoreAndPrivacyRegressions(t *testing.T) {
-	// 1. User config honors XDG_CONFIG_HOME and BV_NO_SAVED_CONFIG=1.
-	xdgDir := t.TempDir()
-	bvCfgDir := filepath.Join(xdgDir, "bv")
-	if err := os.MkdirAll(bvCfgDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bvCfgDir, "config.yaml"), []byte("theme: light\nexperimental:\n  background_mode: true\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XDG_CONFIG_HOME", xdgDir)
-	t.Setenv("BV_NO_SAVED_CONFIG", "")
-	if th, ok := loadThemeFromUserConfig(); !ok || th != "light" {
-		t.Fatalf("expected XDG config theme=light, got (%q, %v)", th, ok)
-	}
-	if bg, ok := loadBackgroundModeFromUserConfig(); !ok || !bg {
-		t.Fatalf("expected XDG config background_mode=true, got (%v, %v)", bg, ok)
-	}
-	t.Setenv("BV_NO_SAVED_CONFIG", "1")
-	if th, ok := loadThemeFromUserConfig(); ok || th != "" {
-		t.Fatalf("BV_NO_SAVED_CONFIG=1 must suppress theme config read, got (%q, %v)", th, ok)
-	}
-	if bg, ok := loadBackgroundModeFromUserConfig(); ok || bg {
-		t.Fatalf("BV_NO_SAVED_CONFIG=1 must suppress background_mode config read, got (%v, %v)", bg, ok)
-	}
-	t.Setenv("BV_NO_SAVED_CONFIG", "")
-
-	exe := buildTestBinary(t)
-	repo := t.TempDir()
-	beadsDir := filepath.Join(repo, ".beads")
-	srcDir := filepath.Join(repo, "src")
-	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGit := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Tester", "GIT_AUTHOR_EMAIL=tester@example.com",
-			"GIT_COMMITTER_NAME=Tester", "GIT_COMMITTER_EMAIL=tester@example.com",
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, string(out))
-		}
-		return strings.TrimSpace(string(out))
-	}
-	runGit("init", "-b", "main")
-
-	// Seed 2-hop heavy chain (h1->h2: 180+180=360m) vs 3-hop light chain (l1->l2->l3: 15+15+15=45m)
-	// plus cross-label dependency (l1 depends on x1 in label "infra") plus template/pinned items.
-	seedIssues := strings.Join([]string{
-		`{"id":"x1","title":"Infra blocker","status":"open","priority":1,"issue_type":"task","labels":["infra"],"estimated_minutes":30,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"h1","title":"Heavy root","status":"open","priority":1,"issue_type":"task","assignee":"alice","labels":["core"],"estimated_minutes":180,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"h2","title":"Heavy leaf","status":"open","priority":2,"issue_type":"task","labels":["core"],"estimated_minutes":180,"dependencies":[{"issue_id":"h2","depends_on_id":"h1","type":"blocks"}],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"l1","title":"Light root","status":"open","priority":2,"issue_type":"task","labels":["core"],"estimated_minutes":15,"dependencies":[{"issue_id":"l1","depends_on_id":"x1","type":"blocks"}],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"l2","title":"Light mid","status":"open","priority":2,"issue_type":"task","labels":["core"],"estimated_minutes":15,"dependencies":[{"issue_id":"l2","depends_on_id":"l1","type":"blocks"}],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"l3","title":"Light leaf","status":"open","priority":2,"issue_type":"task","labels":["core"],"estimated_minutes":15,"dependencies":[{"issue_id":"l3","depends_on_id":"l2","type":"blocks"}],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-		`{"id":"tmpl-1","title":"Template item","status":"open","priority":1,"issue_type":"task","is_template":true,"labels":["core"],"estimated_minutes":999,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(beadsDir, "issues.jsonl"), []byte(seedIssues), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "core.go"), []byte("package src\nfunc Core() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".")
-	runGit("commit", "-m", "chore: seed repo")
-
-	if err := os.WriteFile(filepath.Join(srcDir, "core.go"), []byte("package src\nfunc Core() int { return 1 }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit("add", ".")
-	runGit("commit", "-m", "feat(core): implement h1 core pipeline")
-	headSHA := runGit("rev-parse", "HEAD")
-
-	// 2. --robot-capacity uses weighted longest chain (serial_minutes == critical_path_minutes == 360) and excludes template items.
-	capOut, capErr, err := runCommandWithTimeout(t, repo, exe, "--robot-capacity", "--label", "core")
-	if err != nil {
-		t.Fatalf("--robot-capacity failed: %v\nstderr=%s", err, capErr)
-	}
-	var capPayload struct {
-		OpenIssueCount      int      `json:"open_issue_count"`
-		SerialMinutes       int      `json:"serial_minutes"`
-		CriticalPathMinutes int      `json:"critical_path_minutes"`
-		CriticalPath        []string `json:"critical_path"`
-	}
-	if err := json.Unmarshal([]byte(capOut), &capPayload); err != nil {
-		t.Fatalf("unmarshal capacity: %v\n%s", err, capOut)
-	}
-	if capPayload.OpenIssueCount != 5 {
-		t.Fatalf("expected 5 non-template open issues in core label, got %d", capPayload.OpenIssueCount)
-	}
-	if capPayload.SerialMinutes != capPayload.CriticalPathMinutes || capPayload.CriticalPathMinutes < 360 {
-		t.Fatalf("expected weighted serial_minutes == critical_path_minutes >= 360, got serial=%d cp=%d path=%v",
-			capPayload.SerialMinutes, capPayload.CriticalPathMinutes, capPayload.CriticalPath)
-	}
-	if len(capPayload.CriticalPath) != 2 || capPayload.CriticalPath[0] != "h1" || capPayload.CriticalPath[1] != "h2" {
-		t.Fatalf("expected weighted critical_path=[h1 h2] to beat 3-hop light chain, got %v", capPayload.CriticalPath)
-	}
-
-	// 3. --robot-insights --label core excludes 1-hop prerequisite x1 from candidate rankings while keeping x1 in full_stats dependency context.
-	insOut, insErr, err := runCommandWithTimeout(t, repo, exe, "--robot-insights", "--label", "core")
-	if err != nil {
-		t.Fatalf("--robot-insights --label core failed: %v\nstderr=%s", err, insErr)
-	}
-	var insPayload struct {
-		Bottlenecks []struct {
-			ID string `json:"ID"`
-		} `json:"Bottlenecks"`
-		Keystones []struct {
-			ID string `json:"ID"`
-		} `json:"Keystones"`
-		TopWhatIfs []struct {
-			IssueID string `json:"issue_id"`
-		} `json:"top_what_ifs"`
-		FullStats struct {
-			PageRank map[string]float64 `json:"pagerank"`
-		} `json:"full_stats"`
-	}
-	if err := json.Unmarshal([]byte(insOut), &insPayload); err != nil {
-		t.Fatalf("unmarshal insights: %v", err)
-	}
-	for _, b := range insPayload.Bottlenecks {
-		if b.ID == "x1" {
-			t.Fatalf("expected Bottlenecks to exclude non-candidate x1, got %+v", insPayload.Bottlenecks)
-		}
-	}
-	for _, k := range insPayload.Keystones {
-		if k.ID == "x1" {
-			t.Fatalf("expected Keystones to exclude non-candidate x1, got %+v", insPayload.Keystones)
-		}
-	}
-	for _, w := range insPayload.TopWhatIfs {
-		if w.IssueID == "x1" {
-			t.Fatalf("expected top_what_ifs to exclude non-candidate x1, got %+v", insPayload.TopWhatIfs)
-		}
-	}
-	if insPayload.FullStats.PageRank["x1"] <= 0 {
-		t.Fatalf("expected full_stats.pagerank to preserve 1-hop prerequisite x1 context, got %v", insPayload.FullStats.PageRank)
-	}
-
-	// 4. --robot-next --label core has 0 claimable picks (h1 assigned to alice, others blocked), emits diagnostic_top_pick.
-	nextOut, nextErr, err := runCommandWithTimeout(t, repo, exe, "--robot-next", "--label", "core")
-	if err != nil {
-		t.Fatalf("--robot-next --label core failed: %v\nstderr=%s", err, nextErr)
-	}
-	var nextPayload map[string]any
-	if err := json.Unmarshal([]byte(nextOut), &nextPayload); err != nil {
-		t.Fatalf("unmarshal robot-next: %v", err)
-	}
-	if nextPayload["diagnostic_top_pick"] == nil {
-		t.Fatalf("expected diagnostic_top_pick when all candidates are non-claimable, got: %s", nextOut)
-	}
-
-	// 5. --search --as-of HEAD~1 uses dedicated historical-* index_path (never creating live index-*.bvvi) and caps with --robot-max-results.
-	semDir := filepath.Join(repo, ".bv", "semantic")
-	searchOut, searchErr, err := runCommandWithTimeout(t, repo, exe, "--search", "Heavy", "--as-of", "HEAD~1", "--robot-search", "--robot-max-results", "1")
-	if err != nil {
-		t.Fatalf("--search --as-of failed: %v\nstderr=%s", err, searchErr)
-	}
-	if entries, statErr := os.ReadDir(semDir); statErr == nil {
-		for _, ent := range entries {
-			if !strings.HasPrefix(ent.Name(), "historical-") {
-				t.Fatalf("expected --as-of search never to create live semantic index file, found %q", ent.Name())
-			}
-		}
-	}
-	var searchPayload struct {
-		IndexPath string `json:"index_path"`
-		Limit     int    `json:"limit"`
-		Results   []any  `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(searchOut), &searchPayload); err != nil {
-		t.Fatalf("unmarshal search: %v", err)
-	}
-	if !strings.HasPrefix(filepath.Base(searchPayload.IndexPath), "historical-") {
-		t.Fatalf("expected historical-* index_path, got %q", searchPayload.IndexPath)
-	}
-	if searchPayload.Limit != 1 || len(searchPayload.Results) != 1 {
-		t.Fatalf("expected --robot-max-results=1 to cap --robot-search, got limit=%d len=%d", searchPayload.Limit, len(searchPayload.Results))
-	}
-
-	// 6. --diff-since HEAD --robot-diff --label core produces symmetric from_data_hash == to_data_hash.
-	diffOut, diffErr, err := runCommandWithTimeout(t, repo, exe, "--diff-since", "HEAD", "--robot-diff", "--label", "core")
-	if err != nil {
-		t.Fatalf("--diff-since HEAD --robot-diff --label core failed: %v\nstderr=%s", err, diffErr)
-	}
-	var diffPayload map[string]any
-	if err := json.Unmarshal([]byte(diffOut), &diffPayload); err != nil {
-		t.Fatalf("unmarshal diff: %v", err)
-	}
-	if diffPayload["from_data_hash"] != diffPayload["to_data_hash"] {
-		t.Fatalf("expected symmetric from_data_hash == to_data_hash at HEAD under --label, got from=%v to=%v",
-			diffPayload["from_data_hash"], diffPayload["to_data_hash"])
-	}
-
-	// 7. --robot-ignore-correlation records ignored status without accuracy penalty and refuses --as-of.
-	if _, _, asOfIgnoreErr := runCommandWithTimeout(t, repo, exe, "--robot-ignore-correlation", headSHA+":h1", "--as-of", "HEAD~1"); asOfIgnoreErr == nil {
-		t.Fatal("expected --robot-ignore-correlation with --as-of to be rejected")
-	}
-	igOut, igErr, err := runCommandWithTimeout(t, repo, exe, "--robot-ignore-correlation", headSHA+":h1", "--correlation-reason", "automated formatting")
-	if err != nil {
-		t.Fatalf("--robot-ignore-correlation failed: %v\nstderr=%s", err, igErr)
-	}
-	var igPayload map[string]any
-	if err := json.Unmarshal([]byte(igOut), &igPayload); err != nil || igPayload["status"] != "ignored" {
-		t.Fatalf("expected status=ignored from --robot-ignore-correlation, got: %s", igOut)
-	}
-
-	// 8. Agent intent subcommands: version --json, orphans --json, schema bead-history --json.
-	verOut, verErr, err := runCommandWithTimeout(t, repo, exe, "version", "--json")
-	if err != nil {
-		t.Fatalf("bv version --json failed: %v\nstderr=%s", err, verErr)
-	}
-	var verPayload map[string]any
-	if err := json.Unmarshal([]byte(verOut), &verPayload); err != nil || verPayload["tool"] != "bv" {
-		t.Fatalf("expected JSON from bv version --json, got: %s", verOut)
-	}
-	if _, schemaErr, err := runCommandWithTimeout(t, repo, exe, "schema", "bead-history", "--json"); err != nil {
-		t.Fatalf("bv schema bead-history --json failed: %v\nstderr=%s", err, schemaErr)
-	}
-
-	// 9. TUI --as-of + --search-mode/--search-preset launch wiring (positive + invalid negative control).
-	dbgOut, dbgErr, err := runCommandWithTimeout(t, repo, exe, "--as-of", "HEAD", "--search-mode", "hybrid", "--search-preset", "impact-first", "--debug-render", "board")
-	if err != nil {
-		t.Fatalf("TUI --as-of HEAD --search-mode hybrid --debug-render board failed: %v\nstderr=%s", err, dbgErr)
-	}
-	if !strings.Contains(dbgOut, "h1") {
-		t.Fatalf("expected rendered TUI board output to contain h1, got:\n%s", dbgOut)
-	}
-	if _, _, badSearchErr := runCommandWithTimeout(t, repo, exe, "--search-mode", "bogus-mode", "--debug-render", "board"); badSearchErr == nil {
-		t.Fatal("expected invalid --search-mode on TUI launch to fail closed")
-	}
-	if _, modErr, badModErr := runCommandWithTimeout(t, repo, exe, "--robot-triage", "--search-mode", "hybrid"); badModErr == nil || !strings.Contains(modErr, "--search-mode requires --search") {
-		t.Fatalf("expected --robot-triage --search-mode hybrid to fail with --search-mode requires --search, got err=%v stderr=%s", badModErr, modErr)
-	}
-}
-
-func TestWave15Round1_AuditRemediations(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	t.Setenv("BV_NO_SAVED_CONFIG", "")
-	exe := buildTestBinary(t)
-
-	// [D-2]: XDG_CONFIG_HOME strict isolation (never falls through to $HOME/.config/bv/config.yaml).
-	home := t.TempDir()
-	xdg := t.TempDir()
-	homeCfgDir := filepath.Join(home, ".config", "bv")
-	if err := os.MkdirAll(homeCfgDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(homeCfgDir, "config.yaml"), []byte("theme: light\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", xdg)
-	if v, ok := loadThemeFromUserConfig(); ok || v != "" {
-		t.Fatalf("expected strict XDG_CONFIG_HOME isolation when %s/bv/config.yaml is absent, got (%q, %v)", xdg, v, ok)
-	}
-	t.Setenv("XDG_CONFIG_HOME", "")
-
-	// [D-2] + [D-3] + [D-6] + [D-7]: Historical commit clock under SOURCE_DATE_EPOCH,
-	// hybrid --search --as-of .WithNow(referenceTime), scoped insights.Stats, and synthesizeTargetHistories block.
-	repo := t.TempDir()
-	beadsDir := filepath.Join(repo, ".beads")
-	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt := func(dir, dateISO string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(sanitizedGitEnvForCLI(),
-			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",
-			"GIT_AUTHOR_DATE="+dateISO, "GIT_COMMITTER_DATE="+dateISO,
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	runGitAt(repo, "2025-01-15T12:00:00Z", "init")
-	seedJSONL := strings.Join([]string{
-		`{"id":"x1","title":"External prereq","status":"open","priority":1,"issue_type":"task","labels":["ext"],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-10T00:00:00Z"}`,
-		`{"id":"c1","title":"Deferred core auth","status":"open","priority":1,"issue_type":"task","labels":["core"],"defer_until":"2025-02-01T00:00:00Z","dependencies":[{"issue_id":"c1","depends_on_id":"x1","type":"blocks"}],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-10T00:00:00Z"}`,
-		`{"id":"c2","title":"Ready core item","status":"open","priority":2,"issue_type":"task","labels":["core"],"dependencies":[{"issue_id":"c2","depends_on_id":"c1","type":"blocks"}],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-10T00:00:00Z"}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(beadsDir, "issues.jsonl"), []byte(seedJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repo, "ext.go"), []byte("package main\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(repo, "2025-01-15T12:00:00Z", "add", ".")
-	runGitAt(repo, "2025-01-15T12:00:00Z", "commit", "-m", "feat: touch x1 and c1")
-	c1SHA := runGitAt(repo, "2025-01-15T12:00:00Z", "rev-parse", "HEAD")
-
-	// [D-2] + [D-3] + [R2-D1]: Without SOURCE_DATE_EPOCH, --as-of c1SHA uses historical commit clock 2025-01-15T12:00:00Z
-	// and scores c1 (defer_until 2025-02-01) as deferred (status=0.2, not open=1.0). When SOURCE_DATE_EPOCH is set,
-	// SOURCE_DATE_EPOCH takes precedence for reproducibility (TestRobotSearchHistoricalCache) while still honoring .WithNow(referenceTime).
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	hsOut, hsErr, err := runCommandWithTimeout(t, repo, exe, "--search", "Deferred core auth", "--search-mode", "hybrid", "--as-of", c1SHA, "--robot-search")
-	if err != nil {
-		t.Fatalf("hybrid --search --as-of failed: %v\nstderr=%s", err, hsErr)
-	}
-	var hsPayload struct {
-		RankingTime string `json:"ranking_time"`
-		Results     []struct {
-			IssueID         string             `json:"issue_id"`
-			ComponentScores map[string]float64 `json:"component_scores"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(hsOut), &hsPayload); err != nil {
-		t.Fatalf("unmarshal hybrid search: %v\n%s", err, hsOut)
-	}
-	if hsPayload.RankingTime != "2025-01-15T12:00:00Z" {
-		t.Fatalf("expected ranking_time=2025-01-15T12:00:00Z from commit clock when SOURCE_DATE_EPOCH is unset, got %q", hsPayload.RankingTime)
-	}
-	foundDeferred := false
-	for _, r := range hsPayload.Results {
-		if r.IssueID == "c1" {
-			foundDeferred = true
-			if r.ComponentScores["status"] != 0.2 {
-				t.Fatalf("expected c1 hybrid status score 0.2 (deferred at 2025-01-15), got %v", r.ComponentScores)
-			}
-		}
-	}
-	if !foundDeferred {
-		t.Fatalf("expected c1 in hybrid search results: %+v", hsPayload.Results)
-	}
-	t.Setenv("SOURCE_DATE_EPOCH", "1736985600") // 2025-01-16T00:00:00Z overrides commit clock
-	hsEpochOut, hsEpochErr, err := runCommandWithTimeout(t, repo, exe, "--search", "Deferred core auth", "--search-mode", "hybrid", "--as-of", c1SHA, "--robot-search")
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	if err != nil {
-		t.Fatalf("hybrid --search --as-of with SOURCE_DATE_EPOCH failed: %v\nstderr=%s", err, hsEpochErr)
-	}
-	if err := json.Unmarshal([]byte(hsEpochOut), &hsPayload); err != nil {
-		t.Fatalf("unmarshal epoch hybrid search: %v", err)
-	}
-	if hsPayload.RankingTime != "2025-01-16T00:00:00Z" {
-		t.Fatalf("expected SOURCE_DATE_EPOCH override ranking_time=2025-01-16T00:00:00Z, got %q", hsPayload.RankingTime)
-	}
-
-	// [D-6]: --robot-insights --label core scopes Stats.{NodeCount,EdgeCount,Density} to match ClusterDensity (2 nodes, 1 edge => 0.5).
-	insOut, insErr, err := runCommandWithTimeout(t, repo, exe, "--robot-insights", "--label", "core")
-	if err != nil {
-		t.Fatalf("--robot-insights --label core failed: %v\nstderr=%s", err, insErr)
-	}
-	var insStats struct {
-		ClusterDensity float64 `json:"ClusterDensity"`
-		Stats          struct {
-			NodeCount int     `json:"NodeCount"`
-			EdgeCount int     `json:"EdgeCount"`
-			Density   float64 `json:"Density"`
-		} `json:"Stats"`
-	}
-	if err := json.Unmarshal([]byte(insOut), &insStats); err != nil {
-		t.Fatalf("unmarshal insights stats: %v", err)
-	}
-	if insStats.Stats.NodeCount != 2 || insStats.Stats.EdgeCount != 1 || insStats.Stats.Density != insStats.ClusterDensity {
-		t.Fatalf("expected scoped Stats (2 nodes, 1 edge, density=%v), got %+v", insStats.ClusterDensity, insStats.Stats)
-	}
-
-	// [D-7]: Out-of-scope x1 must NOT be resurrected via synthesizeTargetHistories or mutate feedback under --label core.
-	bhOut, bhErr, err := runCommandWithTimeout(t, repo, exe, "--bead-history", "x1", "--label", "core")
-	if err != nil {
-		t.Fatalf("--bead-history x1 --label core failed: %v\nstderr=%s", err, bhErr)
-	}
-	if strings.Contains(bhOut, `"x1"`) {
-		t.Fatalf("expected --bead-history x1 --label core not to leak out-of-scope x1:\n%s", bhOut)
-	}
-	for _, argv := range [][]string{
-		{"--robot-causality", "x1", "--label", "core"},
-		{"--robot-explain-correlation", c1SHA + ":x1", "--label", "core"},
-		{"--robot-confirm-correlation", c1SHA + ":x1", "--label", "core"},
-		{"--robot-blocker-chain", "x1", "--label", "core"},
-	} {
-		if _, _, scopeErr := runCommandWithTimeout(t, repo, exe, argv...); scopeErr == nil {
-			t.Fatalf("expected %v to reject out-of-scope x1", argv)
-		}
-	}
-	if _, statErr := os.Stat(filepath.Join(beadsDir, "correlation_feedback.jsonl")); statErr == nil {
-		t.Fatal("expected correlation_feedback.jsonl not to be created by rejected out-of-scope feedback command")
-	}
-
-	// [D-5]: Child submodule .beads is never crawled when parent repo issue count drops, and BEADS_DB directory is honored.
-	subBeads := filepath.Join(repo, "submod", ".beads")
-	if err := os.MkdirAll(subBeads, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	var subLines []string
-	for i := 0; i < 20; i++ {
-		subLines = append(subLines, fmt.Sprintf(`{"id":"sub-%d","title":"Sub %d","status":"open","priority":2,"issue_type":"task"}`, i, i))
-	}
-	if err := os.WriteFile(filepath.Join(subBeads, "issues.jsonl"), []byte(strings.Join(subLines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	wizCfg := &export.WizardConfig{RepoName: "submod", LastIssueCount: 20}
-	srcResolved, err := resolvePagesSource(wizCfg, filepath.Join(beadsDir, "issues.jsonl"))
-	if err != nil {
-		t.Fatalf("resolvePagesSource failed: %v", err)
-	}
-	if filepath.Clean(srcResolved.BeadsDir) != filepath.Clean(beadsDir) {
-		t.Fatalf("resolvePagesSource crawled into child submodule %q instead of staying on %q", srcResolved.BeadsDir, beadsDir)
-	}
-	t.Setenv("BEADS_DB", subBeads)
-	dbDirResolved, err := resolvePagesSource(&export.WizardConfig{SourcePath: filepath.Join(beadsDir, "issues.jsonl")}, filepath.Join(beadsDir, "issues.jsonl"))
-	t.Setenv("BEADS_DB", "")
-	if err != nil {
-		t.Fatalf("resolvePagesSource with BEADS_DB dir failed: %v", err)
-	}
-	if filepath.Clean(dbDirResolved.BeadsDir) != filepath.Clean(subBeads) {
-		t.Fatalf("expected BEADS_DB directory %q to win over saved config, got %q", subBeads, dbDirResolved.BeadsDir)
-	}
-
-	// [D-8]: Disconnected cycle + self-loop + 35-stage diamond DAG completes in O(V+E) with serial_minutes == critical_path_minutes.
-	capDir := t.TempDir()
-	capBeads := filepath.Join(capDir, ".beads")
-	if err := os.MkdirAll(capBeads, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	var capLines []string
-	capLines = append(capLines,
-		`{"id":"root-tiny","title":"Tiny root","status":"open","priority":2,"issue_type":"task","estimated_minutes":15}`,
-		`{"id":"self-1","title":"Self loop","status":"open","priority":2,"issue_type":"task","estimated_minutes":30,"dependencies":[{"issue_id":"self-1","depends_on_id":"self-1","type":"blocks"}]}`,
-		`{"id":"cyc-1","title":"Cycle A","status":"open","priority":1,"issue_type":"task","estimated_minutes":300,"dependencies":[{"issue_id":"cyc-1","depends_on_id":"cyc-2","type":"blocks"}]}`,
-		`{"id":"cyc-2","title":"Cycle B","status":"open","priority":1,"issue_type":"task","estimated_minutes":300,"dependencies":[{"issue_id":"cyc-2","depends_on_id":"cyc-1","type":"blocks"}]}`,
-		`{"id":"d-0","title":"Diamond 0","status":"open","priority":2,"issue_type":"task","estimated_minutes":5}`,
-	)
-	for i := 0; i < 35; i++ {
-		prev := fmt.Sprintf("d-%d", i)
-		a := fmt.Sprintf("da-%d", i)
-		b := fmt.Sprintf("db-%d", i)
-		next := fmt.Sprintf("d-%d", i+1)
-		capLines = append(capLines,
-			fmt.Sprintf(`{"id":%q,"title":"DA","status":"open","priority":2,"issue_type":"task","estimated_minutes":5,"dependencies":[{"issue_id":%q,"depends_on_id":%q,"type":"blocks"}]}`, a, a, prev),
-			fmt.Sprintf(`{"id":%q,"title":"DB","status":"open","priority":2,"issue_type":"task","estimated_minutes":5,"dependencies":[{"issue_id":%q,"depends_on_id":%q,"type":"blocks"}]}`, b, b, prev),
-			fmt.Sprintf(`{"id":%q,"title":"DN","status":"open","priority":2,"issue_type":"task","estimated_minutes":5,"dependencies":[{"issue_id":%q,"depends_on_id":%q,"type":"blocks"},{"issue_id":%q,"depends_on_id":%q,"type":"blocks"}]}`, next, next, a, next, b),
-		)
-	}
-	if err := os.WriteFile(filepath.Join(capBeads, "issues.jsonl"), []byte(strings.Join(capLines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	capOut, capErr, err := runCommandWithTimeout(t, capDir, exe, "--robot-capacity")
-	if err != nil {
-		t.Fatalf("--robot-capacity on diamond+cycle failed: %v\nstderr=%s", err, capErr)
-	}
-	var capRes struct {
-		SerialMinutes       int      `json:"serial_minutes"`
-		CriticalPathMinutes int      `json:"critical_path_minutes"`
-		CriticalPath        []string `json:"critical_path"`
-	}
-	if err := json.Unmarshal([]byte(capOut), &capRes); err != nil {
-		t.Fatalf("unmarshal capacity: %v", err)
-	}
-	if capRes.SerialMinutes != capRes.CriticalPathMinutes || capRes.CriticalPathMinutes < 600 {
-		t.Fatalf("expected serial_minutes == critical_path_minutes >= 600 (disconnected cycle), got serial=%d cp=%d path=%v",
-			capRes.SerialMinutes, capRes.CriticalPathMinutes, capRes.CriticalPath)
-	}
-
-	// [D-9]: Shared-.git monorepo workspace --diff-since resolves explicit sub-repo beads_path.
-	mono := t.TempDir()
-	apiBeads := filepath.Join(mono, "services", "api", ".beads")
-	webBeads := filepath.Join(mono, "services", "web", ".beads")
-	wsDir := filepath.Join(mono, ".bv")
-	for _, d := range []string{apiBeads, webBeads, wsDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	wsYAML := "repos:\n  - name: api\n    path: .\n    beads_path: services/api/.beads\n    prefix: api-\n  - name: web\n    path: .\n    beads_path: services/web/.beads\n    prefix: web-\n"
-	wsFile := filepath.Join(wsDir, "workspace.yaml")
-	if err := os.WriteFile(wsFile, []byte(wsYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(apiBeads, "issues.jsonl"), []byte(`{"id":"1","title":"API v1","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(webBeads, "issues.jsonl"), []byte(`{"id":"1","title":"Web v1","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(mono, "2025-03-01T00:00:00Z", "init")
-	runGitAt(mono, "2025-03-01T00:00:00Z", "add", ".")
-	runGitAt(mono, "2025-03-01T00:00:00Z", "commit", "-m", "chore: initial monorepo")
-	if err := os.WriteFile(filepath.Join(webBeads, "issues.jsonl"), []byte(
-		`{"id":"1","title":"Web v1","status":"open","priority":1,"issue_type":"task"}`+"\n"+
-			`{"id":"2","title":"Web v2","status":"open","priority":2,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(mono, "2025-03-02T00:00:00Z", "add", ".")
-	runGitAt(mono, "2025-03-02T00:00:00Z", "commit", "-m", "feat(web): add web-2")
-
-	monoDiffOut, monoDiffErr, err := runCommandWithTimeout(t, mono, exe, "--workspace", wsFile, "--diff-since", "HEAD~1", "--robot-diff")
-	if err != nil {
-		t.Fatalf("monorepo workspace --diff-since failed: %v\nstderr=%s", err, monoDiffErr)
-	}
-	var monoDiff struct {
-		Diff struct {
-			NewIssues []struct {
-				ID string `json:"id"`
-			} `json:"new_issues"`
-		} `json:"diff"`
-	}
-	if err := json.Unmarshal([]byte(monoDiffOut), &monoDiff); err != nil {
-		t.Fatalf("unmarshal monorepo diff: %v", err)
-	}
-	if len(monoDiff.Diff.NewIssues) != 1 || monoDiff.Diff.NewIssues[0].ID != "web-2" {
-		t.Fatalf("expected sole new issue web-2 in monorepo workspace diff, got %+v\nraw=%s", monoDiff.Diff.NewIssues, monoDiffOut)
-	}
-
-	// [R2-D3]: Deleted/tombstoned historical beads remain inspectable under --workspace --repo api
-	// (matching repo) while still rejected under --repo web (non-matching repo) or --label.
-	delWS := t.TempDir()
-	delApi := filepath.Join(delWS, "api")
-	delWeb := filepath.Join(delWS, "web")
-	for _, d := range []string{filepath.Join(delApi, ".beads"), filepath.Join(delWeb, ".beads"), filepath.Join(delWS, ".bv")} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	delWSFile := filepath.Join(delWS, ".bv", "workspace.yaml")
-	if err := os.WriteFile(delWSFile, []byte("repos:\n  - name: api\n    path: api\n    prefix: api-\n  - name: web\n    path: web\n    prefix: web-\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(delApi, "2025-04-01T00:00:00Z", "init")
-	if err := os.WriteFile(filepath.Join(delApi, ".beads", "issues.jsonl"), []byte(`{"id":"DEL-1","title":"Deleted API bead","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(delApi, "svc.go"), []byte("package api\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(delApi, "2025-04-01T00:00:00Z", "add", ".")
-	runGitAt(delApi, "2025-04-01T00:00:00Z", "commit", "-m", "feat: implement DEL-1")
-	delCommitSHA := runGitAt(delApi, "2025-04-01T00:00:00Z", "rev-parse", "HEAD")
-	// Delete DEL-1 from live issues.jsonl in api, keep LIVE-1 open.
-	if err := os.WriteFile(filepath.Join(delApi, ".beads", "issues.jsonl"), []byte(`{"id":"LIVE-1","title":"Live API bead","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(delApi, "2025-04-02T00:00:00Z", "add", ".")
-	runGitAt(delApi, "2025-04-02T00:00:00Z", "commit", "-m", "chore: prune DEL-1")
-
-	runGitAt(delWeb, "2025-04-01T00:00:00Z", "init")
-	if err := os.WriteFile(filepath.Join(delWeb, ".beads", "issues.jsonl"), []byte(`{"id":"W-1","title":"Web bead","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(delWeb, "2025-04-01T00:00:00Z", "add", ".")
-	runGitAt(delWeb, "2025-04-01T00:00:00Z", "commit", "-m", "chore: init web")
-
-	// Positive: --repo api preserves deleted api-DEL-1 across --bead-history, --robot-causality, and --robot-explain-correlation!
-	delHistOut, delHistErr, err := runCommandWithTimeout(t, delWS, exe, "--workspace", delWSFile, "--repo", "api", "--bead-history", "api-DEL-1")
-	if err != nil || !strings.Contains(delHistOut, `"api-DEL-1"`) {
-		t.Fatalf("expected --repo api --bead-history api-DEL-1 to return history, err=%v stderr=%s out=%s", err, delHistErr, delHistOut)
-	}
-	if _, causErr, err := runCommandWithTimeout(t, delWS, exe, "--workspace", delWSFile, "--repo", "api", "--robot-causality", "api-DEL-1"); err != nil {
-		t.Fatalf("expected --repo api --robot-causality api-DEL-1 to succeed, err=%v stderr=%s", err, causErr)
-	}
-	if _, expErr, err := runCommandWithTimeout(t, delWS, exe, "--workspace", delWSFile, "--repo", "api", "--robot-explain-correlation", delCommitSHA+":api-DEL-1"); err != nil {
-		t.Fatalf("expected --repo api --robot-explain-correlation api-DEL-1 to succeed, err=%v stderr=%s", err, expErr)
-	}
-	// Negative: --repo web rejects api-DEL-1!
-	if _, _, wrongRepoErr := runCommandWithTimeout(t, delWS, exe, "--workspace", delWSFile, "--repo", "web", "--robot-causality", "api-DEL-1"); wrongRepoErr == nil {
-		t.Fatal("expected --repo web --robot-causality api-DEL-1 to fail closed")
-	}
-}
-
-func TestWave16_TrackD_CLIRobotScopingWorkspaceAsOfAndHooks(t *testing.T) {
-	exe := buildTestBinary(t)
-
-	runGitAt := func(dir, isoDate string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=Alice",
-			"GIT_AUTHOR_EMAIL=alice@example.com",
-			"GIT_COMMITTER_NAME=Alice",
-			"GIT_COMMITTER_EMAIL=alice@example.com",
-			"GIT_AUTHOR_DATE="+isoDate,
-			"GIT_COMMITTER_DATE="+isoDate,
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v in %s failed: %v\n%s", args, dir, err, string(out))
-		}
-		return strings.TrimSpace(string(out))
-	}
-
-	// 1. --robot-insights --label & --export-pages --label do not leak 1-hop unlabeled neighbors,
-	//    while preserving full-source Readiness.
-	labelRepo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(labelRepo, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	labelJSONL := strings.Join([]string{
-		`{"id":"IN-1","title":"Core auth flow","status":"open","priority":1,"issue_type":"task","labels":["core"],"dependencies":[{"issue_id":"IN-1","depends_on_id":"EXT-1","type":"blocks"}]}`,
-		`{"id":"EXT-1","title":"External infra gate","status":"open","priority":1,"issue_type":"task","labels":["infra"]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(labelRepo, ".beads", "issues.jsonl"), []byte(labelJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	insOut, insErr, err := runCommandWithTimeout(t, labelRepo, exe, "--robot-insights", "--label", "core")
-	if err != nil {
-		t.Fatalf("--robot-insights --label core failed: %v\nstderr=%s", err, insErr)
-	}
-	var insPayload struct {
-		FullStats struct {
-			PageRank map[string]float64 `json:"pagerank"`
-		} `json:"full_stats"`
-	}
-	if err := json.Unmarshal([]byte(insOut), &insPayload); err != nil {
-		t.Fatalf("decode insights: %v\n%s", err, insOut)
-	}
-	if _, leaked := insPayload.FullStats.PageRank["EXT-1"]; leaked {
-		t.Fatalf("expected --robot-insights --label core not to leak 1-hop neighbor EXT-1 into full_stats.pagerank: %+v", insPayload.FullStats.PageRank)
-	}
-	if _, ok := insPayload.FullStats.PageRank["IN-1"]; !ok {
-		t.Fatalf("expected IN-1 in full_stats.pagerank: %+v", insPayload.FullStats.PageRank)
-	}
-
-	// Structured --search --json + BV_ROBOT=1 --version + human --robot-help contract:
-	srchOut, srchErr, err := runCommandWithTimeout(t, labelRepo, exe, "--search", "auth", "--json", "--label", "core")
-	if err != nil {
-		t.Fatalf("--search --json failed: %v\nstderr=%s", err, srchErr)
-	}
-	var srchPayload map[string]any
-	if err := json.Unmarshal([]byte(srchOut), &srchPayload); err != nil || srchPayload["query"] != "auth" {
-		t.Fatalf("expected JSON search output for --search --json, err=%v payload=%+v\nraw=%s", err, srchPayload, srchOut)
-	}
-
-	verCmd := exec.Command(exe, "--version")
-	verCmd.Dir = labelRepo
-	verCmd.Env = append(os.Environ(), "BV_ROBOT=1", "BV_NO_BROWSER=1", "BV_TEST_MODE=1")
-	verOut, err := verCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("BV_ROBOT=1 --version failed: %v\n%s", err, string(verOut))
-	}
-	var verPayload map[string]any
-	if err := json.Unmarshal(verOut, &verPayload); err != nil || verPayload["tool"] != "bv" {
-		t.Fatalf("expected structured JSON from BV_ROBOT=1 --version, got err=%v raw=%s", err, string(verOut))
-	}
-	helpOut, helpErr, err := runCommandWithTimeout(t, labelRepo, exe, "--robot-help")
-	if err != nil || strings.HasPrefix(strings.TrimSpace(helpOut), "{") {
-		t.Fatalf("expected human text from bare --robot-help, err=%v stderr=%s out=%s", err, helpErr, helpOut)
-	}
-
-	// 2. --limit / --robot-max-results across list commands + bv impact --limit + --robot-drift --severity + --baseline-info --json + --save-baseline --as-of guard
-	gitRepo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(gitRepo, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(gitRepo, "2025-05-01T00:00:00Z", "init")
-	v1Issues := strings.Join([]string{
-		`{"id":"B-1","title":"Service alpha","status":"open","priority":1,"issue_type":"task","labels":["api"]}`,
-		`{"id":"B-2","title":"Service beta","status":"open","priority":2,"issue_type":"task","labels":["web"]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(gitRepo, ".beads", "issues.jsonl"), []byte(v1Issues), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	sprintsJSONL := strings.Join([]string{
-		`{"id":"sp-1","name":"Sprint 1","start_date":"2025-05-01T00:00:00Z","end_date":"2025-05-14T00:00:00Z","bead_ids":["B-1"]}`,
-		`{"id":"sp-2","name":"Sprint 2","start_date":"2025-05-15T00:00:00Z","end_date":"2025-05-28T00:00:00Z","bead_ids":["B-2"]}`,
-	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(gitRepo, ".beads", "sprints.jsonl"), []byte(sprintsJSONL), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(gitRepo, "svc.go"), []byte("package main\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(gitRepo, "2025-05-01T00:00:00Z", "add", ".")
-	runGitAt(gitRepo, "2025-05-01T00:00:00Z", "commit", "-m", "feat: implement B-1 and B-2 in svc.go")
-	firstCommit := runGitAt(gitRepo, "2025-05-01T00:00:00Z", "rev-parse", "HEAD")
-
-	// Add 3 unrelated commits so --history-limit 1 would miss firstCommit while --robot-max-results 1 finds it and caps affected_beads to 1!
-	for i := 1; i <= 3; i++ {
-		if err := os.WriteFile(filepath.Join(gitRepo, fmt.Sprintf("doc%d.md", i)), []byte("# doc\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		runGitAt(gitRepo, fmt.Sprintf("2025-05-0%dT00:00:00Z", i+1), "add", ".")
-		runGitAt(gitRepo, fmt.Sprintf("2025-05-0%dT00:00:00Z", i+1), "commit", "-m", fmt.Sprintf("docs: note %d", i))
-	}
-
-	// Guard: --save-baseline --as-of must fail closed without writing .bv/baseline.json
-	if _, _, sbAsOfErr := runCommandWithTimeout(t, gitRepo, exe, "--save-baseline", "bad", "--as-of", firstCommit); sbAsOfErr == nil {
-		t.Fatal("expected --save-baseline --as-of to fail closed")
-	}
-	// --baseline-info --json before saving -> exists: false
-	biBeforeOut, biBeforeErr, err := runCommandWithTimeout(t, gitRepo, exe, "--baseline-info", "--json")
-	if err != nil {
-		t.Fatalf("--baseline-info --json before save failed: %v\nstderr=%s", err, biBeforeErr)
-	}
-	if !strings.Contains(biBeforeOut, `"exists": false`) && !strings.Contains(biBeforeOut, `"exists":false`) {
-		t.Fatalf("expected exists=false before baseline save, got:\n%s", biBeforeOut)
-	}
-	if _, sbErr, err := runCommandWithTimeout(t, gitRepo, exe, "--save-baseline", "initial"); err != nil {
-		t.Fatalf("--save-baseline failed: %v\nstderr=%s", err, sbErr)
-	}
-	biAfterOut, biAfterErr, err := runCommandWithTimeout(t, gitRepo, exe, "--baseline-info", "--json")
-	if err != nil || (!strings.Contains(biAfterOut, `"exists": true`) && !strings.Contains(biAfterOut, `"exists":true`)) {
-		t.Fatalf("expected exists=true from --baseline-info --json after save, err=%v stderr=%s out=%s", err, biAfterErr, biAfterOut)
-	}
-
-	// List --limit aliases: recipes, sprints, labels, hotspots, impact
-	recOut, recErr, err := runCommandWithTimeout(t, gitRepo, exe, "recipes", "--limit", "2", "--json")
-	if err != nil {
-		t.Fatalf("bv recipes --limit 2 failed: %v\nstderr=%s", err, recErr)
-	}
-	var recResp struct {
-		Recipes []any `json:"recipes"`
-	}
-	if err := json.Unmarshal([]byte(recOut), &recResp); err != nil || len(recResp.Recipes) != 2 {
-		t.Fatalf("expected 2 recipes from --limit 2, got len=%d err=%v raw=%s", len(recResp.Recipes), err, recOut)
-	}
-
-	spOut, spErr, err := runCommandWithTimeout(t, gitRepo, exe, "sprints", "--limit", "1", "--json")
-	if err != nil {
-		t.Fatalf("bv sprints --limit 1 failed: %v\nstderr=%s", err, spErr)
-	}
-	var spResp struct {
-		Sprints []any `json:"sprints"`
-	}
-	if err := json.Unmarshal([]byte(spOut), &spResp); err != nil || len(spResp.Sprints) != 1 {
-		t.Fatalf("expected 1 sprint from --limit 1, got len=%d err=%v raw=%s", len(spResp.Sprints), err, spOut)
-	}
-
-	lblOut, lblErr, err := runCommandWithTimeout(t, gitRepo, exe, "labels", "--limit", "1", "--json")
-	if err != nil {
-		t.Fatalf("bv labels --limit 1 failed: %v\nstderr=%s", err, lblErr)
-	}
-	var lblResp struct {
-		Results struct {
-			Labels []any `json:"labels"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal([]byte(lblOut), &lblResp); err != nil || len(lblResp.Results.Labels) != 1 {
-		t.Fatalf("expected 1 label from bv labels --limit 1, got len=%d err=%v raw=%s", len(lblResp.Results.Labels), err, lblOut)
-	}
-
-	impOut, impErr, err := runCommandWithTimeout(t, gitRepo, exe, "impact", "svc.go", "--limit", "1", "--json")
-	if err != nil {
-		t.Fatalf("bv impact svc.go --limit 1 failed: %v\nstderr=%s", err, impErr)
-	}
-	var impResp struct {
-		AffectedBeads []any `json:"affected_beads"`
-	}
-	if err := json.Unmarshal([]byte(impOut), &impResp); err != nil || len(impResp.AffectedBeads) != 1 {
-		t.Fatalf("expected 1 affected bead from bv impact svc.go --limit 1 (not history truncation to 0!), got len=%d err=%v raw=%s", len(impResp.AffectedBeads), err, impOut)
-	}
-
-	// 3. --as-of correlation when working-tree .beads/ is absent (renamed away in a later commit)
-	oldBeadsBackup := filepath.Join(gitRepo, "archived_beads")
-	if err := os.Rename(filepath.Join(gitRepo, ".beads"), oldBeadsBackup); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(gitRepo, "2025-05-06T00:00:00Z", "add", "-A")
-	runGitAt(gitRepo, "2025-05-06T00:00:00Z", "commit", "-m", "chore: archive beads dir")
-
-	if _, causErr, err := runCommandWithTimeout(t, gitRepo, exe, "--robot-causality", "B-1", "--as-of", firstCommit); err != nil {
-		t.Fatalf("expected --robot-causality --as-of to succeed without live .beads/, err=%v stderr=%s", err, causErr)
-	}
-	if _, expErr, err := runCommandWithTimeout(t, gitRepo, exe, "--robot-explain-correlation", firstCommit+":B-1", "--as-of", firstCommit); err != nil {
-		t.Fatalf("expected --robot-explain-correlation --as-of to succeed without live .beads/, err=%v stderr=%s", err, expErr)
-	}
-
-	// 4. --workspace + --as-of in umbrella workspace & --workspace --diff-since <api-sha> --repo api
-	wsRoot := t.TempDir()
-	wsApi := filepath.Join(wsRoot, "api")
-	wsWeb := filepath.Join(wsRoot, "web")
-	for _, d := range []string{filepath.Join(wsApi, ".beads"), filepath.Join(wsWeb, ".beads"), filepath.Join(wsRoot, ".bv")} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	wsCfgPath := filepath.Join(wsRoot, ".bv", "workspace.yaml")
-	if err := os.WriteFile(wsCfgPath, []byte("repos:\n  - name: api\n    path: api\n    prefix: api-\n  - name: web\n    path: web\n    prefix: web-\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(wsApi, "2025-06-01T00:00:00Z", "init")
-	if err := os.WriteFile(filepath.Join(wsApi, ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"API v1","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(wsApi, "2025-06-01T00:00:00Z", "add", ".")
-	runGitAt(wsApi, "2025-06-01T00:00:00Z", "commit", "-m", "init api")
-	apiV1SHA := runGitAt(wsApi, "2025-06-01T00:00:00Z", "rev-parse", "HEAD")
-
-	if err := os.WriteFile(filepath.Join(wsApi, ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"API v1","status":"closed","priority":1,"issue_type":"task"}`+"\n"+`{"id":"2","title":"API v2","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(wsApi, "2025-06-02T00:00:00Z", "add", ".")
-	runGitAt(wsApi, "2025-06-02T00:00:00Z", "commit", "-m", "api v2")
-
-	runGitAt(wsWeb, "2025-06-01T00:00:00Z", "init")
-	if err := os.WriteFile(filepath.Join(wsWeb, ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"Web v1","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(wsWeb, "2025-06-01T00:00:00Z", "add", ".")
-	runGitAt(wsWeb, "2025-06-01T00:00:00Z", "commit", "-m", "init web")
-	if err := os.WriteFile(filepath.Join(wsWeb, ".beads", "issues.jsonl"), []byte(`{"id":"1","title":"Web v1","status":"open","priority":1,"issue_type":"task"}`+"\n"+`{"id":"2","title":"Web v2","status":"open","priority":1,"issue_type":"task"}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGitAt(wsWeb, "2025-06-02T00:00:00Z", "add", ".")
-	runGitAt(wsWeb, "2025-06-02T00:00:00Z", "commit", "-m", "web v2")
-
-	// --workspace + --as-of HEAD~1 in umbrella wsRoot (no root .beads/) succeeds and returns ONLY v1 issues!
-	wsAsOfOut, wsAsOfErr, err := runCommandWithTimeout(t, wsRoot, exe, "--workspace", wsCfgPath, "--as-of", "HEAD~1", "--robot-triage")
-	if err != nil {
-		t.Fatalf("--workspace --as-of HEAD~1 failed: %v\nstderr=%s", err, wsAsOfErr)
-	}
-	if !strings.Contains(wsAsOfOut, `"api-1"`) || !strings.Contains(wsAsOfOut, `"web-1"`) || strings.Contains(wsAsOfOut, `"api-2"`) || strings.Contains(wsAsOfOut, `"web-2"`) {
-		t.Fatalf("expected --workspace --as-of HEAD~1 to contain api-1 & web-1 and exclude api-2/web-2:\n%s", wsAsOfOut)
-	}
-
-	// --workspace --diff-since <apiV1SHA> --repo api succeeds (whereas without --repo api it fails on web)!
-	wsRepoDiffOut, wsRepoDiffErr, err := runCommandWithTimeout(t, wsRoot, exe, "--workspace", wsCfgPath, "--diff-since", apiV1SHA, "--repo", "api", "--robot-diff")
-	if err != nil || !strings.Contains(wsRepoDiffOut, `"api-2"`) {
-		t.Fatalf("expected --workspace --diff-since <apiSHA> --repo api to succeed with api-2, err=%v stderr=%s out=%s", err, wsRepoDiffErr, wsRepoDiffOut)
-	}
-	if _, _, unscopedErr := runCommandWithTimeout(t, wsRoot, exe, "--workspace", wsCfgPath, "--diff-since", apiV1SHA, "--robot-diff"); unscopedErr == nil {
-		t.Fatal("expected unscoped --workspace --diff-since <api-only-SHA> to fail resolving SHA in web repo")
 	}
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Dicklesworthstone/beads_viewer/pkg/agents"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/baseline"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/cass"
@@ -775,7 +774,7 @@ func TestModel_InitSkipsUpdateCheckWhenDisabled(t *testing.T) {
 		return 1
 	}
 
-	t.Setenv("BV_NO_UPDATE_CHECK", "")
+	t.Setenv("BV_NO_UPDATE_CHECK", "0") // the check is off by default; "0" opts in
 	enabled := initCmdCount()
 	t.Setenv("BV_NO_UPDATE_CHECK", "1")
 	disabled := initCmdCount()
@@ -983,34 +982,6 @@ func TestListKeys_DocumentedViewToggles(t *testing.T) {
 		}
 		if m = press(t, m, "esc"); m.focused != focusList {
 			t.Fatalf("esc should close the label dashboard, focused=%v", m.focused)
-		}
-	})
-	t.Run("x exports Markdown into the working directory", func(t *testing.T) {
-		dir := t.TempDir()
-		wd, err := os.Getwd()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chdir(dir); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chdir(wd) })
-		m := press(t, fresh(), "x")
-		if !strings.HasPrefix(m.statusMsg, "✅ Exported") {
-			t.Fatalf("x should export and confirm, status=%q", m.statusMsg)
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var md bool
-		for _, e := range entries {
-			if strings.HasSuffix(e.Name(), ".md") {
-				md = true
-			}
-		}
-		if !md {
-			t.Fatalf("no markdown file written to %s: %v", dir, entries)
 		}
 	})
 }
@@ -2520,7 +2491,7 @@ func TestRound2AuditRegressions(t *testing.T) {
 	})
 
 	// Defect 3.5: Modal Z-order vs key-routing, Ctrl+C never swallowed by modals,
-	// Help over AgentPrompt never mutating AGENTS.md on Enter/y, and Tutorial -> ? -> Space -> Esc no loop.
+	// and Tutorial -> ? -> Space -> Esc no loop.
 	t.Run("Defect3_5_ModalZOrderCtrlCAndHelpTutorialEsc", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -2528,11 +2499,6 @@ func TestRound2AuditRegressions(t *testing.T) {
 		t.Cleanup(func() { GetTutorialProgressManager().Reset() })
 
 		workDir := t.TempDir()
-		agentsPath := filepath.Join(workDir, "AGENTS.md")
-		const initialAgentsContent = "# Original AGENTS.md\nDo not touch while Help/Tutorial is on top.\n"
-		if err := os.WriteFile(agentsPath, []byte(initialAgentsContent), 0o644); err != nil {
-			t.Fatal(err)
-		}
 
 		issues := []model.Issue{{ID: "MOD-1", Title: "Modal test", Status: model.StatusOpen, Priority: 1}}
 		m := NewModel(issues, nil, "")
@@ -2540,7 +2506,7 @@ func TestRound2AuditRegressions(t *testing.T) {
 		m.workDir = workDir
 		m.Update(tea.WindowSizeMsg{Width: 120, Height: 32})
 
-		// (a) Ctrl+C returns non-nil quit command in Tutorial, Help, AgentPrompt, and CassModal.
+		// (a) Ctrl+C returns non-nil quit command in Tutorial, Help, and CassModal.
 		for _, tc := range []struct {
 			name  string
 			setup func(*Model)
@@ -2557,14 +2523,6 @@ func TestRound2AuditRegressions(t *testing.T) {
 				setup: func(m *Model) {
 					m.showTutorial = true
 					m.focused = focusTutorial
-				},
-			},
-			{
-				name: "AgentPrompt",
-				setup: func(m *Model) {
-					m.showAgentPrompt = true
-					m.agentPromptModal = NewAgentPromptModal(agentsPath, "AGENTS.md", m.theme)
-					m.focused = focusAgentPrompt
 				},
 			},
 			{
@@ -2585,61 +2543,7 @@ func TestRound2AuditRegressions(t *testing.T) {
 			}
 		}
 
-		// (b) Enter and 'y' while showHelp (and showTutorial) is open on top of showAgentPrompt must NEVER mutate AGENTS.md!
-		m.Update(AgentFileCheckMsg{ShouldPrompt: true, FilePath: agentsPath, FileType: "AGENTS.md"})
-		if !m.showAgentPrompt || m.focused != focusAgentPrompt {
-			t.Fatalf("expected AgentPrompt active, got show=%v focused=%v", m.showAgentPrompt, m.focused)
-		}
-		// Open Help over AgentPrompt via '?' and press Enter: dismisses Help, keeps AgentPrompt intact, does NOT touch AGENTS.md!
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
-		if !m.showHelp || m.focused != focusHelp {
-			t.Fatalf("expected '?' to open Help over AgentPrompt, got showHelp=%v focused=%v", m.showHelp, m.focused)
-		}
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		afterEnter, err := os.ReadFile(agentsPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(afterEnter) != initialAgentsContent || !m.showAgentPrompt {
-			t.Fatalf("Enter while Help was visible over AgentPrompt mutated AGENTS.md or closed AgentPrompt! showAgentPrompt=%v content=%q",
-				m.showAgentPrompt, string(afterEnter))
-		}
-
-		// Re-open Help over AgentPrompt and press 'y': dismisses Help, does NOT touch AGENTS.md!
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-		afterY, err := os.ReadFile(agentsPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(afterY) != initialAgentsContent || !m.showAgentPrompt {
-			t.Fatalf("'y' while Help was visible over AgentPrompt mutated AGENTS.md or closed AgentPrompt! showAgentPrompt=%v content=%q",
-				m.showAgentPrompt, string(afterY))
-		}
-
-		// Open context Tutorial over AgentPrompt via '~' and press 'y' / Enter: does NOT touch AGENTS.md!
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("~")})
-		if !m.showTutorial || m.focused != focusTutorial {
-			t.Fatalf("expected '~' to open Tutorial over AgentPrompt, got showTutorial=%v focused=%v", m.showTutorial, m.focused)
-		}
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		afterTut, err := os.ReadFile(agentsPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(afterTut) != initialAgentsContent || !m.showAgentPrompt {
-			t.Fatalf("y/Enter while Tutorial was visible over AgentPrompt mutated AGENTS.md! content=%q", string(afterTut))
-		}
-		// Close Tutorial then decline AgentPrompt
-		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-		if m.showTutorial || m.showAgentPrompt || m.focused != focusList {
-			t.Fatalf("expected Esc twice to close Tutorial then AgentPrompt back to focusList, got tut=%v agent=%v focused=%v",
-				m.showTutorial, m.showAgentPrompt, m.focused)
-		}
-
-		// (c) From focusList: '`' (Tutorial) -> '?' (Help) -> Space (back to Tutorial) -> Esc closes Tutorial to focusList (no loop!).
+		// (b) From focusList: '`' (Tutorial) -> '?' (Help) -> Space (back to Tutorial) -> Esc closes Tutorial to focusList (no loop!).
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("`")})
 		if !m.showTutorial || m.focused != focusTutorial {
 			t.Fatalf("expected Tutorial open after '`', got showTutorial=%v focused=%v", m.showTutorial, m.focused)
@@ -2745,12 +2649,6 @@ func TestRound3ModalZOrderAndWedgeRegressions(t *testing.T) {
 	// 2. [BUG R3-3B] Dismissing higher modals over showTimeTravelPrompt ('t') or showLabelPicker ('l')
 	// must NEVER wedge the TUI, and F2/F5/Ctrl+R must not fire underneath them.
 	t.Run("R3_3B_TimeTravelAndLabelPickerNeverWedgeAfterHigherModalDismiss", func(t *testing.T) {
-		agentsDir := t.TempDir()
-		agentsPath := filepath.Join(agentsDir, "AGENTS.md")
-		if err := os.WriteFile(agentsPath, []byte("# Test Agents\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-
 		prompts := []struct {
 			name      string
 			openKey   string
@@ -2779,13 +2677,6 @@ func TestRound3ModalZOrderAndWedgeRegressions(t *testing.T) {
 			trigger func(*Model)
 			dismiss tea.KeyMsg
 		}{
-			{
-				name: "AgentPrompt_Esc",
-				trigger: func(m *Model) {
-					m.Update(AgentFileCheckMsg{ShouldPrompt: true, FilePath: agentsPath, FileType: "AGENTS.md"})
-				},
-				dismiss: tea.KeyMsg{Type: tea.KeyEsc},
-			},
 			{
 				name: "UpdateModal_Esc",
 				trigger: func(m *Model) {
@@ -2937,18 +2828,6 @@ func TestRound3ModalZOrderAndWedgeRegressions(t *testing.T) {
 		if m.showRepoPicker || !m.isBoardView || m.focused != focusBoard {
 			t.Fatalf("second Esc should close RepoPicker and restore focusBoard: repo=%v board=%v focused=%v",
 				m.showRepoPicker, m.isBoardView, m.focused)
-		}
-
-		// Also verify AgentFileCheckMsg arriving over focusBoard restores focusBoard on decline!
-		agentsPath := filepath.Join(t.TempDir(), "AGENTS.md")
-		if err := os.WriteFile(agentsPath, []byte("# Agents\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		m.Update(AgentFileCheckMsg{ShouldPrompt: true, FilePath: agentsPath, FileType: "AGENTS.md"})
-		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-		if m.showAgentPrompt || !m.isBoardView || m.focused != focusBoard {
-			t.Fatalf("expected declining AgentPrompt over Board view to restore focusBoard, got agent=%v board=%v focused=%v",
-				m.showAgentPrompt, m.isBoardView, m.focused)
 		}
 	})
 }
@@ -4956,44 +4835,6 @@ func TestWave12TrackBRegressions(t *testing.T) {
 		}
 	})
 
-	// Gap 6: AgentPromptDecline persists decline for current BlurbVersion via agents.RecordDecline(..., false).
-	t.Run("Gap6_AgentPromptDeclinePersistsForCurrentBlurbVersion", func(t *testing.T) {
-		cfgHome := t.TempDir()
-		t.Setenv("HOME", cfgHome)
-		t.Setenv("XDG_CONFIG_HOME", cfgHome)
-		t.Setenv("BV_NO_SAVED_CONFIG", "")
-
-		workDir := t.TempDir()
-		agentsPath := filepath.Join(workDir, "AGENTS.md")
-		if err := os.WriteFile(agentsPath, []byte("# Project Rules\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if !agents.ShouldPromptForAgentFile(workDir) {
-			t.Fatal("precondition: expected ShouldPromptForAgentFile(workDir) == true before decline")
-		}
-
-		m := NewModel([]model.Issue{{ID: "AG-1", Title: "Agent test", Status: model.StatusOpen, Priority: 1}}, nil, "")
-		t.Cleanup(m.Stop)
-		m.workDir = workDir
-		m.agentPromptModal = NewAgentPromptModal(agentsPath, "AGENTS.md", m.theme)
-		m.showAgentPrompt = true
-
-		m.Update(keyRune("n"))
-		if m.showAgentPrompt {
-			t.Fatal("expected 'n' to close showAgentPrompt")
-		}
-		if agents.ShouldPromptForAgentFile(workDir) {
-			t.Fatal("expected ShouldPromptForAgentFile(workDir) == false after declining current BlurbVersion")
-		}
-		pref, err := agents.LoadAgentPromptPreference(workDir)
-		if err != nil || pref == nil || pref.DontAskAgain {
-			t.Fatalf("expected RecordDecline(..., false) with DontAskAgain=false, got pref=%+v err=%v", pref, err)
-		}
-		if !agents.ShouldPromptForAgentUpgrade(workDir, agents.BlurbVersion+1) {
-			t.Fatal("expected ShouldPromptForAgentUpgrade(workDir, BlurbVersion+1) == true after temporary decline")
-		}
-	})
-
 	// Gap 7: Narrow-pane CJK/emoji TreeModel clamping, BuildFromSnapshot deep-copy isolation, and deterministic ID tie-breakers.
 	t.Run("Gap7_TreeNarrowViewportClampingDeepCopyAndDeterministicSortTieBreakers", func(t *testing.T) {
 		sameTime := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
@@ -5432,7 +5273,7 @@ func TestWave13Round1AuditRemediations(t *testing.T) {
 			t.Fatalf("expected FLOW-END content preserved (not overwritten by list selection), got:\n%s", vpPlain)
 		}
 
-		// Also verify Help ('?') and AgentPrompt modals over flowDetailID + WindowSizeMsg + Esc.
+		// Also verify the Help ('?') modal over flowDetailID + WindowSizeMsg + Esc.
 		m.Update(keyRune("?"))
 		if !m.showHelp || m.focused != focusHelp {
 			t.Fatalf("expected Help modal open over flowDetailID, got show=%v focus=%v", m.showHelp, m.focused)
@@ -5441,13 +5282,6 @@ func TestWave13Round1AuditRemediations(t *testing.T) {
 		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		if m.viewport.Width != 148 || !strings.Contains(ansi.Strip(m.viewport.View()), "UniqueFlowDetailMarkerBody") {
 			t.Fatalf("expected full width 148 & FLOW-END content preserved across Help modal, got width=%d", m.viewport.Width)
-		}
-
-		m.Update(AgentFileCheckMsg{ShouldPrompt: true, FilePath: "/tmp/AGENTS.md", FileType: "AGENTS.md"})
-		m.Update(tea.WindowSizeMsg{Width: 146, Height: 36})
-		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-		if m.viewport.Width != 146 || !strings.Contains(ansi.Strip(m.viewport.View()), "UniqueFlowDetailMarkerBody") {
-			t.Fatalf("expected full width 146 & FLOW-END content preserved across AgentPrompt, got width=%d", m.viewport.Width)
 		}
 	})
 
@@ -6406,41 +6240,6 @@ func TestWave14TrackB(t *testing.T) {
 		}
 		m.showShortcutsSidebar = false
 
-		// 3) Duplicate v8 blurb consolidation copy + narrow modal resize (<64 cols)
-		agentDir := t.TempDir()
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-		t.Setenv("BV_NO_SAVED_CONFIG", "")
-		dupContent := "# Repo\n\n" + agents.AgentBlurb + "\n\n" + agents.AgentBlurb + "\n"
-		agentFile := filepath.Join(agentDir, "AGENTS.md")
-		if err := os.WriteFile(agentFile, []byte(dupContent), 0o644); err != nil {
-			t.Fatalf("write duplicate AGENTS.md: %v", err)
-		}
-		_ = agents.RecordAccept(agentDir) // Even after accepting v8 previously, duplicate v8 blurbs must prompt to consolidate!
-		checkMsg, ok := CheckAgentFileCmd(agentDir)().(AgentFileCheckMsg)
-		if !ok || !checkMsg.ShouldPrompt || !checkMsg.IsUpgrade || checkMsg.ExistingVersion != agents.BlurbVersion {
-			t.Fatalf("expected CheckAgentFileCmd on duplicate v8 blurbs to prompt upgrade/consolidation, got %+v", checkMsg)
-		}
-		m.workDir = agentDir
-		m.Update(checkMsg)
-		m.Update(tea.WindowSizeMsg{Width: 48, Height: 22})
-		modalView := m.agentPromptModal.View()
-		if !strings.Contains(modalView, "duplicate") || strings.Contains(modalView, "outdated") {
-			t.Fatalf("expected duplicate-v8 consolidation copy without claiming outdated:\n%s", modalView)
-		}
-		for _, line := range strings.Split(modalView, "\n") {
-			if ansi.StringWidth(line) > 48 {
-				t.Fatalf("narrow 48-col AgentPromptModal line overflowed (%d > 48): %q", ansi.StringWidth(line), line)
-			}
-		}
-		// Accept consolidates duplicate v8 blurbs down to 1
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		afterBytes, err := os.ReadFile(agentFile)
-		if err != nil {
-			t.Fatalf("read consolidated AGENTS.md: %v", err)
-		}
-		if agents.NeedsUpdate(string(afterBytes)) {
-			t.Fatalf("expected consolidated AGENTS.md to pass !NeedsUpdate()")
-		}
 		m.Update(tea.WindowSizeMsg{Width: 200, Height: 30})
 
 		// 4) Recipe normalized GroupBy + canonical Blockers + configured-row badges + footer count excluding IssueGroupItem headers + ◌ metrics… + clearAllFilters repo scope

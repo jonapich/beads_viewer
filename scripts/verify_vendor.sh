@@ -2,7 +2,7 @@
 # verify_vendor.sh: every file under pkg/export/viewer_assets/vendor/ must be
 # listed in MANIFEST.json with a matching sha256, and every manifest entry
 # must exist. Exit 1 on any mismatch, unlisted file, or missing file.
-# Run by scripts/release_gate.sh (stage 7); pkg/export/vendor_manifest_test.go
+# Run by scripts/release_gate.sh (stage 6); pkg/export/vendor_manifest_test.go
 # performs the same check in Go so `go test` catches drift too.
 #
 # Usage: scripts/verify_vendor.sh [--source] [vendor-dir]

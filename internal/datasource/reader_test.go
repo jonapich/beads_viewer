@@ -514,7 +514,7 @@ func TestSQLiteReader_MissingReadOnlyDatabaseFailsAtOpen(t *testing.T) {
 }
 
 func TestSQLiteReader_EscapesURIControlCharsInPath(t *testing.T) {
-	for _, name := range []string{"odd?name.db", "odd#name.db"} {
+	for _, name := range []string{"odd%name.db", "odd#name.db"} {
 		t.Run(name, func(t *testing.T) {
 			dbPath := filepath.Join(t.TempDir(), name)
 			createContractTestSQLiteDB(t, dbPath)

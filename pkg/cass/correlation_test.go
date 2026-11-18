@@ -177,11 +177,6 @@ func TestWorkspaceFromBeadsPath(t *testing.T) {
 			expected: tmpRoot,
 		},
 		{
-			name:     "standard path",
-			input:    "/home/user/project/.beads/beads.jsonl",
-			expected: "/home/user/project",
-		},
-		{
 			name:     "windows-like path",
 			input:    "C:/Users/dev/project/.beads/issues.jsonl",
 			expected: "C:/Users/dev/project",

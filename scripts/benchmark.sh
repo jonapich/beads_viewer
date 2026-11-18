@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # benchmark.sh: the tracked bv benchmarks, their baseline, and the regression
-# comparison used by scripts/release_gate.sh stage 8.
+# comparison used by scripts/release_gate.sh stage 7.
 #
 # Usage:
 #   scripts/benchmark.sh baseline                 # regenerate benchmarks/baseline.txt (with provenance header)
@@ -38,7 +38,7 @@ cd "$root"
 BENCHMARK_DIR="benchmarks"
 BASELINE_FILE="$BENCHMARK_DIR/baseline.txt"
 CURRENT_FILE="$BENCHMARK_DIR/current.txt"
-# The baseline is taken once with more repetitions; compare runs (gate stage 8)
+# The baseline is taken once with more repetitions; compare runs (gate stage 7)
 # use fewer so the gate stays under ten minutes on the reference machine.
 # BENCH_COUNT overrides both.
 COUNT="${BENCH_COUNT:-5}"

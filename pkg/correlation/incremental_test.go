@@ -46,7 +46,7 @@ func TestNewIncrementalCorrelatorWithOptions(t *testing.T) {
 func TestNewIncrementalCorrelatorForwardsExplicitBeadsPath(t *testing.T) {
 	repoPath := "/tmp/test"
 	explicitPath := filepath.Join(repoPath, ".beads", "custom.jsonl")
-	expectedPath := filepath.Join(".beads", "custom.jsonl")
+	expectedPath := filepath.ToSlash(filepath.Join(".beads", "custom.jsonl")) // git pathspecs use "/"
 
 	ic := NewIncrementalCorrelator(repoPath, explicitPath)
 
@@ -58,7 +58,7 @@ func TestNewIncrementalCorrelatorForwardsExplicitBeadsPath(t *testing.T) {
 func TestNewIncrementalCorrelatorWithOptionsForwardsExplicitBeadsPath(t *testing.T) {
 	repoPath := "/tmp/test"
 	explicitPath := filepath.Join(repoPath, ".beads", "custom.jsonl")
-	expectedPath := filepath.Join(".beads", "custom.jsonl")
+	expectedPath := filepath.ToSlash(filepath.Join(".beads", "custom.jsonl")) // git pathspecs use "/"
 
 	ic := NewIncrementalCorrelatorWithOptions(repoPath, 10*time.Minute, 20, explicitPath)
 
@@ -70,7 +70,7 @@ func TestNewIncrementalCorrelatorWithOptionsForwardsExplicitBeadsPath(t *testing
 func TestIncrementalCorrelatorUsesConfiguredExtractorForUpdates(t *testing.T) {
 	repoPath := "/tmp/test"
 	explicitPath := filepath.Join(repoPath, ".beads", "custom.jsonl")
-	expectedPath := filepath.Join(".beads", "custom.jsonl")
+	expectedPath := filepath.ToSlash(filepath.Join(".beads", "custom.jsonl")) // git pathspecs use "/"
 
 	ic := NewIncrementalCorrelator(repoPath, explicitPath)
 

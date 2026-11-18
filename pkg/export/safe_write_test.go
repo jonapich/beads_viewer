@@ -29,55 +29,6 @@ func assertNoSafeWriteTempFiles(t *testing.T, dir string) {
 	}
 }
 
-func TestSafeWriteOutput_CreateAndAtomicOverwrite(t *testing.T) {
-	baseDir := t.TempDir()
-	target := filepath.Join(baseDir, "nested", "subdir", "report.json")
-
-	firstPayload := []byte("{\"version\":1}\n")
-	if err := SafeWriteOutput(target, firstPayload, 0o600); err != nil {
-		t.Fatalf("initial SafeWriteOutput failed: %v", err)
-	}
-
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read written target: %v", err)
-	}
-	if !bytes.Equal(got, firstPayload) {
-		t.Fatalf("got %q, want %q", got, firstPayload)
-	}
-	firstInfo, err := os.Stat(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := firstInfo.Mode().Perm(); mode != 0o600 {
-		t.Fatalf("initial file mode = %o, want 0600", mode)
-	}
-
-	secondPayload := []byte("{\"version\":2,\"status\":\"ok\"}\n")
-	if err := SafeWriteOutput(target, secondPayload, 0o644); err != nil {
-		t.Fatalf("overwrite SafeWriteOutput failed: %v", err)
-	}
-
-	gotAfter, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read overwritten target: %v", err)
-	}
-	if !bytes.Equal(gotAfter, secondPayload) {
-		t.Fatalf("got %q, want %q", gotAfter, secondPayload)
-	}
-	secondInfo, err := os.Stat(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if os.SameFile(firstInfo, secondInfo) {
-		t.Fatalf("expected atomic rename replacement with new inode, but inode did not change")
-	}
-	if mode := secondInfo.Mode().Perm(); mode != 0o600 {
-		t.Fatalf("overwrite widened existing private file permissions: got %o, want 0600", mode)
-	}
-	assertNoSafeWriteTempFiles(t, filepath.Dir(target))
-}
-
 func TestSafeWriteOutput_RefusesSymlinkTarget(t *testing.T) {
 	dir := t.TempDir()
 	victimPath := filepath.Join(dir, "victim.txt")

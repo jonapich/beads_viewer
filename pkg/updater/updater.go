@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	repoOwner = "Dicklesworthstone"
+	repoOwner = "jonapich"
 	repoName  = "beads_viewer"
 	baseURL   = "https://api.github.com/repos/" + repoOwner + "/" + repoName
 
@@ -82,7 +82,7 @@ type Preferences struct {
 // userUpdateConfig is the subset of config.yaml the updater understands:
 //
 //	updates:
-//	  check: false      # skip the startup release check
+//	  check: true       # opt in to the startup release check (off by default)
 //	  use_token: true   # send the ambient GITHUB_TOKEN / GH_TOKEN
 type userUpdateConfig struct {
 	Updates struct {
@@ -145,13 +145,13 @@ func loadUserUpdateConfig() userUpdateConfig {
 	return cfg
 }
 
-// LoadPreferences resolves the update policy. Defaults are "check on startup,
+// LoadPreferences resolves the update policy. Defaults are "no startup check,
 // never send the ambient token"; config.yaml can flip either, and the
 // nonempty environment (BV_NO_UPDATE_CHECK, BV_UPDATE_USE_TOKEN) wins over both.
 // Empty/unset values preserve saved policy. Invalid values suppress automatic
 // checks and deny credentials, without logging potentially sensitive input.
 func LoadPreferences() Preferences {
-	prefs := Preferences{CheckOnStartup: true, UseAmbientToken: false}
+	prefs := Preferences{CheckOnStartup: false, UseAmbientToken: false}
 	cfg := loadUserUpdateConfig()
 	if cfg.Updates.Check != nil {
 		prefs.CheckOnStartup = *cfg.Updates.Check

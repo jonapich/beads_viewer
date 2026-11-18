@@ -622,7 +622,7 @@ func TestRobotNextContractActionable(t *testing.T) {
 }
 
 // TestRobotEnvelopeConsistency verifies all robot commands include the
-// four standard envelope fields: generated_at, data_hash, output_format, version.
+// standard envelope fields: generated_at and data_hash.
 // This is the acceptance test for bd-x1tm.
 func TestRobotEnvelopeConsistency(t *testing.T) {
 	bv := buildBvBinary(t)

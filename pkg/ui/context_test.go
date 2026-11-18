@@ -31,11 +31,6 @@ func TestCurrentContext_Overlays(t *testing.T) {
 		expected Context
 	}{
 		{
-			name:     "agent prompt",
-			setup:    func(m *Model) { m.showAgentPrompt = true },
-			expected: ContextAgentPrompt,
-		},
-		{
 			name:     "help overlay",
 			setup:    func(m *Model) { m.showHelp = true },
 			expected: ContextHelp,
@@ -267,7 +262,7 @@ func TestContext_IsOverlay(t *testing.T) {
 	overlays := []Context{
 		ContextLabelPicker, ContextRecipePicker, ContextHelp, ContextQuitConfirm,
 		ContextLabelHealthDetail, ContextLabelDrilldown, ContextLabelGraphAnalysis,
-		ContextTimeTravelInput, ContextAlerts, ContextRepoPicker, ContextAgentPrompt,
+		ContextTimeTravelInput, ContextAlerts, ContextRepoPicker,
 	}
 
 	for _, c := range overlays {

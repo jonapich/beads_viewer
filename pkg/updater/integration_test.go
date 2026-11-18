@@ -62,18 +62,18 @@ func TestCheckForUpdates_WithMockServer(t *testing.T) {
 	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
 		release := Release{
 			TagName: "v99.0.0",
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0",
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0",
 			Assets: []Asset{
 				{
 					Name:               assetName,
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/" + assetName,
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/" + assetName,
 					Size:               int64(len(archiveBytes)),
 					Digest:             "sha256:" + archiveHash,
 					State:              "uploaded",
 				},
 				{
 					Name:               "checksums.txt",
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/v99.0.0/checksums.txt",
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/v99.0.0/checksums.txt",
 					Size:               int64(len(checksumContent)),
 					Digest:             "sha256:" + hex.EncodeToString(checksumHash[:]),
 					State:              "uploaded",
@@ -110,7 +110,7 @@ func TestCheckForUpdates_WithMockServer(t *testing.T) {
 	if tag != "v99.0.0" {
 		t.Errorf("expected tag v99.0.0, got %s", tag)
 	}
-	if url != "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v99.0.0" {
+	if url != "https://github.com/jonapich/beads_viewer/releases/tag/v99.0.0" {
 		t.Errorf("expected release URL, got %s", url)
 	}
 }
@@ -120,7 +120,7 @@ func TestCheckUpdateAvailable_NoUpdateNeeded(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		release := Release{
 			TagName: "v0.0.1", // Lower than any real version
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v0.0.1",
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/v0.0.1",
 		}
 		if err := json.NewEncoder(w).Encode(release); err != nil {
 			t.Errorf("encode release: %v", err)

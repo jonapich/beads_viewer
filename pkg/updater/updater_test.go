@@ -347,7 +347,7 @@ func TestRelease_Fields(t *testing.T) {
 	// Test that Release struct can be properly instantiated
 	rel := Release{
 		TagName: "v0.9.0",
-		HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/v0.9.0",
+		HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/v0.9.0",
 	}
 
 	if rel.TagName != "v0.9.0" {
@@ -453,7 +453,7 @@ func installMockUpdaterDownloads(t *testing.T, srv *httptest.Server) {
 			clone := req.Clone(req.Context())
 			clonedURL := *req.URL
 			clone.URL = &clonedURL
-			if req.URL.Hostname() == "github.com" && strings.HasPrefix(req.URL.Path, "/Dicklesworthstone/beads_viewer/releases/download/") {
+			if req.URL.Hostname() == "github.com" && strings.HasPrefix(req.URL.Path, "/jonapich/beads_viewer/releases/download/") {
 				clone.URL.Scheme = target.Scheme
 				clone.URL.Host = target.Host
 			}
@@ -514,18 +514,18 @@ func TestVerifyReleaseAssetChecksumEntry(t *testing.T) {
 		checksumSum := sha256.Sum256([]byte(checksumBody))
 		return &Release{
 			TagName: tag,
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/" + tag,
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/" + tag,
 			Assets: []Asset{
 				{
 					Name:               assetName,
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/" + assetName,
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/" + assetName,
 					Size:               1024,
 					Digest:             "sha256:" + wantDigest,
 					State:              "uploaded",
 				},
 				{
 					Name:               "checksums.txt",
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/checksums.txt",
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/checksums.txt",
 					Size:               int64(len(checksumBody)),
 					Digest:             "sha256:" + hex.EncodeToString(checksumSum[:]),
 					State:              "uploaded",
@@ -657,18 +657,18 @@ func TestPerformUpdate_StagesInBinaryDirAndCleansUp(t *testing.T) {
 
 		rel := &Release{
 			TagName: tag,
-			HTMLURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/tag/" + tag,
+			HTMLURL: "https://github.com/jonapich/beads_viewer/releases/tag/" + tag,
 			Assets: []Asset{
 				{
 					Name:               assetName,
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/" + assetName,
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/" + assetName,
 					Size:               int64(len(archiveBytes)),
 					Digest:             "sha256:" + archiveDigest,
 					State:              "uploaded",
 				},
 				{
 					Name:               "checksums.txt",
-					BrowserDownloadURL: "https://github.com/Dicklesworthstone/beads_viewer/releases/download/" + tag + "/checksums.txt",
+					BrowserDownloadURL: "https://github.com/jonapich/beads_viewer/releases/download/" + tag + "/checksums.txt",
 					Size:               int64(len(checksumBody)),
 					Digest:             "sha256:" + hex.EncodeToString(checksumSum[:]),
 					State:              "uploaded",

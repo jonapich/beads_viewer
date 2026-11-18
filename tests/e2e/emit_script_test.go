@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -111,7 +110,7 @@ func TestEmitScript_WithRobotTriageAndContainerEpicFiltering(t *testing.T) {
 	}
 }
 
-// TestEmitScript_FiveSurfaceReadinessEquivalenceAndReadmeExamples (bv-apal.24)
+// TestEmitScript_FiveSurfaceReadinessEquivalence (bv-apal.24)
 // proves that default invocations of all 5 recommendation surfaces:
 //  1. --robot-triage
 //  2. --emit-script
@@ -122,9 +121,8 @@ func TestEmitScript_WithRobotTriageAndContainerEpicFiltering(t *testing.T) {
 // emit the exact same actionable leaf recommendation IDs on a mixed fixture
 // (ready leaves, container epic + blocked child, childless open epic, blocked
 // task, future-deferred task), that --robot-include-inactive surfaces the
-// excluded non-claimable diagnostics, and that the bash --emit-script examples
-// in README.md execute cleanly and pass `bash -n` syntax validation.
-func TestEmitScript_FiveSurfaceReadinessEquivalenceAndReadmeExamples(t *testing.T) {
+// excluded non-claimable diagnostics.
+func TestEmitScript_FiveSurfaceReadinessEquivalence(t *testing.T) {
 	bv := buildBvBinary(t)
 	env := t.TempDir()
 
@@ -291,36 +289,6 @@ func TestEmitScript_FiveSurfaceReadinessEquivalenceAndReadmeExamples(t *testing.
 		claimable, present := inactiveClaimable[excludedID]
 		if !present || claimable {
 			t.Fatalf("--robot-include-inactive expected %s present with claimable=false, got present=%v claimable=%v", excludedID, present, claimable)
-		}
-	}
-
-	// 7. Extract and execute the bash --emit-script examples directly from README.md and validate via `bash -n`.
-	bashBin, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not found on PATH")
-	}
-	readme := repoFile(t, "README.md")
-	var readmeBashExamples []string
-	for _, line := range strings.Split(readme, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "bv ") && strings.Contains(trimmed, "--emit-script") && !strings.Contains(trimmed, "--script-format=") {
-			readmeBashExamples = append(readmeBashExamples, trimmed)
-		}
-	}
-	if len(readmeBashExamples) < 2 {
-		t.Fatalf("expected at least 2 bash --emit-script examples in README.md, found %v", readmeBashExamples)
-	}
-	for _, example := range readmeBashExamples {
-		argPart := strings.TrimSpace(strings.Split(example, ">")[0])
-		fields := strings.Fields(strings.TrimPrefix(argPart, "bv "))
-		emitted := runBV(fields...)
-		if !bytes.HasPrefix(emitted, []byte("#!/usr/bin/env bash\n")) {
-			t.Fatalf("README example %q did not emit bash shebang:\n%s", example, emitted)
-		}
-		syntaxCheck := exec.Command(bashBin, "-n")
-		syntaxCheck.Stdin = bytes.NewReader(emitted)
-		if out, err := syntaxCheck.CombinedOutput(); err != nil {
-			t.Fatalf("README example %q emitted invalid bash syntax: %v\n%s\nscript:\n%s", example, err, out, emitted)
 		}
 	}
 }

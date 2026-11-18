@@ -16,7 +16,7 @@ import (
 // upstream module cache. This test pins the remaining failure modes: a patch
 // applied to vendor/ by hand (lost on the next vendor run), a change under
 // third_party/ that was never vendored, and a third_party/ copy no replace
-// directive points at. See docs/PROVENANCE.md.
+// directive points at.
 func TestThirdPartyReplacementsMatchVendor(t *testing.T) {
 	root := findRepoRoot(t)
 	replacements := thirdPartyReplacements(t, root)

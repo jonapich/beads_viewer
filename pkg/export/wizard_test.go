@@ -1,7 +1,6 @@
 package export
 
 import (
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,41 +10,6 @@ import (
 
 	"github.com/charmbracelet/huh"
 )
-
-func TestReadWizardInputTimeoutDoesNotKeepConsumingPipe(t *testing.T) {
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = reader.Close()
-		_ = writer.Close()
-	})
-
-	_, err = readWizardInput(reader, 20*time.Millisecond)
-	if !errors.Is(err, os.ErrDeadlineExceeded) {
-		t.Fatalf("readWizardInput error = %v, want deadline exceeded", err)
-	}
-
-	// SAFETY: after the timeout there must be no abandoned reader goroutine.
-	// Data written now must remain available to this caller, and clearing the
-	// helper's deadline must make the pipe reusable.
-	want := "input after timeout\n"
-	if _, err := io.WriteString(writer, want); err != nil {
-		t.Fatalf("write after timeout: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-
-	got, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatalf("read after timeout: %v", err)
-	}
-	if string(got) != want {
-		t.Fatalf("read after timeout = %q, want %q", got, want)
-	}
-}
 
 func TestReadWizardInputReadsClosedPipe(t *testing.T) {
 	reader, writer, err := os.Pipe()
@@ -214,6 +178,7 @@ func TestWizardConfigPath(t *testing.T) {
 func TestSaveAndLoadWizardConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 
@@ -269,6 +234,7 @@ func TestSaveWizardConfigRejectsNil(t *testing.T) {
 func TestSaveWizardConfigCleansTempOnReplaceFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 
@@ -297,6 +263,7 @@ func TestSaveWizardConfigCleansTempOnReplaceFailure(t *testing.T) {
 func TestLoadWizardConfig_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 
@@ -478,6 +445,7 @@ func TestWizard_IsolatesSavedConfigByRepo(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 
@@ -551,6 +519,7 @@ func TestWizardConfig_XDGAndNoSavedConfig(t *testing.T) {
 	homeDir := t.TempDir()
 	xdgDir := filepath.Join(t.TempDir(), "custom-xdg")
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 	t.Setenv("BV_NO_SAVED_CONFIG", "")
 

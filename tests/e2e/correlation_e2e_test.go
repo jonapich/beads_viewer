@@ -383,7 +383,7 @@ func TestCorrelationRobotImpactNetworkMissingBeadFails(t *testing.T) {
 	bv := buildBvBinary(t)
 	repoDir := createCorrelationRepo(t)
 
-	cmd := exec.Command(bv, "robot-impact-network", "definitely-missing", "--json")
+	cmd := exec.Command(bv, "robot-impact-network", "definitely-missing")
 	cmd.Dir = repoDir
 	out, err := cmd.CombinedOutput()
 	if err == nil {

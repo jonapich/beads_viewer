@@ -82,15 +82,15 @@ func TestShouldSuppressTTYQueries_AllCanonicalRobotAndHeadlessFlags(t *testing.T
 	}
 }
 
-func TestShouldSuppressTTYQueries_PositionalAndStructuredFormatForms(t *testing.T) {
+func TestShouldSuppressTTYQueries_PositionalForms(t *testing.T) {
 	suppressCases := [][]string{
-		{"bv", "robot-triage", "--json"},
-		{"bv", "robot-commit", "HEAD", "--json"},
-		{"bv", "triage", "--json"},
+		{"bv", "robot-triage"},
+		{"bv", "robot-commit", "HEAD"},
+		{"bv", "triage"},
 		{"bv", "next"},
 		{"bv", "plan"},
 		{"bv", "insights"},
-		{"bv", "commit", "HEAD", "--json"},
+		{"bv", "commit", "HEAD"},
 		{"bv", "drift"},
 		{"bv", "bead-history", "bv-1"},
 		{"bv", "upgrade", "--check"},
@@ -100,24 +100,6 @@ func TestShouldSuppressTTYQueries_PositionalAndStructuredFormatForms(t *testing.
 		{"bv", "-robot-triage"},
 		{"bv", "-h"},
 		{"bv", "-v"},
-		{"bv", "--json"},
-		{"bv", "--json=true"},
-		{"bv", "--json=false"},
-		{"bv", "--json=0"},
-		{"bv", "--toon"},
-		{"bv", "--toon=true"},
-		{"bv", "--toon=false"},
-		{"bv", "--toon=0"},
-		{"bv", "--format", "json"},
-		{"bv", "--format=toon"},
-		{"bv", "-f", "json"},
-		{"bv", "-f=toon"},
-		{"bv", "--agents-dry-run"},
-		{"bv", "--agents-force"},
-		{"bv", "--output", "json"},
-		{"bv", "--output=toon"},
-		{"bv", "-o", "json"},
-		{"bv", "-o=toon"},
 	}
 	for _, argv := range suppressCases {
 		if !shouldSuppressTTYQueries(argv, false, false) {
@@ -130,14 +112,11 @@ func TestShouldSuppressTTYQueries_PositionalAndStructuredFormatForms(t *testing.
 		{"bv", "--recipe", "triage"},
 		{"bv", "-r", "actionable"},
 		{"bv", "--label", "-v"},
-		{"bv", "--label", "--json"},
-		{"bv", "--json=bogus"},
 		{"bv", "--robot-triage=false"},
 		{"bv", "--version=false"},
 		{"bv", "--workspace", ".bv/workspace.yaml"},
 		{"bv", "--as-of", "HEAD~1"},
 		{"bv", "--", "--robot-triage"},
-		{"bv", "--output", "report.md"},
 		{"bv", "--id-pattern", "-v"},
 		{"bv", "--search-mode", "-h"},
 		{"bv", "--history-since", "-v"},

@@ -101,7 +101,7 @@ func assertBetweennessResultEqual(t *testing.T, got, want BetweennessResult) {
 		}
 		t.Fatalf("score map contains extra entries: got%d want%d", len(got.Scores), len(want.Scores))
 	}
-	if got.Elapsed <= 0 {
+	if got.Elapsed < 0 { // Windows' coarse monotonic clock can report 0 for tiny graphs
 		t.Fatal("completed computation must report elapsed time")
 	}
 }

@@ -844,6 +844,9 @@ func TestCassSessionModal_UnhandledKeyIgnored(t *testing.T) {
 // controlled by CASS_STUB_EXIT (0 healthy, 1 needs index).
 func writeStubCass(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("stub cass is a POSIX shell script")
+	}
 	dir := t.TempDir()
 	// CASS_STUB_SEARCH_SLEEP makes a search hang; exec keeps it one process,
 	// so a deadline kill ends it (and closes its stdout) at once.

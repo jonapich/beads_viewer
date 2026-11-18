@@ -1,9 +1,6 @@
 # git.sr.ht/~sbinet/gg v0.8.0
 ## explicit; go 1.25.0
 git.sr.ht/~sbinet/gg
-# github.com/Dicklesworthstone/toon-go v0.0.0-20260322013033-4564467a45fb
-## explicit; go 1.21
-github.com/Dicklesworthstone/toon-go
 # github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b
 ## explicit; go 1.15
 github.com/ajstarks/svgo

@@ -110,7 +110,7 @@ func TestRobotCommandsHonourDeferUntilEndToEnd(t *testing.T) {
 	exe := buildTestBinary(t)
 	run := func(args ...string) []byte {
 		t.Helper()
-		cmd := exec.Command(exe, append(args, "--format=json")...)
+		cmd := exec.Command(exe, args...)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "SOURCE_DATE_EPOCH="+pinnedEpoch, "BV_NO_CACHE=1")
 		out, err := cmd.Output()

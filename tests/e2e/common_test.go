@@ -148,6 +148,14 @@ func detectScriptTUICapability(bvPath string) (bool, string) {
 	return true, ""
 }
 
+// exeName appends the platform executable suffix (".exe" on Windows).
+func exeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
+
 func buildBvOnce() error {
 	tempDir, err := os.MkdirTemp("", "bv-e2e-build-*")
 	if err != nil {
