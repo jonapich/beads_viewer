@@ -265,7 +265,9 @@ func (d AgentDeskModel) renderSignoffPreview(width int) string {
 			}
 		}
 	}
-	add(d.theme.PrimaryBold.Render(it.ID + "  " + it.Title))
+	for _, w := range strings.Split(wrapText(it.ID+"  "+it.Title, max(10, width)), "\n") {
+		add(d.theme.PrimaryBold.Render(w))
+	}
 	if d.disputing {
 		add(d.input.View())
 		add(d.theme.MutedText.Render("enter files a follow-up bead linked to " + it.ID + " and marks it disputed (it stays closed) • esc cancels"))

@@ -12176,6 +12176,7 @@ func (m *Model) handleLeftClick(x, y int) *Model {
 		m.focused == focusTree || m.isGraphView || m.isBoardView ||
 		m.isActionableView || m.isHistoryView || m.isSprintView ||
 		m.focused == focusLabelDashboard || m.focused == focusAttention ||
+		m.focused == focusAgentDesk ||
 		m.focused == focusVelocityComparison || m.showVelocityComparison {
 		return m
 	}
