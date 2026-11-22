@@ -59,6 +59,19 @@ func TestAgentDeskSignoffListAndPreview(t *testing.T) {
 	}
 }
 
+func TestAgentDeskSignoffPreviewWrapsLongTitle(t *testing.T) {
+	issues := signoffFixture()
+	issues[2].Title = strings.Repeat("long words in a title ", 8) + "TAILWORD"
+	d := NewAgentDeskModel(DefaultTheme(nil))
+	d.SetData(issues, time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC))
+	d.SetSize(60, 40)
+	d.Update(deskKey("D"))
+	_, preview, _ := strings.Cut(d.View(), strings.Repeat("─", 60))
+	if !strings.Contains(preview, "TAILWORD") {
+		t.Fatalf("preview title truncated instead of wrapped:\n%s", preview)
+	}
+}
+
 func TestAgentDeskSignoffKeys(t *testing.T) {
 	d := newSignoffDesk(t)
 	action, _, _ := d.Update(deskKey("a"))

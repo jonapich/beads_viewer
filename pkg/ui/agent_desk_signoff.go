@@ -265,14 +265,16 @@ func (d AgentDeskModel) renderSignoffPreview(width int) string {
 			}
 		}
 	}
+	// Wrapped lines already fit; render after sizing, since truncate counts
+	// the style's escape codes as width and would clip a full-width line.
 	for _, w := range strings.Split(wrapText(it.ID+"  "+it.Title, max(10, width)), "\n") {
-		add(d.theme.PrimaryBold.Render(w))
+		lines = append(lines, d.theme.PrimaryBold.Render(w))
 	}
 	if d.disputing {
 		add(d.input.View())
 		add(d.theme.MutedText.Render("enter files a follow-up bead linked to " + it.ID + " and marks it disputed (it stays closed) • esc cancels"))
 	} else {
-		add(d.theme.MutedText.Render("a approve (removes needs-signoff) • d dispute with a note • s skip"))
+		lines = append(lines, d.theme.MutedText.Render(truncate("a approve (removes needs-signoff) • d dispute with a note • s skip", width)))
 	}
 	if !it.HasComment {
 		add(d.theme.MutedText.Render("No `bd-kind: signoff` comment on this bead."))
