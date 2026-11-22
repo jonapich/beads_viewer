@@ -71,10 +71,12 @@ web/embed.go         package web: //go:embed all:dist  -> exported fs.FS
 - **Robot builders are not lifted.** `cmd/bv`'s `--robot-*` code stays as is
   (beads-c2o.2 is descoped). The API calls `pkg/snapshot` and `pkg/analysis`
   directly with the TUI's options.
-- **`pkg/tracker`**: a `Client` built from a `loader.IssueOrigin`, with methods
-  that mirror today's actions: `Signoff(id, approve bool, note string)`,
-  `SetPriority(id, p)`, `SetLabel(id, label, on bool)`, `AddComment`,
-  `AnswerQuestion`, `Update(id, FieldDiff)`, `RefreshExport()`. It keeps the bd
+- **`pkg/tracker`**: a `Client` built from a `model.Issue` (its `Origin`, the
+  tracker route the loader attached) and targeting that issue, with methods
+  that mirror today's actions: `Signoff(ctx, approve bool, note string)`,
+  `SetPriority(ctx, p)`, `SetLabel(ctx, label, on bool)`, `AddComment`,
+  `AnswerQuestion`, `Update(ctx, FieldDiff)`, `RefreshExport(ctx)`. Because the
+  client is already bound to the issue, the methods take no `id`. It keeps the bd
   `signoff` path and the br/old-bd fallback exactly as `pkg/ui` does now. After
   that, `pkg/ui` wraps these calls in `tea.Cmd`, and the API calls them directly.
 - **`pkg/api`** depends on `pkg/snapshot`, `pkg/analysis`, `pkg/tracker`,

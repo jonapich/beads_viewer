@@ -1,14 +1,15 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/agentdesk"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -224,12 +225,8 @@ func (m *Model) handleAgentDeskKeys(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 // signoffDeskBead approves or disputes a closed bead awaiting sign-off.
 //
-// On bd it runs `bd signoff --json --approve` or `--dispute=<note>`, which
-// does the whole job in one command. A tracker without `signoff` (br, or an
-// older bd) gets the equivalent sequence: approve removes needs-signoff and
-// sets metadata signoff=approved; dispute files a follow-up bead
-// (discovered-from the closed one) with the note as its description, then
-// comments on the closed bead and marks it disputed. The closed bead is
+// The tracker client does the work: `bd signoff` on bd, with the label/metadata
+// fallback on br or an older bd (see tracker.Client.Signoff). The closed bead is
 // never reopened.
 func (m *Model) signoffDeskBead(id, state, note string) tea.Cmd {
 	issue := m.resolveLiveIssue(id, nil)
@@ -237,32 +234,14 @@ func (m *Model) signoffDeskBead(id, state, note string) tea.Cmd {
 		m.statusMsg, m.statusIsError = "❌ "+id+" is no longer loaded", true
 		return nil
 	}
-	mark := []string{"update", "--json", "--remove-label=" + agentdesk.LabelNeedsSignoff, "--set-metadata=" + agentdesk.SignoffMetaKey + "=" + state}
-	var ops []trackerOp
+	approve := state != agentdesk.SignoffDisputed
 	summary := "Signed off " + issue.ID
-	if state == agentdesk.SignoffDisputed {
-		local := issue.ID
-		if issue.Origin != nil && issue.Origin.LocalID != "" {
-			local = issue.Origin.LocalID
-		}
-		ops = append(ops,
-			trackerOp{noTarget: true, captureID: true, args: []string{"create", "--json",
-				"--title=" + agentdesk.DisputeTitle(issue.Title), "--description=" + note,
-				"--deps=discovered-from:" + local, "--priority=" + strconv.Itoa(issue.Priority)}},
-			trackerOp{args: []string{"comments", "add"}, trailing: []string{"Disputed: " + note + " (follow-up {new})"}},
-		)
+	if !approve {
 		summary = "Disputed " + issue.ID + " (follow-up filed)"
-		mark = append(mark, "--set-metadata=signoff_note="+note, "--set-metadata=signoff_followup={new}")
 	}
-	ops = append(ops, trackerOp{args: mark})
-	if issue.Origin != nil && issue.Origin.Tracker == "bd" {
-		native := trackerOp{args: []string{"signoff", "--json", "--approve"}, fallback: ops}
-		if state == agentdesk.SignoffDisputed {
-			native = trackerOp{args: []string{"signoff", "--json", "--dispute=" + note}, captureID: true, fallback: ops}
-		}
-		ops = []trackerOp{native}
-	}
-	cmd := m.runTrackerOps(issue, ops, summary)
+	cmd := m.runTrackerAction(issue, summary, func(ctx context.Context, c *tracker.Client) (tracker.Result, error) {
+		return c.Signoff(ctx, approve, note)
+	})
 	if cmd != nil {
 		m.agentDesk.MarkSignedOff(issue.ID, state)
 	}
@@ -277,11 +256,10 @@ func (m *Model) postDeskAnswer(action deskAction) tea.Cmd {
 		m.statusMsg, m.statusIsError = "❌ "+action.IssueID+" is no longer loaded", true
 		return nil
 	}
-	ops := []trackerOp{
-		{args: []string{"comments", "add"}, trailing: []string{action.Comment}},
-		{args: []string{"update", "--json", "--remove-label=" + action.RemoveLabel}},
-	}
-	cmd := m.runTrackerOps(issue, ops, fmt.Sprintf("Answered %s (%s removed)", issue.ID, action.RemoveLabel))
+	cmd := m.runTrackerAction(issue, fmt.Sprintf("Answered %s (%s removed)", issue.ID, action.RemoveLabel),
+		func(ctx context.Context, c *tracker.Client) (tracker.Result, error) {
+			return c.AnswerQuestion(ctx, action.Comment, action.RemoveLabel)
+		})
 	if cmd != nil {
 		m.agentDesk.MarkAnswered(issue.ID, action.Comment)
 	}

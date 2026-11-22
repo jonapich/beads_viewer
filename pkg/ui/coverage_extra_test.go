@@ -21,6 +21,7 @@ import (
 	"github.com/Dicklesworthstone/beads_viewer/pkg/loader"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/recipe"
+	trackerpkg "github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/watcher"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,7 +99,7 @@ func runEditorTrackerTestProcess() bool {
 		case "show-hang":
 			time.Sleep(10 * time.Second)
 		case "show-noisy":
-			fmt.Print(strings.Repeat("x", editorShowLimit+1))
+			fmt.Print(strings.Repeat("x", trackerpkg.ShowOutputLimit+1))
 			return true
 		case "show-invalid":
 			fmt.Print("not-json")
@@ -302,7 +303,7 @@ func installEditorTracker(t *testing.T, tracker string) (model.Issue, string, st
 	}
 	issues := []model.Issue{issue}
 	loader.AttachIssueOrigins(issues, path, true)
-	if err := editorOriginError(issues[0].Origin); err != nil {
+	if err := trackerpkg.OriginError(issues[0].Origin); err != nil {
 		t.Fatalf("bind controlled tracker: %v", err)
 	}
 	return issues[0], path, capture
@@ -646,7 +647,7 @@ func TestEditorExportFailureRequiresRealRetry(t *testing.T) {
 				t.Fatal("export retry did not schedule fresh load")
 			}
 			m.Update(reload())
-			if m.sourceStaleReason != "" || m.pendingTrackerRefresh != nil || m.issueMap[issue.ID].Title != "Saved title" || editorOriginError(m.issueMap[issue.ID].Origin) != nil {
+			if m.sourceStaleReason != "" || m.pendingTrackerRefresh != nil || m.issueMap[issue.ID].Title != "Saved title" || trackerpkg.OriginError(m.issueMap[issue.ID].Origin) != nil {
 				t.Fatalf("retry did not restore fresh writable view: status=%q issue=%+v", m.statusMsg, m.issueMap[issue.ID])
 			}
 		})
@@ -861,7 +862,7 @@ func TestReloadRevalidatesLiveOriginAndCompleteness(t *testing.T) {
 			return loaded
 		}
 		good := load()
-		if len(good.Issues) != 1 || editorOriginError(good.Issues[0].Origin) != nil {
+		if len(good.Issues) != 1 || trackerpkg.OriginError(good.Issues[0].Origin) != nil {
 			t.Fatalf("live reload lost verified origin: %+v", good.Issues)
 		}
 		original, err := os.ReadFile(path)

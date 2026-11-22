@@ -11,6 +11,7 @@ import (
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/loader"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 	_ "modernc.org/sqlite"
 )
 
@@ -215,7 +216,7 @@ INSERT INTO issues VALUES ('local-1', 'Live SQLite issue', 'open', 2, 'task');`)
 		} else {
 			loaded, err = loadIssuesForReload(path, loader.ParseOptions{})
 		}
-		if err != nil || len(loaded.Issues) != 1 || editorOriginError(loaded.Issues[0].Origin) != nil {
+		if err != nil || len(loaded.Issues) != 1 || tracker.OriginError(loaded.Issues[0].Origin) != nil {
 			t.Fatalf("SQLite reload dropped mutation authority (async=%t): err=%v issues=%+v", async, err, loaded.Issues)
 		}
 		if *loaded.Issues[0].Origin != *issue.Origin {

@@ -1,9 +1,7 @@
 package ui
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -34,6 +32,7 @@ import (
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/recipe"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/search"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/updater"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/watcher"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/workspace"
@@ -431,113 +430,13 @@ func (m *Model) retryEditorExport() tea.Cmd {
 			err = revalidateEditorSource(ctx, session, false)
 		}
 		if err == nil {
-			err = refreshEditorExport(ctx, *origin, sourcePath)
+			err = tracker.RefreshExport(ctx, *origin, sourcePath)
 		}
 		return editorExportRefreshMsg{origin: origin, sourceVersion: version, request: request, err: err}
 	}
 }
 
-const (
-	brUpdateTimeout       = 30 * time.Second
-	editorDiagnosticLimit = 16 << 10
-	editorShowLimit       = 8 << 20
-)
-
-type editorCommandOutput struct {
-	buffer    bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (o *editorCommandOutput) Write(p []byte) (int, error) {
-	n := len(p)
-	if remaining := o.limit - o.buffer.Len(); len(p) > remaining {
-		p = p[:remaining]
-		o.truncated = true
-	}
-	_, _ = o.buffer.Write(p)
-	return n, nil
-}
-
-func editorOriginError(origin *model.IssueOrigin) error {
-	if origin == nil {
-		return fmt.Errorf("source has no verified live tracker; historical and imported views are read-only")
-	}
-	if origin.ReadOnlyReason != "" {
-		return fmt.Errorf("source is read-only: %s", origin.ReadOnlyReason)
-	}
-	if (origin.Tracker != "br" && origin.Tracker != "bd") || origin.LocalID == "" ||
-		!filepath.IsAbs(origin.Executable) || !filepath.IsAbs(origin.WorkingDirectory) ||
-		!filepath.IsAbs(origin.TrackerDirectory) || !filepath.IsAbs(origin.Database) {
-		return fmt.Errorf("source has no complete, absolute tracker route")
-	}
-	for _, value := range []string{origin.LocalID, origin.Executable, origin.WorkingDirectory, origin.TrackerDirectory, origin.Database} {
-		if strings.ContainsRune(value, '\x00') {
-			return fmt.Errorf("tracker route contains an invalid NUL byte")
-		}
-	}
-	return nil
-}
-
-func editorTrackerEnvironment(parent []string, origin model.IssueOrigin) []string {
-	result := make([]string, 0, len(parent)+3)
-	for _, entry := range parent {
-		key, _, _ := strings.Cut(entry, "=")
-		if strings.EqualFold(key, "BEADS_DIR") || strings.EqualFold(key, "BEADS_DB") || strings.EqualFold(key, "BD_DB") || strings.EqualFold(key, "BEADS_JSONL") {
-			continue
-		}
-		result = append(result, entry)
-	}
-	return append(result, "BEADS_DIR="+origin.TrackerDirectory, "BEADS_DB="+origin.Database, "BD_DB="+origin.Database)
-}
-
-func runEditorTracker(ctx context.Context, origin model.IssueOrigin, mutating bool, operation ...string) ([]byte, string, error) {
-	if err := editorOriginError(&origin); err != nil {
-		return nil, "", err
-	}
-	args := []string{"--db", origin.Database}
-	if origin.Tracker == "br" {
-		args = append(args, "--no-auto-import")
-		if !mutating {
-			args = append(args, "--no-auto-flush")
-		}
-	}
-	args = append(args, operation...)
-	cmd := exec.CommandContext(ctx, origin.Executable, args...)
-	cmd.Dir = origin.WorkingDirectory
-	cmd.Env = editorTrackerEnvironment(os.Environ(), origin)
-	cmd.WaitDelay = time.Second
-	limit := editorShowLimit
-	if mutating {
-		limit = editorDiagnosticLimit
-	}
-	stdout := &editorCommandOutput{limit: limit}
-	stderr := &editorCommandOutput{limit: editorDiagnosticLimit}
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	err := cmd.Run()
-	if ctx.Err() != nil {
-		err = errors.Join(ctx.Err(), err)
-	}
-	diagnostic := strings.TrimSpace(ansi.Strip(stderr.buffer.String()))
-	if stderr.truncated {
-		diagnostic += " [diagnostics truncated]"
-	}
-	if !mutating && stdout.truncated {
-		err = errors.Join(err, fmt.Errorf("tracker issue response exceeds %d bytes", editorShowLimit))
-	}
-	return stdout.buffer.Bytes(), diagnostic, err
-}
-
-func editorFields(issue model.Issue) map[string]string {
-	return map[string]string{
-		"title": issue.Title, "status": string(issue.Status), "priority": strconv.Itoa(issue.Priority),
-		"assignee": issue.Assignee, "type": string(issue.IssueType), "description": issue.Description,
-	}
-}
-
-func editorIssueUnchanged(original, current model.Issue) bool {
-	return maps.Equal(editorFields(original), editorFields(current)) && original.UpdatedAt.Equal(current.UpdatedAt)
-}
+const brUpdateTimeout = 30 * time.Second
 
 func (m *Model) validateEditorSession(session *editorSession) error {
 	if session == nil || session != m.editorSession {
@@ -556,16 +455,16 @@ func (m *Model) validateEditorSession(session *editorSession) error {
 	if current == nil {
 		return fmt.Errorf("issue %s no longer exists in the current view", session.issue.ID)
 	}
-	if err := editorOriginError(current.Origin); err != nil {
+	if err := tracker.OriginError(current.Origin); err != nil {
 		return err
 	}
-	if err := editorOriginError(session.issue.Origin); err != nil {
+	if err := tracker.OriginError(session.issue.Origin); err != nil {
 		return err
 	}
 	if *current.Origin != *session.issue.Origin {
 		return fmt.Errorf("issue tracker route changed while editing")
 	}
-	if !editorIssueUnchanged(session.issue, *current) {
+	if !tracker.Unchanged(session.issue, *current) {
 		return fmt.Errorf("issue changed while editing; reopen it and reconcile the saved draft")
 	}
 	return nil
@@ -577,57 +476,6 @@ func (m *Model) editorFailure(message, draft string) {
 		m.statusMsg += "; draft saved at " + draft
 	}
 	m.statusIsError = true
-}
-
-func readEditorLiveIssue(data []byte, localID string) (model.Issue, error) {
-	data = bytes.TrimSpace(data)
-	var issue model.Issue
-	if len(data) == 0 {
-		return issue, fmt.Errorf("tracker returned no issue")
-	}
-	if data[0] == '[' {
-		var issues []model.Issue
-		if err := json.Unmarshal(data, &issues); err != nil {
-			return issue, fmt.Errorf("decode tracker issue: %w", err)
-		}
-		if len(issues) != 1 {
-			return issue, fmt.Errorf("tracker returned %d issues, expected one", len(issues))
-		}
-		issue = issues[0]
-	} else if err := json.Unmarshal(data, &issue); err != nil {
-		return issue, fmt.Errorf("decode tracker issue: %w", err)
-	}
-	if issue.ID != localID {
-		return issue, fmt.Errorf("tracker returned a different issue")
-	}
-	return issue, nil
-}
-
-func editorOriginSource(origin model.IssueOrigin, sourcePath string) string {
-	if sourcePath != "" {
-		return sourcePath
-	}
-	if origin.Tracker == "bd" {
-		return filepath.Join(origin.TrackerDirectory, "issues.jsonl")
-	}
-	return origin.Database
-}
-
-func refreshEditorExport(ctx context.Context, origin model.IssueOrigin, sourcePath string) error {
-	if err := loader.RevalidateIssueOrigin(editorOriginSource(origin, sourcePath), origin); err != nil {
-		return err
-	}
-	if origin.Tracker == "bd" {
-		return loader.RefreshBDExport(ctx, origin)
-	}
-	// An installed br may have sync.auto_flush disabled. An explicit guarded
-	// flush keeps JSONL viewers current without enabling import or bypassing
-	// native stale/empty database protections.
-	_, diagnostic, err := runEditorTracker(ctx, origin, true, "sync", "--flush-only", "--json")
-	if err != nil && diagnostic != "" {
-		return fmt.Errorf("%w: %s", err, diagnostic)
-	}
-	return err
 }
 
 func revalidateEditorSource(ctx context.Context, session *editorSession, compareFields bool) error {
@@ -653,23 +501,39 @@ func revalidateEditorSource(ctx context.Context, session *editorSession, compare
 	if current == nil {
 		return fmt.Errorf("issue is no longer present in the selected source")
 	}
-	if err := editorOriginError(current.Origin); err != nil {
+	if err := tracker.OriginError(current.Origin); err != nil {
 		return err
 	}
 	if *current.Origin != *session.issue.Origin {
 		return fmt.Errorf("selected workspace tracker route changed while editing")
 	}
-	if compareFields && !editorIssueUnchanged(session.issue, *current) {
+	if compareFields && !tracker.Unchanged(session.issue, *current) {
 		return fmt.Errorf("issue changed in the selected source while editing; reconcile the saved draft")
 	}
 	return nil
+}
+
+// fieldDiff converts the editor's changed-fields map to the tracker's diff,
+// passing every value through verbatim.
+func fieldDiff(fields map[string]string) tracker.FieldDiff {
+	pick := func(key string) *string {
+		if value, ok := fields[key]; ok {
+			return &value
+		}
+		return nil
+	}
+	return tracker.FieldDiff{
+		Title: pick("title"), Status: pick("status"), Priority: pick("priority"),
+		Assignee: pick("assignee"), Type: pick("type"), Description: pick("description"),
+	}
 }
 
 func runIssueUpdateCmd(ctx context.Context, cancel context.CancelFunc, session *editorSession, fields map[string]string, tmpFile string) tea.Cmd {
 	return func() tea.Msg {
 		defer cancel()
 		result := brUpdateResultMsg{issueID: session.issue.ID, fieldCount: len(fields), session: session, tmpFile: tmpFile}
-		if err := editorOriginError(session.issue.Origin); err != nil {
+		client, err := tracker.New(session.issue, session.sourcePath)
+		if err != nil {
 			result.err = err
 			return result
 		}
@@ -677,43 +541,12 @@ func runIssueUpdateCmd(ctx context.Context, cancel context.CancelFunc, session *
 			result.err = err
 			return result
 		}
-		origin := *session.issue.Origin
-		sourcePath := editorOriginSource(origin, session.sourcePath)
-		if err := loader.RevalidateIssueOrigin(sourcePath, origin); err != nil {
-			result.err = err
-			return result
-		}
 		// The TUI may have been suspended in an editor while another agent
-		// changed the tracker. Re-read the same native ID before saving. This is
-		// an optimistic conflict check, not an atomic compare-and-swap promise.
-		data, diagnostic, err := runEditorTracker(ctx, origin, false, "show", "--json", "--", origin.LocalID)
-		if err != nil {
-			result.err, result.output = fmt.Errorf("verify current tracker issue: %w", err), diagnostic
-			return result
-		}
-		current, err := readEditorLiveIssue(data, origin.LocalID)
-		if err != nil {
-			result.err = err
-			return result
-		}
-		if !editorIssueUnchanged(session.issue, current) {
-			result.err = fmt.Errorf("issue changed in the tracker while editing; reopen it and reconcile the saved draft")
-			return result
-		}
-		args := []string{"update", "--json"}
-		for _, key := range []string{"title", "status", "priority", "assignee", "type", "description"} {
-			if value, ok := fields[key]; ok {
-				args = append(args, "--"+key+"="+value)
-			}
-		}
-		args = append(args, "--", origin.LocalID)
-		_, result.output, result.err = runEditorTracker(ctx, origin, true, args...)
-		if result.err != nil {
-			return result
-		}
-		if origin.Tracker == "bd" || session.sourcePath == "" || strings.EqualFold(filepath.Ext(session.sourcePath), ".jsonl") {
-			result.refreshErr = refreshEditorExport(ctx, origin, session.sourcePath)
-		}
+		// changed the tracker. Update re-reads the same native ID before saving.
+		// This is an optimistic conflict check, not an atomic compare-and-swap
+		// promise.
+		res, err := client.Update(ctx, fieldDiff(fields))
+		result.output, result.err, result.refreshErr = res.Output, err, res.RefreshErr
 		return result
 	}
 }
@@ -3608,7 +3441,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Changes are relative to the immutable document opened by this edit,
 		// never a row replaced by a background reload while the editor ran.
 		editedFields := parseIssueFrontmatter(editedContent)
-		originalFields := editorFields(msg.session.issue)
+		originalFields := tracker.EditableFields(msg.session.issue)
 		fields := make(map[string]string)
 		for _, key := range []string{"title", "status", "priority", "assignee", "type"} {
 			if value, ok := editedFields[key]; ok && value != originalFields[key] {
@@ -11102,7 +10935,9 @@ func (m *Model) setSelectedPriority(p int) tea.Cmd {
 		return nil
 	}
 	summary := fmt.Sprintf("P%d → P%d for %s", issue.Priority, p, issue.ID)
-	return m.runQuickEdit(issue, []string{"--priority=" + strconv.Itoa(p)}, summary)
+	return m.runTrackerAction(issue, summary, func(ctx context.Context, c *tracker.Client) (tracker.Result, error) {
+		return c.SetPriority(ctx, p)
+	})
 }
 
 func (m *Model) toggleCloseCandidate() tea.Cmd {
@@ -11112,77 +10947,24 @@ func (m *Model) toggleCloseCandidate() tea.Cmd {
 		return nil
 	}
 	if slices.Contains(issue.Labels, closeCandidateLabel) {
-		return m.runQuickEdit(issue, []string{"--remove-label=" + closeCandidateLabel},
-			fmt.Sprintf("Removed %s from %s", closeCandidateLabel, issue.ID))
+		return m.runTrackerAction(issue, fmt.Sprintf("Removed %s from %s", closeCandidateLabel, issue.ID),
+			func(ctx context.Context, c *tracker.Client) (tracker.Result, error) {
+				return c.SetLabel(ctx, closeCandidateLabel, false)
+			})
 	}
-	return m.runQuickEdit(issue, []string{"--add-label=" + closeCandidateLabel},
-		fmt.Sprintf("Marked %s as %s", issue.ID, closeCandidateLabel))
+	return m.runTrackerAction(issue, fmt.Sprintf("Marked %s as %s", issue.ID, closeCandidateLabel),
+		func(ctx context.Context, c *tracker.Client) (tracker.Result, error) {
+			return c.SetLabel(ctx, closeCandidateLabel, true)
+		})
 }
 
-// runQuickEdit runs `<tracker> update --json <flags> -- <id>` against the
-// issue's own tracker (same route and guards as the $EDITOR save path), then
-// refreshes the JSONL export when the view reads one, and reloads.
-func (m *Model) runQuickEdit(issue *model.Issue, flags []string, summary string) tea.Cmd {
-	args := append([]string{"update", "--json"}, flags...)
-	return m.runTrackerOps(issue, []trackerOp{{args: args}}, summary)
-}
-
-// trackerOp is one tracker invocation: `<tracker> <args...> -- <id> <trailing...>`.
-// With noTarget the `-- <id>` part is left out. With captureID the issue ID
-// in the op's JSON output replaces "{new}" in the args of later ops.
-type trackerOp struct {
-	args      []string
-	trailing  []string
-	noTarget  bool
-	captureID bool
-	// fallback runs instead when the tracker does not know the op's command
-	// (an older build answering "unknown command").
-	fallback []trackerOp
-}
-
-// createdIssueID reads the issue ID from a tracker's `create --json` output,
-// which is an object or a one-element array, or the follow-up ID from
-// `signoff --json --dispute` output.
-func createdIssueID(out []byte) (string, error) {
-	out = bytes.TrimSpace(out)
-	var followup struct {
-		Followup string `json:"followup"`
-	}
-	if json.Unmarshal(out, &followup) == nil && followup.Followup != "" {
-		return followup.Followup, nil
-	}
-	var one struct {
-		ID string `json:"id"`
-	}
-	if len(out) > 0 && out[0] == '[' {
-		var many []struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(out, &many); err != nil || len(many) == 0 {
-			return "", fmt.Errorf("tracker create returned no issue")
-		}
-		one.ID = many[0].ID
-	} else if err := json.Unmarshal(out, &one); err != nil {
-		return "", fmt.Errorf("tracker create output is not JSON: %w", err)
-	}
-	if one.ID == "" {
-		return "", fmt.Errorf("tracker create returned no issue id")
-	}
-	return one.ID, nil
-}
-
-func substituteNewID(values []string, id string) []string {
-	out := make([]string, len(values))
-	for i, v := range values {
-		out[i] = strings.ReplaceAll(v, "{new}", id)
-	}
-	return out
-}
-
-// runTrackerOps runs each operation against the issue's own tracker in order,
-// stopping at the first failure, then refreshes the JSONL export and reloads
-// like runQuickEdit.
-func (m *Model) runTrackerOps(issue *model.Issue, ops []trackerOp, summary string) tea.Cmd {
+// runTrackerAction runs act against the issue's own tracker through a
+// tracker.Client, then the client refreshes the JSONL export when the view
+// reads one, and the result message reloads. It keeps the TUI state gating
+// (time travel, one update in flight, status text) and leaves the tracker
+// calls to pkg/tracker.
+func (m *Model) runTrackerAction(issue *model.Issue, summary string,
+	act func(context.Context, *tracker.Client) (tracker.Result, error)) tea.Cmd {
 	if m.timeTravelMode {
 		m.statusMsg, m.statusIsError = "❌ Read-only while time-traveling", true
 		return nil
@@ -11191,51 +10973,21 @@ func (m *Model) runTrackerOps(issue *model.Issue, ops []trackerOp, summary strin
 		m.statusMsg, m.statusIsError = "⏳ Finish the current tracker update first", false
 		return nil
 	}
-	if err := editorOriginError(issue.Origin); err != nil {
+	// The client captures the issue's origin and the view's source at dispatch.
+	client, err := tracker.New(*issue, m.beadsPath)
+	if err != nil {
 		m.editorFailure(err.Error(), "")
 		return nil
 	}
-	origin := *issue.Origin
-	sourcePath := m.beadsPath
 	m.brUpdateInFlight = true
 	m.statusMsg, m.statusIsError = "⏳ "+summary+"…", false
+	issueID := issue.ID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), brUpdateTimeout)
 		defer cancel()
-		result := quickEditResultMsg{issueID: issue.ID, summary: summary}
-		newID := ""
-		var run func([]trackerOp) error
-		run = func(ops []trackerOp) error {
-			for _, op := range ops {
-				args := substituteNewID(op.args, newID)
-				if !op.noTarget {
-					args = append(append(args, "--", origin.LocalID), substituteNewID(op.trailing, newID)...)
-				}
-				out, diagnostic, err := runEditorTracker(ctx, origin, true, args...)
-				result.output = diagnostic
-				if err != nil && op.fallback != nil && strings.Contains(diagnostic, "unknown command") {
-					if err := run(op.fallback); err != nil {
-						return err
-					}
-					continue
-				}
-				if err != nil {
-					return err
-				}
-				if op.captureID {
-					if newID, err = createdIssueID(out); err != nil {
-						return err
-					}
-					result.createdID = newID
-				}
-			}
-			return nil
-		}
-		result.err = run(ops)
-		if result.err == nil && (origin.Tracker == "bd" || sourcePath == "" || strings.EqualFold(filepath.Ext(sourcePath), ".jsonl")) {
-			result.refreshErr = refreshEditorExport(ctx, origin, sourcePath)
-		}
-		return result
+		res, err := act(ctx, client)
+		return quickEditResultMsg{issueID: issueID, summary: summary, createdID: res.CreatedID,
+			output: res.Output, err: err, refreshErr: res.RefreshErr}
 	}
 }
 
@@ -14452,7 +14204,7 @@ func (m *Model) launchTerminalEditor(editorArgs []string) tea.Cmd {
 		return nil
 	}
 	issue := selectedIssue.Clone()
-	if err := editorOriginError(issue.Origin); err != nil {
+	if err := tracker.OriginError(issue.Origin); err != nil {
 		m.editorFailure(err.Error(), "")
 		return nil
 	}
@@ -14531,7 +14283,7 @@ func (m *Model) guiEditorPath() (string, error) {
 	if current == nil {
 		return "", fmt.Errorf("selected issue is no longer loaded")
 	}
-	if err := editorOriginError(current.Origin); err != nil {
+	if err := tracker.OriginError(current.Origin); err != nil {
 		return "", err
 	}
 	if m.sourceStaleReason != "" {
