@@ -667,23 +667,51 @@ func (d AgentDeskModel) renderPreview(width int) string {
 			lines = append(lines, l)
 		}
 	}
-	add(d.theme.PrimaryBold.Render(truncate(it.ID+"  "+it.Title, width)))
+	// wrapped splits s to width, indenting continuation lines by indent.
+	// (wrapText collapses whitespace, so the first-line prefix is added after.)
+	wrapped := func(first, s string, w, indent int) []string {
+		parts := strings.Split(wrapText(s, max(10, w-indent)), "\n")
+		parts[0] = first + parts[0]
+		for i := 1; i < len(parts); i++ {
+			parts[i] = strings.Repeat(" ", indent) + parts[i]
+		}
+		return parts
+	}
+	for _, l := range wrapped(it.ID+"  ", it.Title, width, len(it.ID)+2) {
+		add(d.theme.PrimaryBold.Render(l))
+	}
 	if it.WaitingOn != "" {
-		add(truncate("Waiting on: "+it.WaitingOn, width))
+		for _, l := range wrapped("Waiting on: ", it.WaitingOn, width, 12) {
+			add(l)
+		}
 	}
 	if len(it.Options) > 0 {
 		for i, o := range it.Options {
-			text := fmt.Sprintf("(%s) %s", o.Key, o.Text)
-			if o.Recommended {
-				text += "  ★ recommended"
-			}
+			text := o.Text
 			prefix := "  "
-			if d.answering && !d.typing && d.answerCursor == i {
+			selected := d.answering && !d.typing && d.answerCursor == i
+			w := width
+			if selected {
 				prefix = "▸ "
-				add(d.theme.Selected.Render(truncate(prefix+text, width-d.theme.Selected.GetHorizontalFrameSize())))
-				continue
+				w -= d.theme.Selected.GetHorizontalFrameSize()
 			}
-			add(truncate(prefix+text, width))
+			indent := 2 + len(o.Key) + 3 // under the text, past "(k) "
+			optLines := wrapped(prefix+"("+o.Key+") ", text, w, indent)
+			if o.Recommended {
+				const mark = "  ★ recommended"
+				last := len(optLines) - 1
+				if len([]rune(optLines[last]+mark)) <= w {
+					optLines[last] += mark
+				} else {
+					optLines = append(optLines, strings.Repeat(" ", indent)+strings.TrimSpace(mark))
+				}
+			}
+			for _, l := range optLines {
+				if selected {
+					l = d.theme.Selected.Render(padRight(l, w))
+				}
+				add(l)
+			}
 		}
 		if d.answering && !d.typing {
 			other := "  ✎ type an answer"
