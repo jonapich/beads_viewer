@@ -1381,21 +1381,32 @@ func ComputeLabelHealthScores(issues []model.Issue, cfg LabelHealthConfig, now t
 		issBW := bw[iss.ID]
 
 		isClosed := isClosedLikeStatus(iss.Status)
-		isClosedWithTime := isClosed && iss.ClosedAt != nil
 		var closed30Inc, prevWeekInc, curWeekInc int
-		if isClosedWithTime {
-			closedAt := *iss.ClosedAt
-			if closedAt.After(monthAgo) {
-				closed30Inc = 1
+		if isClosed {
+			// Mirror ComputeVelocityMetrics: fall back to UpdatedAt when ClosedAt
+			// is missing and ignore closures dated in the future.
+			var closedAt time.Time
+			switch {
+			case iss.ClosedAt != nil && !iss.ClosedAt.IsZero():
+				closedAt = *iss.ClosedAt
+			case !iss.UpdatedAt.IsZero():
+				closedAt = iss.UpdatedAt
 			}
-			if closedAt.After(prevWeekStart) && closedAt.Before(weekAgo) {
-				prevWeekInc = 1
-			} else if closedAt.After(weekAgo) {
-				curWeekInc = 1
+			if !closedAt.IsZero() && !closedAt.After(now) {
+				if closedAt.After(monthAgo) {
+					closed30Inc = 1
+				}
+				if closedAt.After(prevWeekStart) && closedAt.Before(weekAgo) {
+					prevWeekInc = 1
+				} else if closedAt.After(weekAgo) {
+					curWeekInc = 1
+				}
 			}
 		}
 
-		hasUpdated := !iss.IsParkedForStalenessAt(now) && !iss.UpdatedAt.IsZero()
+		// Mirror ComputeFreshnessMetrics: only open (non-closed-like) issues
+		// contribute to average staleness.
+		hasUpdated := !isClosed && !iss.IsParkedForStalenessAt(now) && !iss.UpdatedAt.IsZero()
 		var stalenessDays float64
 		if hasUpdated {
 			stalenessDays = now.Sub(iss.UpdatedAt).Hours() / 24.0
