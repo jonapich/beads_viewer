@@ -247,6 +247,10 @@ type phaseThreeRobotHandlerConfig struct {
 	RobotCausalityFlag      *string
 	RobotSprintShowFlag     *string
 	RobotCapacityFlag       *bool
+	RobotInboxFlag          *bool
+	RobotPipelineFlag       *bool
+	RobotSliceMetricsFlag   *bool
+	StaleAfter              *string
 	CapacityAgents          *int
 	CapacityLabel           *string
 	// NotReadyLabels (issue #173): opt-in label-class excluded from claimable
@@ -729,6 +733,9 @@ func configuredPrimaryRobotFlagNames() []string {
 		RobotLabelHealthFlag:    &dummyBool,
 		RobotLabelFlowFlag:      &dummyBool,
 		RobotLabelAttentionFlag: &dummyBool,
+		RobotInboxFlag:          &dummyBool,
+		RobotPipelineFlag:       &dummyBool,
+		RobotSliceMetricsFlag:   &dummyBool,
 		GraphRoot:               &dummyStr,
 		BeadHistoryFlag:         &dummyStr,
 		RobotExplainCorrFlag:    &dummyStr,
@@ -2398,6 +2405,11 @@ func registerPhaseThreeRobotHandlers(registry *RobotRegistry, cfg phaseThreeRobo
 	register("robot-capacity", cfg.RobotCapacityFlag, "Output capacity simulation and projection as JSON", func(ctx RobotContext) error {
 		return handleRobotCapacity(ctx, cfg)
 	})
+	register("robot-inbox", cfg.RobotInboxFlag, "Output beads awaiting the user (needs-decision/needs-design) as JSON", handleRobotInbox)
+	register("robot-pipeline", cfg.RobotPipelineFlag, "Output in-progress beads with stage, session and staleness as JSON", func(ctx RobotContext) error {
+		return handleRobotPipeline(ctx, cfg)
+	})
+	register("robot-slice-metrics", cfg.RobotSliceMetricsFlag, "Output per-epic slice metrics as JSON", handleRobotSliceMetrics)
 }
 
 func attachSourceDiffsForContext(calc *drift.Calculator, ctx RobotContext, maxAlerts int) {

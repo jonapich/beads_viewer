@@ -3200,7 +3200,7 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		}
 	}
 
-	// Live round-trip CLI schema conformance across all 44 registered primary
+	// Live round-trip CLI schema conformance across all registered primary
 	// robot commands against a seeded git + beads + sprint + baseline workspace.
 	exe := buildTestBinary(t)
 	tmpDir := t.TempDir()
@@ -3310,6 +3310,9 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		"robot-label-health":        {"--robot-label-health"},
 		"robot-label-flow":          {"--robot-label-flow"},
 		"robot-label-attention":     {"--robot-label-attention"},
+		"robot-inbox":               {"--robot-inbox"},
+		"robot-pipeline":            {"--robot-pipeline"},
+		"robot-slice-metrics":       {"--robot-slice-metrics"},
 		"robot-orphans":             {"--robot-orphans"},
 		"robot-file-beads":          {"--robot-file-beads", "src/app.go"},
 		"robot-commit":              {"--robot-commit", headSHA},

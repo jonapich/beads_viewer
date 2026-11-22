@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -136,6 +137,8 @@ func runEditorTrackerTestProcess() bool {
 				issue.IssueType = model.IssueType(value)
 			case "assignee":
 				issue.Assignee = value
+			case "remove-label":
+				issue.Labels = slices.DeleteFunc(issue.Labels, func(l string) bool { return l == value })
 			}
 		}
 		issue.UpdatedAt = issue.UpdatedAt.Add(time.Second)
@@ -149,6 +152,19 @@ func runEditorTrackerTestProcess() bool {
 			}
 		}
 		fmt.Println(string(data))
+	case "comments":
+		// comments add -- <id> <text>: record the comment on the state issue.
+		if mode == "comment-fail" {
+			fail(fmt.Errorf("controlled comment failure"))
+		}
+		if len(args) != 5 || args[1] != "add" || args[2] != "--" {
+			fail(fmt.Errorf("unexpected comments argv: %q", args))
+		}
+		issue.Comments = append(issue.Comments, &model.Comment{IssueID: issue.ID, Text: args[4]})
+		data, _ = json.Marshal(issue)
+		if err := os.WriteFile(statePath, data, 0o600); err != nil {
+			fail(err)
+		}
 	case "sync":
 		if mode == "export-fail" {
 			fail(fmt.Errorf("controlled export failure"))

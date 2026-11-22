@@ -183,6 +183,8 @@ func focusesForBindingDoc(doc KeyBindingDoc) []focus {
 			addFocus(focusAttention)
 		case "velocity", "velocity-comparison":
 			addFocus(focusVelocityComparison)
+		case "desk", "agent-desk":
+			addFocus(focusAgentDesk)
 		}
 	}
 
@@ -204,6 +206,7 @@ func allDocumentedFocuses() []focus {
 		focusSprint,
 		focusAttention,
 		focusVelocityComparison,
+		focusAgentDesk,
 	}
 }
 
@@ -249,6 +252,10 @@ func GetKeyBindingDocs() []KeyBindingDoc {
 		{"P", "Sprint dashboard", "Views", "list,detail"},
 		{"[", "Label dashboard", "Views", "list,detail"},
 		{"]", "Attention view", "Views", "list,detail"},
+		{"I", "Agent desk: inbox (beads awaiting you)", "Views", "list,detail"},
+		{"W", "Agent desk: live pipeline (in-progress stages)", "Views", "list,detail"},
+		{"M", "Agent desk: slice metrics per epic", "Views", "list,detail"},
+		{"z", "Expand/collapse handoff comments", "Views", "list,detail"},
 		{"!", "Alerts panel", "Views", "list"},
 		{"w", "Repo picker (workspace mode)", "Views", "list"},
 		{"?", "Help overlay", "Views", "all"},
@@ -371,6 +378,16 @@ func GetKeyBindingDocs() []KeyBindingDoc {
 		{"enter", "Label drilldown", "Attention", "attention"},
 		{"1-9", "Filter list by rank", "Attention", "attention"},
 		{"]", "Close attention view", "Attention", "attention"},
+
+		// Agent Desk (I / W / M)
+		{"tab", "Next tab: inbox, pipeline, slice metrics", "Desk", "desk"},
+		{"enter", "Inbox: answer the bead; pipeline/metrics: show the bead", "Desk", "desk"},
+		{"a-h", "While answering: post that option", "Desk", "desk"},
+		{"t", "While answering: type a free answer", "Desk", "desk"},
+		{"n", "While answering: post the option with a note", "Desk", "desk"},
+		{"1-9", "Open link N of the selected bead in the browser", "Desk", "desk"},
+		{"o", "Open the mock/artifact link (else the first link)", "Desk", "desk"},
+		{"v", "Show the selected bead in the list", "Desk", "desk"},
 
 		// Label Dashboard ([)
 		{"g", "Go to top", "Label", "label"},

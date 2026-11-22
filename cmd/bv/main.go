@@ -460,6 +460,12 @@ func inferAgentFlagContext(args []string) string {
 			detected = "impact-network"
 		case "robot-label-attention":
 			detected = "label-attention"
+		case "robot-inbox":
+			detected = "inbox"
+		case "robot-pipeline":
+			detected = "pipeline"
+		case "robot-slice-metrics":
+			detected = "slice-metrics"
 		case "robot-file-beads":
 			detected = "file-beads"
 		case "robot-commit":
@@ -530,6 +536,12 @@ func rewriteAgentIntentCommand(args []string) ([]string, bool) {
 		return append([]string{"--robot-label-flow"}, rewriteAgentIntentFlagAliases(rest, "label-flow")...), true
 	case "label-attention":
 		return append([]string{"--robot-label-attention"}, rewriteAgentIntentFlagAliases(rest, "label-attention")...), true
+	case "inbox":
+		return append([]string{"--robot-inbox"}, rewriteAgentIntentFlagAliases(rest, "inbox")...), true
+	case "pipeline":
+		return append([]string{"--robot-pipeline"}, rewriteAgentIntentFlagAliases(rest, "pipeline")...), true
+	case "slice-metrics", "slices":
+		return append([]string{"--robot-slice-metrics"}, rewriteAgentIntentFlagAliases(rest, "slice-metrics")...), true
 	case "hotspots", "file-hotspots":
 		return append([]string{"--robot-file-hotspots"}, rewriteAgentIntentFlagAliases(rest, "file-hotspots")...), true
 	case "orphans":
@@ -631,7 +643,7 @@ func rewriteCanonicalRobotCommandIntent(command string, rest []string) ([]string
 	switch command {
 	case "robot-help":
 		return append([]string{"--robot-help"}, rewriteAgentIntentFlagAliases(rest, "help")...), true
-	case "robot-triage", "robot-triage-by-track", "robot-triage-by-label", "robot-next", "robot-plan", "robot-insights", "robot-priority", "robot-alerts", "robot-suggest", "robot-recipes", "robot-metrics", "robot-label-health", "robot-label-flow", "robot-label-attention", "robot-file-hotspots", "robot-sprint-list", "robot-capacity", "robot-capabilities", "robot-orphans", "robot-correlation-stats":
+	case "robot-triage", "robot-triage-by-track", "robot-triage-by-label", "robot-next", "robot-plan", "robot-insights", "robot-priority", "robot-alerts", "robot-suggest", "robot-recipes", "robot-metrics", "robot-label-health", "robot-label-flow", "robot-label-attention", "robot-file-hotspots", "robot-sprint-list", "robot-capacity", "robot-capabilities", "robot-orphans", "robot-correlation-stats", "robot-inbox", "robot-pipeline", "robot-slice-metrics":
 		context := strings.TrimPrefix(command, "robot-")
 		return append([]string{"--" + command}, rewriteAgentIntentFlagAliases(rest, context)...), true
 	case "robot-docs":
@@ -896,6 +908,7 @@ var knownValueTakingCLIFlags = map[string]bool{
 	"robot-docs":                true,
 	"robot-not-ready-labels":    true,
 	"attention-limit":           true,
+	"stale-after":               true,
 	"schema-command":            true,
 	"suggest-type":              true,
 	"suggest-confidence":        true,
@@ -1484,7 +1497,7 @@ func defaultFlagSections() []flagSection {
 					return true
 				}
 				switch name {
-				case "attention-limit", "brief", "schema-command",
+				case "attention-limit", "stale-after", "brief", "schema-command",
 					"suggest-type", "suggest-confidence", "suggest-bead",
 					"graph-format", "graph-root", "graph-depth",
 					"orphans-min-score", "file-beads-limit", "hotspots-limit",
@@ -1649,6 +1662,10 @@ func main() {
 	robotLabelFlow := flag.Bool("robot-label-flow", false, "Output cross-label dependency flow as JSON for AI agents")
 	robotLabelAttention := flag.Bool("robot-label-attention", false, "Output attention-ranked labels as JSON for AI agents")
 	attentionLimit := flag.Int("attention-limit", 5, "Limit number of labels in --robot-label-attention output")
+	robotInbox := flag.Bool("robot-inbox", false, "Output beads awaiting the user (needs-decision/needs-design) as JSON")
+	robotPipeline := flag.Bool("robot-pipeline", false, "Output in-progress beads with stage, session and staleness as JSON")
+	robotSliceMetrics := flag.Bool("robot-slice-metrics", false, "Output per-epic slice metrics as JSON")
+	staleAfter := flag.String("stale-after", "", "Staleness threshold for --robot-pipeline as a Go duration (e.g. 2h; default 2h)")
 	robotAlerts := flag.Bool("robot-alerts", false, "Output alerts (drift + proactive) as JSON for AI agents")
 	robotMetrics := flag.Bool("robot-metrics", false, "Output performance metrics (timing, cache, memory) as JSON")
 	// JSON Schema for robot outputs (bd-2kxo)
@@ -1874,6 +1891,10 @@ func main() {
 		RobotLabelHealthFlag:    robotLabelHealth,
 		RobotLabelFlowFlag:      robotLabelFlow,
 		RobotLabelAttentionFlag: robotLabelAttention,
+		RobotInboxFlag:          robotInbox,
+		RobotPipelineFlag:       robotPipeline,
+		RobotSliceMetricsFlag:   robotSliceMetrics,
+		StaleAfter:              staleAfter,
 		RobotOrphansFlag:        robotOrphans,
 		OrphansMinScore:         orphansMinScore,
 		RobotFileBeadsFlag:      robotFileBeads,
@@ -1966,6 +1987,7 @@ func main() {
 			{modifier: "search-limit", requires: []string{"search"}},
 			{modifier: "search-min-score", requires: []string{"search"}},
 			{modifier: "attention-limit", requires: []string{"robot-label-attention"}},
+			{modifier: "stale-after", requires: []string{"robot-pipeline"}},
 			{modifier: "schema-command", requires: []string{"robot-schema"}},
 			{modifier: "suggest-type", requires: []string{"robot-suggest"}},
 			{modifier: "suggest-confidence", requires: []string{"robot-suggest"}},
@@ -2072,6 +2094,9 @@ func main() {
 			{flags: []string{"robot-label-health"}},
 			{flags: []string{"robot-label-flow"}},
 			{flags: []string{"robot-label-attention"}},
+			{flags: []string{"robot-inbox"}},
+			{flags: []string{"robot-pipeline"}},
+			{flags: []string{"robot-slice-metrics"}},
 			{flags: []string{"robot-alerts"}},
 			{flags: []string{"robot-metrics"}},
 			{flags: []string{"robot-schema"}},
@@ -3728,6 +3753,9 @@ func main() {
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-label-health", robotDispatchContext)
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-label-flow", robotDispatchContext)
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-label-attention", robotDispatchContext)
+		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-inbox", robotDispatchContext)
+		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-pipeline", robotDispatchContext)
+		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-slice-metrics", robotDispatchContext)
 
 		// Handle --robot-label-health
 		// Handle --robot-label-flow (can be used stand-alone to avoid full health computation)
@@ -9026,6 +9054,25 @@ func robotCommandDocs() map[string]robotCommandDoc {
 			Params:      []string{"--attention-limit <n>"},
 			NeedsIssues: true,
 		},
+		"robot-inbox": {
+			Flag:        "--robot-inbox",
+			Description: "Beads awaiting the user (open + needs-decision/needs-design), grouped by epic with links, options and waiting_on.",
+			KeyFields:   []string{"total", "ready_to_judge", "groups", "groups[].epic", "groups[].items", "groups[].items[].options", "groups[].items[].waiting_on"},
+			NeedsIssues: true,
+		},
+		"robot-pipeline": {
+			Flag:        "--robot-pipeline",
+			Description: "In-progress beads with stage, claiming session, stage age and stale flag.",
+			KeyFields:   []string{"stale_after", "total", "stale", "by_stage", "rows", "rows[].stage", "rows[].session", "rows[].stale"},
+			Params:      []string{"--stale-after 2h"},
+			NeedsIssues: true,
+		},
+		"robot-slice-metrics": {
+			Flag:        "--robot-slice-metrics",
+			Description: "Per-epic slice metrics: outcomes, review rounds, test runs, wall time, tokens, escaped bugs.",
+			KeyFields:   []string{"total", "epics", "epics[].epic", "unmatched_escapes"},
+			NeedsIssues: true,
+		},
 		"robot-graph": {
 			Flag: "--robot-graph", Description: "Dependency graph export in JSON, DOT, or Mermaid format.",
 			Params:      []string{"--graph-format json|dot|mermaid", "--graph-root <id>", "--graph-depth <n>"},
@@ -9236,6 +9283,12 @@ func preferredRobotInvocationOverride(commandName string) string {
 		return "bv robot-suggest --suggest-type duplicate"
 	case "robot-label-attention":
 		return "bv robot-label-attention --attention-limit 5"
+	case "robot-inbox":
+		return "bv robot-inbox"
+	case "robot-pipeline":
+		return "bv robot-pipeline --stale-after 2h"
+	case "robot-slice-metrics":
+		return "bv robot-slice-metrics"
 	case "robot-graph":
 		return "bv robot-graph mermaid"
 	case "robot-orphans":
@@ -10151,6 +10204,9 @@ func generateRobotSchemas() RobotSchemas {
 			},
 			"required": []string{"generated_at", "data_hash", "version", "limit", "total_labels", "labels", "usage_hints"},
 		},
+		"robot-inbox":         robotInboxSchema(),
+		"robot-pipeline":      robotPipelineSchema(),
+		"robot-slice-metrics": robotSliceMetricsSchema(),
 		"robot-sprint-list": {
 			"$schema":     "https://json-schema.org/draft/2020-12/schema",
 			"title":       "Robot Sprint List Output",

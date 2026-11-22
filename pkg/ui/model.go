@@ -80,6 +80,7 @@ const (
 	focusCassModal          // Cass session preview modal (bv-5bqh)
 	focusUpdateModal        // Self-update modal (bv-182)
 	focusVelocityComparison // Side-by-side label velocity comparison (bv-125)
+	focusAgentDesk          // Agent desk: inbox (I), pipeline (W), slice metrics (M)
 )
 
 // embeddedTextInputTarget identifies one of the text inputs owned by Model.
@@ -1409,6 +1410,8 @@ type Model struct {
 	showLabelGraphAnalysis   bool
 	labelGraphAnalysisResult *LabelGraphAnalysisResult
 	attentionView            AttentionModel // ] ranked label attention view (bv-117)
+	agentDesk                AgentDeskModel // I/W/M agent desk: inbox, pipeline, slice metrics
+	expandHandoffs           bool           // z: show handoff (structured) comments in full in the detail pane
 	attentionCache           analysis.LabelAttentionResult
 	attentionCached          bool
 	showShortcutsSidebar     bool // bv-3qi5 toggleable shortcuts sidebar
@@ -2838,6 +2841,7 @@ func NewModel(issues []model.Issue, activeRecipe *recipe.Recipe, beadsPath strin
 		board:                          board,
 		labelDashboard:                 labelDashboard,
 		attentionView:                  NewAttentionModel(theme),
+		agentDesk:                      NewAgentDeskModel(theme),
 		velocityComparison:             velocityComparison,
 		shortcutsSidebar:               shortcutsSidebar,
 		graphView:                      graphView,
@@ -3357,6 +3361,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case quickEditResultMsg:
 		m.brUpdateInFlight = false
 		if msg.err != nil {
+			m.agentDesk.ClearAnswered(msg.issueID)
 			message := fmt.Sprintf("%s failed: %v", msg.summary, msg.err)
 			if msg.output != "" {
 				message += " — " + msg.output
@@ -3966,6 +3971,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if underlyingFocus == focusAttention {
 			m.refreshAttentionView()
 		}
+		if underlyingFocus == focusAgentDesk {
+			m.refreshAgentDesk()
+		}
 
 		// Re-apply recipe filter if active (to update scores while preserving filter)
 		// Otherwise, update list respecting current filter (open/ready/etc.) and sort mode
@@ -4569,6 +4577,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if underlyingFocus == focusAttention {
 			m.refreshAttentionView()
 		}
+		if underlyingFocus == focusAgentDesk {
+			m.refreshAgentDesk()
+		}
 		if m.isActionableView || underlyingFocus == focusActionable {
 			m.refreshActionableView()
 		}
@@ -5016,6 +5027,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if profileRefresh {
 				recordTiming("attention_view", time.Since(attentionStart))
 			}
+		}
+		if underlyingFocus == focusAgentDesk {
+			m.refreshAgentDesk()
 		}
 		if underlyingFocus == focusFlowMatrix {
 			m.refreshFlowMatrix()
@@ -5638,6 +5652,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focused == focusAttention {
 			if updated, cmd, handled := m.handleAttentionKeys(msg); handled {
 				return updated, cmd
+			}
+		}
+
+		// Agent desk: inbox answers, link opens, tab switches. Unhandled keys
+		// (ctrl+r, ?, view switches) fall through.
+		if m.focused == focusAgentDesk {
+			if cmd, handled := m.handleAgentDeskKeys(msg); handled {
+				return m, cmd
 			}
 		}
 
@@ -6579,7 +6601,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (enabling cross-view switching, e.g. 'g' from board -> graph).
 			// ═══════════════════════════════════════════════════════════════
 			switch msg.String() {
-			case "b", "g", "a", "i", "E", "f", "[", "]":
+			case "b", "g", "a", "i", "E", "f", "[", "]", "I", "W", "M":
 				if !m.isSplitView {
 					m.showDetails = false
 				}
@@ -6723,6 +6745,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				return m, m.enterHistoryView()
+
+			case "I", "W", "M":
+				// Agent desk: I inbox, W pipeline, M slice metrics
+				m.openAgentDesk(map[string]deskMode{"I": deskInbox, "W": deskPipeline, "M": deskMetrics}[msg.String()])
+				return m, nil
+
+			case "z":
+				// Expand/collapse structured handoff comments in the detail pane
+				m.expandHandoffs = !m.expandHandoffs
+				m.updateViewportContent()
+				if m.expandHandoffs {
+					m.statusMsg = "Handoff comments expanded (z collapses)"
+				} else {
+					m.statusMsg = "Handoff comments collapsed (z expands)"
+				}
+				m.statusIsError = false
+				return m, nil
 
 			case "[", "f3":
 				// Toggle label dashboard (phase 1: table view)
@@ -8169,6 +8208,9 @@ func (m *Model) syncSecondaryViewsForRepoScope(targetFocus focus) {
 	if targetFocus == focusAttention {
 		m.refreshAttentionView()
 	}
+	if targetFocus == focusAgentDesk {
+		m.refreshAgentDesk()
+	}
 	if targetFocus == focusLabelDashboard || targetFocus == focusVelocityComparison ||
 		m.showLabelHealthDetail || m.showLabelDrilldown || m.showVelocityComparison {
 		m.refreshLabelViews(targetFocus)
@@ -8669,7 +8711,7 @@ func (m *Model) validateViewFocus(candidate focus) focus {
 		if m.showVelocityComparison {
 			return focusVelocityComparison
 		}
-	case focusAttention, focusInsights, focusFlowMatrix, focusTree, focusLabelDashboard:
+	case focusAttention, focusAgentDesk, focusInsights, focusFlowMatrix, focusTree, focusLabelDashboard:
 		if !m.isGraphView && !m.isBoardView && !m.isActionableView && !m.isHistoryView && !m.isSprintView {
 			return candidate
 		}
@@ -9023,6 +9065,9 @@ func (m *Model) renderMainView() (body string, overlay bool) {
 		case m.focused == focusAttention:
 			m.attentionView.SetSize(bodyWidth, bodyHeight)
 			body = m.attentionView.View()
+		case m.focused == focusAgentDesk:
+			m.agentDesk.SetSize(bodyWidth, bodyHeight)
+			body = m.agentDesk.View()
 		case m.focused == focusInsights:
 			m.insightsPanel.SetSize(bodyWidth, bodyHeight)
 			body = m.insightsPanel.View()
@@ -11018,6 +11063,7 @@ const closeCandidateLabel = "close-candidate"
 
 // quickEditResultMsg reports a single-key tracker update (priority, label).
 type quickEditResultMsg struct {
+	issueID    string
 	summary    string
 	output     string
 	err        error
@@ -11065,6 +11111,20 @@ func (m *Model) toggleCloseCandidate() tea.Cmd {
 // issue's own tracker (same route and guards as the $EDITOR save path), then
 // refreshes the JSONL export when the view reads one, and reloads.
 func (m *Model) runQuickEdit(issue *model.Issue, flags []string, summary string) tea.Cmd {
+	args := append([]string{"update", "--json"}, flags...)
+	return m.runTrackerOps(issue, []trackerOp{{args: args}}, summary)
+}
+
+// trackerOp is one tracker invocation: `<tracker> <args...> -- <id> <trailing...>`.
+type trackerOp struct {
+	args     []string
+	trailing []string
+}
+
+// runTrackerOps runs each operation against the issue's own tracker in order,
+// stopping at the first failure, then refreshes the JSONL export and reloads
+// like runQuickEdit.
+func (m *Model) runTrackerOps(issue *model.Issue, ops []trackerOp, summary string) tea.Cmd {
 	if m.timeTravelMode {
 		m.statusMsg, m.statusIsError = "❌ Read-only while time-traveling", true
 		return nil
@@ -11084,10 +11144,13 @@ func (m *Model) runQuickEdit(issue *model.Issue, flags []string, summary string)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), brUpdateTimeout)
 		defer cancel()
-		args := append([]string{"update", "--json"}, flags...)
-		args = append(args, "--", origin.LocalID)
-		result := quickEditResultMsg{summary: summary}
-		_, result.output, result.err = runEditorTracker(ctx, origin, true, args...)
+		result := quickEditResultMsg{issueID: issue.ID, summary: summary}
+		for _, op := range ops {
+			args := append(append(append([]string{}, op.args...), "--", origin.LocalID), op.trailing...)
+			if _, result.output, result.err = runEditorTracker(ctx, origin, true, args...); result.err != nil {
+				break
+			}
+		}
 		if result.err == nil && (origin.Tracker == "bd" || sourcePath == "" || strings.EqualFold(filepath.Ext(sourcePath), ".jsonl")) {
 			result.refreshErr = refreshEditorExport(ctx, origin, sourcePath)
 		}
@@ -12309,6 +12372,9 @@ func (m *Model) updateViewportContent() {
 	// Those edges are stored on the other issue, so scan for them.
 	m.writeReverseLinks(&sb, item.ID)
 
+	// Links: typed metadata links, then URLs found in comments
+	sb.WriteString(renderLinksMD(item))
+
 	// Comments
 	if len(item.Comments) > 0 {
 		sb.WriteString(fmt.Sprintf("### Comments (%d)\n", len(item.Comments)))
@@ -12316,10 +12382,7 @@ func (m *Model) updateViewportContent() {
 			if comment == nil {
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("> **%s** (%s)\n> \n> %s\n\n",
-				comment.Author,
-				FormatTimeRelAt(comment.CreatedAt, m.analysisReferenceTime()),
-				strings.ReplaceAll(comment.Text, "\n", "\n> ")))
+			sb.WriteString(renderCommentMD(comment, FormatTimeRelAt(comment.CreatedAt, m.analysisReferenceTime()), m.expandHandoffs))
 		}
 	}
 
@@ -13043,6 +13106,8 @@ func (f focus) String() string {
 		return "history"
 	case focusAttention:
 		return "attention"
+	case focusAgentDesk:
+		return "agent_desk"
 	case focusLabelPicker:
 		return "label_picker"
 	case focusSprint:
@@ -14235,6 +14300,11 @@ func (m *Model) selectedIssueForActionWithReason() (*model.Issue, string) {
 		return nil, "❌ No issue selected in label dashboard"
 	case focusAttention:
 		return nil, "❌ No issue selected in attention view"
+	case focusAgentDesk:
+		if iss := m.resolveLiveIssue(m.agentDesk.SelectedIssueID(), nil); iss != nil {
+			return iss, ""
+		}
+		return nil, "❌ No issue selected in agent desk"
 	case focusVelocityComparison:
 		return nil, "❌ No issue selected in velocity view"
 	case focusDetail:
@@ -14769,6 +14839,9 @@ func (m *Model) isTextInputActive() bool {
 		return true
 	}
 	if m.focused == focusHistory && m.historyReportIsCurrent() && m.historyView.IsSearchActive() {
+		return true
+	}
+	if m.focused == focusAgentDesk && m.agentDesk.Typing() {
 		return true
 	}
 	return false

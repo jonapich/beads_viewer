@@ -43,6 +43,16 @@ type Issue struct {
 	Dependencies       []*Dependency `json:"dependencies,omitempty"`
 	Comments           []*Comment    `json:"comments,omitempty"`
 	SourceRepo         string        `json:"source_repo,omitempty"`
+	// StartedAt is when the issue was claimed (`bd update --claim`).
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	// LeaseExpiresAt and HeartbeatAt describe a claim lease. They come from a
+	// node-local table in bd and may be absent from exported JSONL.
+	LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
+	HeartbeatAt    *time.Time `json:"heartbeat_at,omitempty"`
+	// Metadata is the issue's free-form metadata object, kept raw. bd stores
+	// pipeline stage, typed links, claim sessions and slice metrics here; use
+	// MetadataMap to decode it.
+	Metadata stdjson.RawMessage `json:"metadata,omitempty"`
 	// Origin is established by the live loader before workspace namespacing.
 	// Serialized input cannot manufacture authority to emit tracker commands.
 	Origin *IssueOrigin `json:"-"`
@@ -228,6 +238,10 @@ func (i Issue) Clone() Issue {
 		v := *i.CompactedAtCommit
 		clone.CompactedAtCommit = &v
 	}
+	clone.StartedAt = cloneTimePtr(i.StartedAt)
+	clone.LeaseExpiresAt = cloneTimePtr(i.LeaseExpiresAt)
+	clone.HeartbeatAt = cloneTimePtr(i.HeartbeatAt)
+	clone.Metadata = cloneRaw(i.Metadata)
 
 	if i.Labels != nil {
 		clone.Labels = make([]string, len(i.Labels))
@@ -437,6 +451,10 @@ func CloneIssues(issues []Issue) []Issue {
 			dst.CompactedAtCommit = &strPtrSlab[strPtrPos]
 			strPtrPos++
 		}
+		dst.StartedAt = cloneTimePtr(src.StartedAt)
+		dst.LeaseExpiresAt = cloneTimePtr(src.LeaseExpiresAt)
+		dst.HeartbeatAt = cloneTimePtr(src.HeartbeatAt)
+		dst.Metadata = cloneRaw(src.Metadata)
 
 		if src.Labels != nil {
 			n := len(src.Labels)
@@ -487,6 +505,34 @@ func CloneIssues(issues []Issue) []Issue {
 	}
 
 	return clones
+}
+
+func cloneTimePtr(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	v := *t
+	return &v
+}
+
+func cloneRaw(raw stdjson.RawMessage) stdjson.RawMessage {
+	if raw == nil {
+		return nil
+	}
+	return append(stdjson.RawMessage(make([]byte, 0, len(raw))), raw...)
+}
+
+// MetadataMap decodes the issue's metadata object. It returns nil when the
+// issue has no metadata or the metadata is not a JSON object.
+func (i Issue) MetadataMap() map[string]any {
+	if len(i.Metadata) == 0 {
+		return nil
+	}
+	var out map[string]any
+	if err := stdjson.Unmarshal(i.Metadata, &out); err != nil {
+		return nil
+	}
+	return out
 }
 
 // IsDeferredAt reports whether the issue's defer_until deferral is still
