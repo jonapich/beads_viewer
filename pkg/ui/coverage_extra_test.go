@@ -158,6 +158,31 @@ func runEditorTrackerTestProcess() bool {
 			}
 		}
 		fmt.Println(string(data))
+	case "signoff":
+		// signoff --json --approve|--dispute=<text> -- <id>, or an older bd without it.
+		if mode == "no-signoff" || mode == "create-fail" {
+			fail(fmt.Errorf(`Error: unknown command "signoff" for "bd"`))
+		}
+		meta := map[string]any{}
+		_ = json.Unmarshal(issue.Metadata, &meta)
+		issue.Labels = slices.DeleteFunc(issue.Labels, func(l string) bool { return l == "needs-signoff" })
+		out := map[string]any{"issue_id": issue.ID}
+		for _, arg := range args[1:] {
+			if arg == "--approve" {
+				meta["signoff"], out["signoff"] = "approved", "approved"
+			}
+			if note, ok := strings.CutPrefix(arg, "--dispute="); ok {
+				meta["signoff"], meta["signoff_note"], meta["signoff_followup"] = "disputed", note, "local-new"
+				out["signoff"], out["followup"], out["note"] = "disputed", "local-new", note
+			}
+		}
+		issue.Metadata, _ = json.Marshal(meta)
+		data, _ = json.Marshal(issue)
+		if err := os.WriteFile(statePath, data, 0o600); err != nil {
+			fail(err)
+		}
+		reply, _ := json.Marshal(out)
+		fmt.Println(string(reply))
 	case "create":
 		// create --json --title=... : the call is captured above; answer with a new id.
 		if mode == "create-fail" {

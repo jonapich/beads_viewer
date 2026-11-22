@@ -11135,12 +11135,22 @@ type trackerOp struct {
 	trailing  []string
 	noTarget  bool
 	captureID bool
+	// fallback runs instead when the tracker does not know the op's command
+	// (an older build answering "unknown command").
+	fallback []trackerOp
 }
 
 // createdIssueID reads the issue ID from a tracker's `create --json` output,
-// which is an object or a one-element array.
+// which is an object or a one-element array, or the follow-up ID from
+// `signoff --json --dispute` output.
 func createdIssueID(out []byte) (string, error) {
 	out = bytes.TrimSpace(out)
+	var followup struct {
+		Followup string `json:"followup"`
+	}
+	if json.Unmarshal(out, &followup) == nil && followup.Followup != "" {
+		return followup.Followup, nil
+	}
 	var one struct {
 		ID string `json:"id"`
 	}
@@ -11194,22 +11204,34 @@ func (m *Model) runTrackerOps(issue *model.Issue, ops []trackerOp, summary strin
 		defer cancel()
 		result := quickEditResultMsg{issueID: issue.ID, summary: summary}
 		newID := ""
-		for _, op := range ops {
-			args := substituteNewID(op.args, newID)
-			if !op.noTarget {
-				args = append(append(args, "--", origin.LocalID), substituteNewID(op.trailing, newID)...)
-			}
-			var out []byte
-			if out, result.output, result.err = runEditorTracker(ctx, origin, true, args...); result.err != nil {
-				break
-			}
-			if op.captureID {
-				if newID, result.err = createdIssueID(out); result.err != nil {
-					break
+		var run func([]trackerOp) error
+		run = func(ops []trackerOp) error {
+			for _, op := range ops {
+				args := substituteNewID(op.args, newID)
+				if !op.noTarget {
+					args = append(append(args, "--", origin.LocalID), substituteNewID(op.trailing, newID)...)
 				}
-				result.createdID = newID
+				out, diagnostic, err := runEditorTracker(ctx, origin, true, args...)
+				result.output = diagnostic
+				if err != nil && op.fallback != nil && strings.Contains(diagnostic, "unknown command") {
+					if err := run(op.fallback); err != nil {
+						return err
+					}
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				if op.captureID {
+					if newID, err = createdIssueID(out); err != nil {
+						return err
+					}
+					result.createdID = newID
+				}
 			}
+			return nil
 		}
+		result.err = run(ops)
 		if result.err == nil && (origin.Tracker == "bd" || sourcePath == "" || strings.EqualFold(filepath.Ext(sourcePath), ".jsonl")) {
 			result.refreshErr = refreshEditorExport(ctx, origin, sourcePath)
 		}

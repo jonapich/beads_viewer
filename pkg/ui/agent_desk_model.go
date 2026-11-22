@@ -223,10 +223,14 @@ func (m *Model) handleAgentDeskKeys(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 // signoffDeskBead approves or disputes a closed bead awaiting sign-off.
-// Approve removes needs-signoff and sets metadata signoff=approved. Dispute
-// first files a follow-up bead (discovered-from the closed one) with the
-// note as its description, then comments on the closed bead and marks it
-// disputed. The closed bead is never reopened.
+//
+// On bd it runs `bd signoff --json --approve` or `--dispute=<note>`, which
+// does the whole job in one command. A tracker without `signoff` (br, or an
+// older bd) gets the equivalent sequence: approve removes needs-signoff and
+// sets metadata signoff=approved; dispute files a follow-up bead
+// (discovered-from the closed one) with the note as its description, then
+// comments on the closed bead and marks it disputed. The closed bead is
+// never reopened.
 func (m *Model) signoffDeskBead(id, state, note string) tea.Cmd {
 	issue := m.resolveLiveIssue(id, nil)
 	if issue == nil {
@@ -251,6 +255,13 @@ func (m *Model) signoffDeskBead(id, state, note string) tea.Cmd {
 		mark = append(mark, "--set-metadata=signoff_note="+note, "--set-metadata=signoff_followup={new}")
 	}
 	ops = append(ops, trackerOp{args: mark})
+	if issue.Origin != nil && issue.Origin.Tracker == "bd" {
+		native := trackerOp{args: []string{"signoff", "--json", "--approve"}, fallback: ops}
+		if state == agentdesk.SignoffDisputed {
+			native = trackerOp{args: []string{"signoff", "--json", "--dispute=" + note}, captureID: true, fallback: ops}
+		}
+		ops = []trackerOp{native}
+	}
 	cmd := m.runTrackerOps(issue, ops, summary)
 	if cmd != nil {
 		m.agentDesk.MarkSignedOff(issue.ID, state)

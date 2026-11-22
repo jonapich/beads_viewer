@@ -154,14 +154,51 @@ func readTrackerState(t *testing.T) model.Issue {
 	return issue
 }
 
-func TestModelSignoffApprove(t *testing.T) {
+func TestModelSignoffApproveNative(t *testing.T) {
 	m, issue, capture := signoffTrackerModel(t)
 	_, cmd := m.Update(deskKey("a"))
 	if result := findQuickEditResult(t, cmd); result.err != nil {
 		t.Fatalf("approve failed: %v (%s)", result.err, result.output)
 	}
-	want := []string{"update", "--json", "--remove-label=needs-signoff", "--set-metadata=signoff=approved", "--", issue.Origin.LocalID}
+	want := []string{"signoff", "--json", "--approve", "--", issue.Origin.LocalID}
 	if ops := trackerOps(t, capture); len(ops) != 1 || !slices.Equal(ops[0], want) {
+		t.Fatalf("approve calls: %q", ops)
+	}
+	saved := readTrackerState(t)
+	if slices.Contains(saved.Labels, "needs-signoff") || !strings.Contains(string(saved.Metadata), `"signoff":"approved"`) {
+		t.Fatalf("state after approve: labels=%v meta=%s", saved.Labels, saved.Metadata)
+	}
+}
+
+func TestModelSignoffDisputeNative(t *testing.T) {
+	m, issue, capture := signoffTrackerModel(t)
+	m.Update(deskKey("d"))
+	for _, r := range "-q beat too loud" {
+		m.Update(deskKey(string(r)))
+	}
+	_, cmd := m.Update(deskKey("enter"))
+	result := findQuickEditResult(t, cmd)
+	if result.err != nil || result.createdID != "local-new" {
+		t.Fatalf("dispute failed: %v (%s) created=%q", result.err, result.output, result.createdID)
+	}
+	want := []string{"signoff", "--json", "--dispute=-q beat too loud", "--", issue.Origin.LocalID}
+	if ops := trackerOps(t, capture); len(ops) != 1 || !slices.Equal(ops[0], want) {
+		t.Fatalf("dispute calls: %q", ops)
+	}
+	if saved := readTrackerState(t); saved.Status != model.StatusClosed || !strings.Contains(string(saved.Metadata), `"signoff":"disputed"`) {
+		t.Fatalf("state after dispute: status=%s meta=%s", saved.Status, saved.Metadata)
+	}
+}
+
+func TestModelSignoffApproveFallback(t *testing.T) {
+	m, issue, capture := signoffTrackerModel(t)
+	t.Setenv("BV_TEST_TRACKER_MODE", "no-signoff")
+	_, cmd := m.Update(deskKey("a"))
+	if result := findQuickEditResult(t, cmd); result.err != nil {
+		t.Fatalf("approve failed: %v (%s)", result.err, result.output)
+	}
+	want := []string{"update", "--json", "--remove-label=needs-signoff", "--set-metadata=signoff=approved", "--", issue.Origin.LocalID}
+	if ops := trackerOps(t, capture); len(ops) != 2 || ops[0][0] != "signoff" || !slices.Equal(ops[1], want) {
 		t.Fatalf("approve calls: %q", ops)
 	}
 	saved := readTrackerState(t)
@@ -170,8 +207,9 @@ func TestModelSignoffApprove(t *testing.T) {
 	}
 }
 
-func TestModelSignoffDisputeFilesFollowUp(t *testing.T) {
+func TestModelSignoffDisputeFallbackFilesFollowUp(t *testing.T) {
 	m, issue, capture := signoffTrackerModel(t)
+	t.Setenv("BV_TEST_TRACKER_MODE", "no-signoff")
 	m.Update(deskKey("d"))
 	for _, r := range "beat too loud" {
 		m.Update(deskKey(string(r)))
@@ -183,6 +221,9 @@ func TestModelSignoffDisputeFilesFollowUp(t *testing.T) {
 	}
 	local := issue.Origin.LocalID
 	ops := trackerOps(t, capture)
+	if len(ops) > 0 && ops[0][0] == "signoff" {
+		ops = ops[1:] // the older bd refused signoff; the fallback follows
+	}
 	want := [][]string{
 		{"create", "--json", "--title=Dispute: " + issue.Title, "--description=beat too loud", "--deps=discovered-from:" + local, "--priority=2"},
 		{"comments", "add", "--", local, "Disputed: beat too loud (follow-up local-new)"},
@@ -218,8 +259,8 @@ func TestModelSignoffDisputeCreateFailureWritesNothingElse(t *testing.T) {
 	if !m.statusIsError || m.agentDesk.signDone[result.issueID] != "" {
 		t.Fatalf("failure: status=%q marker=%q", m.statusMsg, m.agentDesk.signDone[result.issueID])
 	}
-	if ops := trackerOps(t, capture); len(ops) != 1 || ops[0][0] != "create" {
-		t.Fatalf("nothing but the failed create may run: %q", ops)
+	if ops := trackerOps(t, capture); len(ops) != 2 || ops[0][0] != "signoff" || ops[1][0] != "create" {
+		t.Fatalf("nothing but the refused signoff and the failed create may run: %q", ops)
 	}
 }
 
