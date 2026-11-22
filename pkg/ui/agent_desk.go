@@ -19,6 +19,8 @@ const (
 	deskInbox    deskMode = iota // I: questions awaiting the user
 	deskPipeline                 // W: live in-progress work
 	deskMetrics                  // M: slice metrics per epic
+	deskSignoff                  // D: closed beads awaiting sign-off
+	deskModeCount
 )
 
 func (d deskMode) title() string {
@@ -27,6 +29,8 @@ func (d deskMode) title() string {
 		return "Pipeline"
 	case deskMetrics:
 		return "Slice metrics"
+	case deskSignoff:
+		return "Sign-off"
 	default:
 		return "Inbox"
 	}
@@ -42,6 +46,8 @@ const (
 	deskActionOpenURL                  // open URL in the browser
 	deskActionShowIssue                // select IssueID in the main list
 	deskActionStatus                   // show Status in the status bar
+	deskActionApprove                  // sign off IssueID
+	deskActionDispute                  // dispute IssueID with the note in Comment
 )
 
 // deskAction is the result of a key the desk handled.
@@ -89,6 +95,14 @@ type AgentDeskModel struct {
 	metrics     agentdesk.SliceReport
 	metCursor   int
 	generatedAt time.Time
+
+	signoffs   agentdesk.Signoffs
+	signItems  []agentdesk.SignoffItem
+	signRows   []signRow
+	signCursor int
+	signScroll int
+	signDone   map[string]string // id → "approved"/"disputed" while the write is in flight
+	disputing  bool
 }
 
 // NewAgentDeskModel creates an empty desk.
@@ -97,7 +111,7 @@ func NewAgentDeskModel(theme Theme) AgentDeskModel {
 	ti.Prompt = "Decision: "
 	ti.Placeholder = "type the answer, enter posts, esc goes back"
 	ti.CharLimit = 2000
-	return AgentDeskModel{theme: theme, input: ti, answered: map[string]string{}}
+	return AgentDeskModel{theme: theme, input: ti, answered: map[string]string{}, signDone: map[string]string{}}
 }
 
 // SetData rebuilds every tab from issues at now, keeping the inbox cursor on
@@ -147,6 +161,7 @@ func (d *AgentDeskModel) SetData(issues []model.Issue, now time.Time) {
 	d.pipeCursor = min(d.pipeCursor, max(0, len(d.pipeline.Rows)-1))
 	d.metrics = agentdesk.BuildSliceReport(issues)
 	d.metCursor = min(d.metCursor, max(0, len(d.metrics.Epics)-1))
+	d.setSignoffs(agentdesk.BuildSignoffs(issues), selected)
 }
 
 // SetSize records the body area.
@@ -154,19 +169,21 @@ func (d *AgentDeskModel) SetSize(width, height int) {
 	d.width, d.height = width, height
 	d.input.Width = max(10, width-len(d.input.Prompt)-4)
 	d.clampInbox()
+	d.clampSignoff()
 }
 
 // SetMode switches tabs.
 func (d *AgentDeskModel) SetMode(mode deskMode) {
 	d.mode = mode
 	d.stopAnswering()
+	d.stopDisputing()
 }
 
 // Mode returns the current tab.
 func (d AgentDeskModel) Mode() deskMode { return d.mode }
 
 // Typing reports whether the answer text input is capturing keys.
-func (d AgentDeskModel) Typing() bool { return d.answering && d.typing }
+func (d AgentDeskModel) Typing() bool { return (d.answering && d.typing) || d.disputing }
 
 // Answering reports whether the answer panel is open.
 func (d AgentDeskModel) Answering() bool { return d.answering }
@@ -181,6 +198,10 @@ func (d AgentDeskModel) SelectedIssueID() string {
 	case deskMetrics:
 		if d.metCursor >= 0 && d.metCursor < len(d.metrics.Epics) {
 			return d.metrics.Epics[d.metCursor].Epic
+		}
+	case deskSignoff:
+		if it := d.selectedSignoff(); it != nil {
+			return it.ID
 		}
 	default:
 		if it := d.selectedItem(); it != nil {
@@ -214,7 +235,9 @@ func (d AgentDeskModel) StatusLine() string {
 	case deskPipeline:
 		return fmt.Sprintf("Pipeline: %d in progress • %d stale • enter shows bead • tab/I/M switch • q closes", d.pipeline.Total, d.pipeline.Stale)
 	case deskMetrics:
-		return fmt.Sprintf("Slice metrics: %d slices in %d epics • %d escaped bugs • tab/I/W switch • q closes", d.metrics.Total.Slices, len(d.metrics.Epics), d.metrics.Total.EscapedBugs)
+		return fmt.Sprintf("Slice metrics: %d slices in %d epics • %d escaped bugs • tab/I/W/D switch • q closes", d.metrics.Total.Slices, len(d.metrics.Epics), d.metrics.Total.EscapedBugs)
+	case deskSignoff:
+		return fmt.Sprintf("Sign-off: %d closed beads await you • a approve • d dispute • s skip • 1-9 open link • q closes", d.signoffs.Total)
 	default:
 		return fmt.Sprintf("Inbox: %d awaiting you • %d ready to judge • enter answers • 1-9 open link • tab/W/M switch • q closes", d.inbox.Total, d.inbox.Ready)
 	}
@@ -227,15 +250,27 @@ func (d *AgentDeskModel) Update(msg tea.KeyMsg) (deskAction, tea.Cmd, bool) {
 		action, cmd := d.updateAnswer(msg)
 		return action, cmd, true
 	}
+	if d.disputing {
+		action, cmd := d.updateDispute(msg)
+		return action, cmd, true
+	}
 	key := msg.String()
+	if d.mode == deskSignoff {
+		if action, handled := d.updateSignoff(key); handled {
+			return action, nil, true
+		}
+	}
 	switch key {
 	case "q", "esc":
 		return deskAction{Kind: deskActionClose}, nil, true
 	case "tab":
-		d.SetMode((d.mode + 1) % 3)
+		d.SetMode((d.mode + 1) % deskModeCount)
 		return deskAction{}, nil, true
 	case "shift+tab":
-		d.SetMode((d.mode + 2) % 3)
+		d.SetMode((d.mode + deskModeCount - 1) % deskModeCount)
+		return deskAction{}, nil, true
+	case "D":
+		d.SetMode(deskSignoff)
 		return deskAction{}, nil, true
 	case "I":
 		d.SetMode(deskInbox)
@@ -292,6 +327,9 @@ func (d *AgentDeskModel) move(delta int) {
 		d.pipeCursor = clampInt(d.pipeCursor+delta, 0, len(d.pipeline.Rows)-1)
 	case deskMetrics:
 		d.metCursor = clampInt(d.metCursor+delta, 0, len(d.metrics.Epics)-1)
+	case deskSignoff:
+		d.signCursor = clampInt(d.signCursor+delta, 0, len(d.signItems)-1)
+		d.clampSignoff()
 	default:
 		d.cursor = clampInt(d.cursor+delta, 0, len(d.items)-1)
 		d.clampInbox()
@@ -451,8 +489,11 @@ func (d AgentDeskModel) previewHeight() int {
 // listHeight is the number of rows the upper table shows.
 func (d AgentDeskModel) listHeight() int {
 	h := d.height - 2 // tab bar + header
-	if d.mode == deskInbox {
+	switch d.mode {
+	case deskInbox:
 		h -= d.previewHeight() + 1
+	case deskSignoff:
+		h -= d.signoffPreviewHeight() + 1
 	}
 	return max(1, h)
 }
@@ -495,6 +536,8 @@ func (d AgentDeskModel) View() string {
 		b.WriteString(d.renderPipeline(width))
 	case deskMetrics:
 		b.WriteString(d.renderMetrics(width))
+	case deskSignoff:
+		b.WriteString(d.renderSignoff(width))
 	default:
 		b.WriteString(d.renderInbox(width))
 	}
@@ -506,7 +549,7 @@ func (d AgentDeskModel) renderTabs(width int) string {
 	for _, m := range []struct {
 		mode deskMode
 		key  string
-	}{{deskInbox, "I"}, {deskPipeline, "W"}, {deskMetrics, "M"}} {
+	}{{deskInbox, "I"}, {deskPipeline, "W"}, {deskMetrics, "M"}, {deskSignoff, "D"}} {
 		label := fmt.Sprintf(" %s %s ", m.key, m.mode.title())
 		switch m.mode {
 		case deskInbox:
@@ -517,6 +560,8 @@ func (d AgentDeskModel) renderTabs(width int) string {
 				label += fmt.Sprintf(", %d stale", d.pipeline.Stale)
 			}
 			label += ") "
+		case deskSignoff:
+			label = fmt.Sprintf(" %s Sign-off (%d) ", m.key, d.signoffs.Total)
 		}
 		if m.mode == d.mode {
 			label = d.theme.Selected.Render(label)

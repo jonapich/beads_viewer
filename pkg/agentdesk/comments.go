@@ -100,6 +100,13 @@ func (p ParsedComment) Expanded() string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
+		if list, ok := p.Data[k].([]any); ok && allScalars(list) {
+			fmt.Fprintf(&sb, "%s:\n", k)
+			for _, e := range list {
+				fmt.Fprintf(&sb, "  - %s\n", scalar(e))
+			}
+			continue
+		}
 		v := scalar(p.Data[k])
 		if v == "" {
 			raw, _ := json.Marshal(p.Data[k])
@@ -108,6 +115,15 @@ func (p ParsedComment) Expanded() string {
 		fmt.Fprintf(&sb, "%s: %s\n", k, v)
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+func allScalars(list []any) bool {
+	for _, e := range list {
+		if scalar(e) == "" {
+			return false
+		}
+	}
+	return len(list) > 0
 }
 
 // scalar renders strings, numbers and bools; other values give "".

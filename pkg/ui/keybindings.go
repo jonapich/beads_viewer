@@ -255,6 +255,7 @@ func GetKeyBindingDocs() []KeyBindingDoc {
 		{"I", "Agent desk: inbox (beads awaiting you)", "Views", "list,detail"},
 		{"W", "Agent desk: live pipeline (in-progress stages)", "Views", "list,detail"},
 		{"M", "Agent desk: slice metrics per epic", "Views", "list,detail"},
+		{"D", "Agent desk: closed beads awaiting sign-off", "Views", "list,detail"},
 		{"z", "Expand/collapse handoff comments", "Views", "list,detail"},
 		{"!", "Alerts panel", "Views", "list"},
 		{"w", "Repo picker (workspace mode)", "Views", "list"},
@@ -388,6 +389,9 @@ func GetKeyBindingDocs() []KeyBindingDoc {
 		{"1-9", "Open link N of the selected bead in the browser", "Desk", "desk"},
 		{"o", "Open the mock/artifact link (else the first link)", "Desk", "desk"},
 		{"v", "Show the selected bead in the list", "Desk", "desk"},
+		{"a", "Sign-off: approve (removes needs-signoff)", "Desk", "desk"},
+		{"d", "Sign-off: dispute with a note (files a follow-up bead)", "Desk", "desk"},
+		{"s", "Sign-off: skip to the next bead", "Desk", "desk"},
 
 		// Label Dashboard ([)
 		{"g", "Go to top", "Label", "label"},

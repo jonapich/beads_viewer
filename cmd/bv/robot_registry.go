@@ -250,6 +250,7 @@ type phaseThreeRobotHandlerConfig struct {
 	RobotInboxFlag          *bool
 	RobotPipelineFlag       *bool
 	RobotSliceMetricsFlag   *bool
+	RobotSignoffFlag        *bool
 	StaleAfter              *string
 	CapacityAgents          *int
 	CapacityLabel           *string
@@ -736,6 +737,7 @@ func configuredPrimaryRobotFlagNames() []string {
 		RobotInboxFlag:          &dummyBool,
 		RobotPipelineFlag:       &dummyBool,
 		RobotSliceMetricsFlag:   &dummyBool,
+		RobotSignoffFlag:        &dummyBool,
 		GraphRoot:               &dummyStr,
 		BeadHistoryFlag:         &dummyStr,
 		RobotExplainCorrFlag:    &dummyStr,
@@ -2410,6 +2412,7 @@ func registerPhaseThreeRobotHandlers(registry *RobotRegistry, cfg phaseThreeRobo
 		return handleRobotPipeline(ctx, cfg)
 	})
 	register("robot-slice-metrics", cfg.RobotSliceMetricsFlag, "Output per-epic slice metrics as JSON", handleRobotSliceMetrics)
+	register("robot-signoff", cfg.RobotSignoffFlag, "Output closed beads pending the user's sign-off as JSON", handleRobotSignoff)
 }
 
 func attachSourceDiffsForContext(calc *drift.Calculator, ctx RobotContext, maxAlerts int) {

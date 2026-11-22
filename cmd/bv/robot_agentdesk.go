@@ -101,6 +101,67 @@ func handleRobotSliceMetrics(ctx RobotContext) error {
 	return nil
 }
 
+// handleRobotSignoff emits the closed beads pending the user's sign-off,
+// newest first per epic, with the signoff comment's parts.
+func handleRobotSignoff(ctx RobotContext) error {
+	signoffs := agentdesk.BuildSignoffs(agentdeskIssues(ctx))
+	if signoffs.Groups == nil {
+		signoffs.Groups = []agentdesk.SignoffGroup{}
+	}
+	output := struct {
+		RobotEnvelope
+		Total  int                      `json:"total"`
+		Groups []agentdesk.SignoffGroup `json:"groups"`
+	}{
+		RobotEnvelope: ctx.Envelope(),
+		Total:         signoffs.Total,
+		Groups:        signoffs.Groups,
+	}
+	if err := ctx.EncoderOrDefault().Encode(output); err != nil {
+		return fmt.Errorf("encoding signoff: %w", err)
+	}
+	return nil
+}
+
+func robotSignoffSchema() map[string]interface{} {
+	link := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"kind": schemaStr(), "url": schemaStr(), "note": schemaStr(),
+			"at": schemaTime(), "by": schemaStr(), "source": schemaStr(),
+		},
+		"required": []string{"kind", "url", "source"},
+	}
+	lines := schemaArrayOf(schemaStr())
+	item := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"id": schemaStr(), "title": schemaStr(), "epic": schemaStr(), "priority": schemaInt(),
+			"closed_at": schemaTime(), "state": schemaStr(), "has_signoff_comment": schemaBool(),
+			"calls_made": lines, "what_changed": lines, "removed_or_renamed": lines, "where_to_see": lines,
+			"commits": lines, "captures": lines, "links": schemaArrayOf(link), "raw": schemaStr(),
+		},
+		"required": []string{"id", "title", "priority", "state", "has_signoff_comment"},
+	}
+	group := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"epic": schemaStr(), "epic_title": schemaStr(), "items": schemaArrayOf(item),
+		},
+		"required": []string{"epic", "items"},
+	}
+	return map[string]interface{}{
+		"$schema":     "https://json-schema.org/draft/2020-12/schema",
+		"title":       "Robot Signoff Output",
+		"description": "Closed beads pending the user's sign-off (needs-signoff label or metadata signoff=pending), newest first per epic",
+		"type":        "object",
+		"properties": agentdeskEnvelopeProps(map[string]interface{}{
+			"total": schemaInt(), "groups": schemaArrayOf(group),
+		}),
+		"required": []string{"generated_at", "data_hash", "total", "groups"},
+	}
+}
+
 func schemaStr() map[string]interface{}  { return map[string]interface{}{"type": "string"} }
 func schemaInt() map[string]interface{}  { return map[string]interface{}{"type": "integer"} }
 func schemaBool() map[string]interface{} { return map[string]interface{}{"type": "boolean"} }

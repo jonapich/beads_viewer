@@ -1412,6 +1412,7 @@ type Model struct {
 	attentionView            AttentionModel // ] ranked label attention view (bv-117)
 	agentDesk                AgentDeskModel // I/W/M agent desk: inbox, pipeline, slice metrics
 	expandHandoffs           bool           // z: show handoff (structured) comments in full in the detail pane
+	deskBadges               deskBadgeCache // footer counts: beads awaiting you, sign-offs pending
 	attentionCache           analysis.LabelAttentionResult
 	attentionCached          bool
 	showShortcutsSidebar     bool // bv-3qi5 toggleable shortcuts sidebar
@@ -3362,9 +3363,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.brUpdateInFlight = false
 		if msg.err != nil {
 			m.agentDesk.ClearAnswered(msg.issueID)
+			m.agentDesk.ClearSignedOff(msg.issueID)
 			message := fmt.Sprintf("%s failed: %v", msg.summary, msg.err)
 			if msg.output != "" {
 				message += " — " + msg.output
+			}
+			if msg.createdID != "" {
+				message += fmt.Sprintf(" (follow-up %s was created)", msg.createdID)
 			}
 			m.editorFailure(message, "")
 			return m, nil
@@ -6601,7 +6606,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (enabling cross-view switching, e.g. 'g' from board -> graph).
 			// ═══════════════════════════════════════════════════════════════
 			switch msg.String() {
-			case "b", "g", "a", "i", "E", "f", "[", "]", "I", "W", "M":
+			case "b", "g", "a", "i", "E", "f", "[", "]", "I", "W", "M", "D":
 				if !m.isSplitView {
 					m.showDetails = false
 				}
@@ -6746,9 +6751,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, m.enterHistoryView()
 
-			case "I", "W", "M":
-				// Agent desk: I inbox, W pipeline, M slice metrics
-				m.openAgentDesk(map[string]deskMode{"I": deskInbox, "W": deskPipeline, "M": deskMetrics}[msg.String()])
+			case "I", "W", "M", "D":
+				// Agent desk: I inbox, W pipeline, M slice metrics, D sign-off
+				m.openAgentDesk(map[string]deskMode{"I": deskInbox, "W": deskPipeline, "M": deskMetrics, "D": deskSignoff}[msg.String()])
 				return m, nil
 
 			case "z":
@@ -10411,6 +10416,12 @@ func (m *Model) renderFooter() string {
 			blockedCount,
 			closedStyle.Render("●"),
 			closedCount)
+		if awaiting, signoff := m.deskBadgeCounts(); awaiting+signoff > 0 {
+			statsContent += " " + readyStyle.Render(fmt.Sprintf("✋%d", awaiting))
+			if signoff > 0 {
+				statsContent += " " + blockedStyle.Render(fmt.Sprintf("✍%d", signoff))
+			}
+		}
 		statsSection = statsStyle.Render(statsContent)
 	}
 
@@ -11064,6 +11075,7 @@ const closeCandidateLabel = "close-candidate"
 // quickEditResultMsg reports a single-key tracker update (priority, label).
 type quickEditResultMsg struct {
 	issueID    string
+	createdID  string // issue created by a captureID op (dispute follow-up)
 	summary    string
 	output     string
 	err        error
@@ -11116,9 +11128,45 @@ func (m *Model) runQuickEdit(issue *model.Issue, flags []string, summary string)
 }
 
 // trackerOp is one tracker invocation: `<tracker> <args...> -- <id> <trailing...>`.
+// With noTarget the `-- <id>` part is left out. With captureID the issue ID
+// in the op's JSON output replaces "{new}" in the args of later ops.
 type trackerOp struct {
-	args     []string
-	trailing []string
+	args      []string
+	trailing  []string
+	noTarget  bool
+	captureID bool
+}
+
+// createdIssueID reads the issue ID from a tracker's `create --json` output,
+// which is an object or a one-element array.
+func createdIssueID(out []byte) (string, error) {
+	out = bytes.TrimSpace(out)
+	var one struct {
+		ID string `json:"id"`
+	}
+	if len(out) > 0 && out[0] == '[' {
+		var many []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(out, &many); err != nil || len(many) == 0 {
+			return "", fmt.Errorf("tracker create returned no issue")
+		}
+		one.ID = many[0].ID
+	} else if err := json.Unmarshal(out, &one); err != nil {
+		return "", fmt.Errorf("tracker create output is not JSON: %w", err)
+	}
+	if one.ID == "" {
+		return "", fmt.Errorf("tracker create returned no issue id")
+	}
+	return one.ID, nil
+}
+
+func substituteNewID(values []string, id string) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = strings.ReplaceAll(v, "{new}", id)
+	}
+	return out
 }
 
 // runTrackerOps runs each operation against the issue's own tracker in order,
@@ -11145,10 +11193,21 @@ func (m *Model) runTrackerOps(issue *model.Issue, ops []trackerOp, summary strin
 		ctx, cancel := context.WithTimeout(context.Background(), brUpdateTimeout)
 		defer cancel()
 		result := quickEditResultMsg{issueID: issue.ID, summary: summary}
+		newID := ""
 		for _, op := range ops {
-			args := append(append(append([]string{}, op.args...), "--", origin.LocalID), op.trailing...)
-			if _, result.output, result.err = runEditorTracker(ctx, origin, true, args...); result.err != nil {
+			args := substituteNewID(op.args, newID)
+			if !op.noTarget {
+				args = append(append(args, "--", origin.LocalID), substituteNewID(op.trailing, newID)...)
+			}
+			var out []byte
+			if out, result.output, result.err = runEditorTracker(ctx, origin, true, args...); result.err != nil {
 				break
+			}
+			if op.captureID {
+				if newID, result.err = createdIssueID(out); result.err != nil {
+					break
+				}
+				result.createdID = newID
 			}
 		}
 		if result.err == nil && (origin.Tracker == "bd" || sourcePath == "" || strings.EqualFold(filepath.Ext(sourcePath), ".jsonl")) {
@@ -12218,6 +12277,8 @@ func (m *Model) updateViewportContent() {
 	if len(item.Labels) > 0 {
 		sb.WriteString(fmt.Sprintf("**Labels:** %s\n\n", strings.Join(item.Labels, ", ")))
 	}
+	// A bead awaiting sign-off leads with its signoff comment, in full.
+	sb.WriteString(renderSignoffMD(item))
 	if names := recipeMetricNames(m.activeRecipe); len(names) > 0 {
 		sb.WriteString("### Recipe Metrics\n\n")
 		for _, name := range names {

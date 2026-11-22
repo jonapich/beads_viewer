@@ -466,6 +466,8 @@ func inferAgentFlagContext(args []string) string {
 			detected = "pipeline"
 		case "robot-slice-metrics":
 			detected = "slice-metrics"
+		case "robot-signoff":
+			detected = "signoff"
 		case "robot-file-beads":
 			detected = "file-beads"
 		case "robot-commit":
@@ -542,6 +544,8 @@ func rewriteAgentIntentCommand(args []string) ([]string, bool) {
 		return append([]string{"--robot-pipeline"}, rewriteAgentIntentFlagAliases(rest, "pipeline")...), true
 	case "slice-metrics", "slices":
 		return append([]string{"--robot-slice-metrics"}, rewriteAgentIntentFlagAliases(rest, "slice-metrics")...), true
+	case "signoff", "sign-off":
+		return append([]string{"--robot-signoff"}, rewriteAgentIntentFlagAliases(rest, "signoff")...), true
 	case "hotspots", "file-hotspots":
 		return append([]string{"--robot-file-hotspots"}, rewriteAgentIntentFlagAliases(rest, "file-hotspots")...), true
 	case "orphans":
@@ -643,7 +647,7 @@ func rewriteCanonicalRobotCommandIntent(command string, rest []string) ([]string
 	switch command {
 	case "robot-help":
 		return append([]string{"--robot-help"}, rewriteAgentIntentFlagAliases(rest, "help")...), true
-	case "robot-triage", "robot-triage-by-track", "robot-triage-by-label", "robot-next", "robot-plan", "robot-insights", "robot-priority", "robot-alerts", "robot-suggest", "robot-recipes", "robot-metrics", "robot-label-health", "robot-label-flow", "robot-label-attention", "robot-file-hotspots", "robot-sprint-list", "robot-capacity", "robot-capabilities", "robot-orphans", "robot-correlation-stats", "robot-inbox", "robot-pipeline", "robot-slice-metrics":
+	case "robot-triage", "robot-triage-by-track", "robot-triage-by-label", "robot-next", "robot-plan", "robot-insights", "robot-priority", "robot-alerts", "robot-suggest", "robot-recipes", "robot-metrics", "robot-label-health", "robot-label-flow", "robot-label-attention", "robot-file-hotspots", "robot-sprint-list", "robot-capacity", "robot-capabilities", "robot-orphans", "robot-correlation-stats", "robot-inbox", "robot-pipeline", "robot-slice-metrics", "robot-signoff":
 		context := strings.TrimPrefix(command, "robot-")
 		return append([]string{"--" + command}, rewriteAgentIntentFlagAliases(rest, context)...), true
 	case "robot-docs":
@@ -1665,6 +1669,7 @@ func main() {
 	robotInbox := flag.Bool("robot-inbox", false, "Output beads awaiting the user (needs-decision/needs-design) as JSON")
 	robotPipeline := flag.Bool("robot-pipeline", false, "Output in-progress beads with stage, session and staleness as JSON")
 	robotSliceMetrics := flag.Bool("robot-slice-metrics", false, "Output per-epic slice metrics as JSON")
+	robotSignoff := flag.Bool("robot-signoff", false, "Output closed beads pending the user's sign-off as JSON")
 	staleAfter := flag.String("stale-after", "", "Staleness threshold for --robot-pipeline as a Go duration (e.g. 2h; default 2h)")
 	robotAlerts := flag.Bool("robot-alerts", false, "Output alerts (drift + proactive) as JSON for AI agents")
 	robotMetrics := flag.Bool("robot-metrics", false, "Output performance metrics (timing, cache, memory) as JSON")
@@ -1894,6 +1899,7 @@ func main() {
 		RobotInboxFlag:          robotInbox,
 		RobotPipelineFlag:       robotPipeline,
 		RobotSliceMetricsFlag:   robotSliceMetrics,
+		RobotSignoffFlag:        robotSignoff,
 		StaleAfter:              staleAfter,
 		RobotOrphansFlag:        robotOrphans,
 		OrphansMinScore:         orphansMinScore,
@@ -2097,6 +2103,7 @@ func main() {
 			{flags: []string{"robot-inbox"}},
 			{flags: []string{"robot-pipeline"}},
 			{flags: []string{"robot-slice-metrics"}},
+			{flags: []string{"robot-signoff"}},
 			{flags: []string{"robot-alerts"}},
 			{flags: []string{"robot-metrics"}},
 			{flags: []string{"robot-schema"}},
@@ -3756,6 +3763,7 @@ func main() {
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-inbox", robotDispatchContext)
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-pipeline", robotDispatchContext)
 		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-slice-metrics", robotDispatchContext)
+		dispatchRobotFlagOrExit(&phaseThreeRobotRegistry, "robot-signoff", robotDispatchContext)
 
 		// Handle --robot-label-health
 		// Handle --robot-label-flow (can be used stand-alone to avoid full health computation)
@@ -9073,6 +9081,12 @@ func robotCommandDocs() map[string]robotCommandDoc {
 			KeyFields:   []string{"total", "epics", "epics[].epic", "unmatched_escapes"},
 			NeedsIssues: true,
 		},
+		"robot-signoff": {
+			Flag:        "--robot-signoff",
+			Description: "Closed beads pending the user's sign-off (needs-signoff), newest first per epic, with the signoff comment's calls made, changes, removals, where to see it, links, captures and commits.",
+			KeyFields:   []string{"total", "groups", "groups[].items", "groups[].items[].calls_made", "groups[].items[].commits"},
+			NeedsIssues: true,
+		},
 		"robot-graph": {
 			Flag: "--robot-graph", Description: "Dependency graph export in JSON, DOT, or Mermaid format.",
 			Params:      []string{"--graph-format json|dot|mermaid", "--graph-root <id>", "--graph-depth <n>"},
@@ -9289,6 +9303,8 @@ func preferredRobotInvocationOverride(commandName string) string {
 		return "bv robot-pipeline --stale-after 2h"
 	case "robot-slice-metrics":
 		return "bv robot-slice-metrics"
+	case "robot-signoff":
+		return "bv robot-signoff"
 	case "robot-graph":
 		return "bv robot-graph mermaid"
 	case "robot-orphans":
@@ -10207,6 +10223,7 @@ func generateRobotSchemas() RobotSchemas {
 		"robot-inbox":         robotInboxSchema(),
 		"robot-pipeline":      robotPipelineSchema(),
 		"robot-slice-metrics": robotSliceMetricsSchema(),
+		"robot-signoff":       robotSignoffSchema(),
 		"robot-sprint-list": {
 			"$schema":     "https://json-schema.org/draft/2020-12/schema",
 			"title":       "Robot Sprint List Output",

@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,9 @@ import (
 // listed one per line.
 func renderCommentMD(c *model.Comment, when string, expand bool) string {
 	parsed := agentdesk.ParseComment(c.Text)
+	if parsed.Kind == agentdesk.KindSignoff {
+		expand = true // a signoff is meant to be read, never collapsed
+	}
 	if !parsed.Collapsible() {
 		return fmt.Sprintf("> **%s** (%s)\n> \n> %s\n\n", c.Author, when, strings.ReplaceAll(c.Text, "\n", "\n> "))
 	}
@@ -27,6 +32,45 @@ func renderCommentMD(c *model.Comment, when string, expand bool) string {
 		kind = "json"
 	}
 	return fmt.Sprintf("> **%s** (%s) ▾ %s\n> \n> ```\n> %s\n> ```\n\n", c.Author, when, kind, strings.ReplaceAll(parsed.Expanded(), "\n", "\n> "))
+}
+
+// renderSignoffMD renders the sign-off section that leads the detail pane of
+// a closed bead pending sign-off: calls made on the user's behalf first, then
+// the other parts, captures and commits. It returns "" for any other bead.
+func renderSignoffMD(issue model.Issue) string {
+	if !model.IsClosedLikeStatus(issue.Status) || agentdesk.SignoffState(issue) != agentdesk.SignoffPending {
+		return ""
+	}
+	s := agentdesk.ParseSignoff(issue)
+	var sb strings.Builder
+	sb.WriteString("### ✍ Awaiting your sign-off (agent desk: D)\n\n")
+	if !s.HasComment {
+		sb.WriteString("_No `bd-kind: signoff` comment on this bead._\n\n")
+	}
+	for _, part := range []struct {
+		title string
+		lines []string
+	}{
+		{"Calls made on your behalf", s.CallsMade},
+		{"What changed", s.WhatChanged},
+		{"Removed or renamed", s.RemovedOrRenamed},
+		{"Where to see it", s.WhereToSee},
+		{"Captures", s.Captures},
+		{"Commits", s.Commits},
+	} {
+		if len(part.lines) == 0 {
+			continue
+		}
+		fmt.Fprintf(&sb, "**%s**\n", part.title)
+		for _, l := range part.lines {
+			fmt.Fprintf(&sb, "- %s\n", l)
+		}
+		sb.WriteString("\n")
+	}
+	if s.Raw != "" {
+		fmt.Fprintf(&sb, "%s\n\n", s.Raw)
+	}
+	return sb.String()
 }
 
 // renderLinksMD lists the bead's links for the detail pane (typed links
@@ -52,6 +96,47 @@ func renderLinksMD(issue model.Issue) string {
 	}
 	sb.WriteString("\n")
 	return sb.String()
+}
+
+// deskBadgeCache holds the footer's agent-desk counts for one issue slice, so
+// metadata is decoded once per load rather than once per frame.
+type deskBadgeCache struct {
+	valid              bool
+	gen                uint64 // semanticDataGeneration: bumps on every dataset update
+	first              *model.Issue
+	n                  int
+	awaiting, signoffs int
+}
+
+// deskBadgeCounts returns the number of open beads awaiting the user
+// (needs-decision / needs-design) and of closed beads pending sign-off.
+func (m *Model) deskBadgeCounts() (awaiting, signoffs int) {
+	issues := m.repoScopedIssues()
+	var first *model.Issue
+	if len(issues) > 0 {
+		first = &issues[0]
+	}
+	c := &m.deskBadges
+	if c.valid && c.gen == m.semanticDataGeneration && c.first == first && c.n == len(issues) {
+		return c.awaiting, c.signoffs
+	}
+	*c = deskBadgeCache{valid: true, gen: m.semanticDataGeneration, first: first, n: len(issues)}
+	for i := range issues {
+		issue := issues[i]
+		if model.IsClosedLikeStatus(issue.Status) {
+			if agentdesk.SignoffState(issue) == agentdesk.SignoffPending {
+				c.signoffs++
+			}
+			continue
+		}
+		for _, l := range agentdesk.AwaitingLabels {
+			if slices.Contains(issue.Labels, l) {
+				c.awaiting++
+				break
+			}
+		}
+	}
+	return c.awaiting, c.signoffs
 }
 
 // deskNow is the instant pipeline ages are measured from: wall-clock time,
@@ -129,8 +214,48 @@ func (m *Model) handleAgentDeskKeys(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 	case deskActionAnswer:
 		return tea.Batch(cmd, m.postDeskAnswer(action)), true
+	case deskActionApprove:
+		return tea.Batch(cmd, m.signoffDeskBead(action.IssueID, agentdesk.SignoffApproved, "")), true
+	case deskActionDispute:
+		return tea.Batch(cmd, m.signoffDeskBead(action.IssueID, agentdesk.SignoffDisputed, action.Comment)), true
 	}
 	return cmd, true
+}
+
+// signoffDeskBead approves or disputes a closed bead awaiting sign-off.
+// Approve removes needs-signoff and sets metadata signoff=approved. Dispute
+// first files a follow-up bead (discovered-from the closed one) with the
+// note as its description, then comments on the closed bead and marks it
+// disputed. The closed bead is never reopened.
+func (m *Model) signoffDeskBead(id, state, note string) tea.Cmd {
+	issue := m.resolveLiveIssue(id, nil)
+	if issue == nil {
+		m.statusMsg, m.statusIsError = "❌ "+id+" is no longer loaded", true
+		return nil
+	}
+	mark := []string{"update", "--json", "--remove-label=" + agentdesk.LabelNeedsSignoff, "--set-metadata=" + agentdesk.SignoffMetaKey + "=" + state}
+	var ops []trackerOp
+	summary := "Signed off " + issue.ID
+	if state == agentdesk.SignoffDisputed {
+		local := issue.ID
+		if issue.Origin != nil && issue.Origin.LocalID != "" {
+			local = issue.Origin.LocalID
+		}
+		ops = append(ops,
+			trackerOp{noTarget: true, captureID: true, args: []string{"create", "--json",
+				"--title=" + agentdesk.DisputeTitle(issue.Title), "--description=" + note,
+				"--deps=discovered-from:" + local, "--priority=" + strconv.Itoa(issue.Priority)}},
+			trackerOp{args: []string{"comments", "add"}, trailing: []string{"Disputed: " + note + " (follow-up {new})"}},
+		)
+		summary = "Disputed " + issue.ID + " (follow-up filed)"
+		mark = append(mark, "--set-metadata=signoff_note="+note, "--set-metadata=signoff_followup={new}")
+	}
+	ops = append(ops, trackerOp{args: mark})
+	cmd := m.runTrackerOps(issue, ops, summary)
+	if cmd != nil {
+		m.agentDesk.MarkSignedOff(issue.ID, state)
+	}
+	return cmd
 }
 
 // postDeskAnswer writes the answer comment and removes the awaiting label

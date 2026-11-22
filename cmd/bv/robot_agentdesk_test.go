@@ -152,3 +152,37 @@ func TestRobotSliceMetricsHandlerAndSchema(t *testing.T) {
 		t.Fatalf("unexpected epics: %v", epics)
 	}
 }
+
+func TestRobotSignoffHandlerAndSchema(t *testing.T) {
+	closed := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	issues := append(agentdeskTestIssues(time.Now().UTC()), model.Issue{
+		ID: "ep-1.4", Title: "Signed slice", Status: model.StatusClosed, IssueType: model.TypeTask, ClosedAt: &closed,
+		Labels:       []string{"needs-signoff"},
+		Dependencies: []*model.Dependency{{IssueID: "ep-1.4", DependsOnID: "ep-1", Type: model.DepParentChild}},
+		Comments: []*model.Comment{{Text: "bd-kind: signoff\n" +
+			`{"calls_made":["kept the stun look"],"what_changed":"beat built","commit":"a1b2c3d"}`}},
+	})
+	out := runAgentdeskHandler(t, handleRobotSignoff, issues)
+	requireOutputMatchesSchema(t, "robot-signoff", out)
+	if out["total"].(float64) != 1 {
+		t.Fatalf("total: %v", out["total"])
+	}
+	group := out["groups"].([]interface{})[0].(map[string]interface{})
+	item := group["items"].([]interface{})[0].(map[string]interface{})
+	itemProps := requireNestedSchemaProperties(t,
+		generateRobotSchemas().Commands["robot-signoff"]["properties"].(map[string]interface{})["groups"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["items"].(map[string]interface{})["items"],
+		"signoff item")
+	for key := range item {
+		if itemProps[key] == nil {
+			t.Errorf("signoff item key %q not in schema", key)
+		}
+	}
+	if group["epic"] != "ep-1" || item["id"] != "ep-1.4" || item["state"] != "pending" ||
+		item["calls_made"].([]interface{})[0] != "kept the stun look" || item["commits"].([]interface{})[0] != "a1b2c3d" {
+		t.Fatalf("unexpected signoff item: %v", item)
+	}
+	empty := runAgentdeskHandler(t, handleRobotSignoff, nil)
+	if groups, ok := empty["groups"].([]interface{}); !ok || len(groups) != 0 {
+		t.Fatalf("empty groups should be [], got %v", empty["groups"])
+	}
+}

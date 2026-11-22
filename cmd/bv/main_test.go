@@ -3313,6 +3313,7 @@ func TestRobotRegistry_TotalContract(t *testing.T) {
 		"robot-inbox":               {"--robot-inbox"},
 		"robot-pipeline":            {"--robot-pipeline"},
 		"robot-slice-metrics":       {"--robot-slice-metrics"},
+		"robot-signoff":             {"--robot-signoff"},
 		"robot-orphans":             {"--robot-orphans"},
 		"robot-file-beads":          {"--robot-file-beads", "src/app.go"},
 		"robot-commit":              {"--robot-commit", headSHA},

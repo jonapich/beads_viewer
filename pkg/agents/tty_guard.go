@@ -53,6 +53,7 @@ var canonicalRobotFlags = []string{
 	"robot-related",
 	"robot-schema",
 	"robot-search",
+	"robot-signoff",
 	"robot-slice-metrics",
 	"robot-sprint-list",
 	"robot-sprint-show",

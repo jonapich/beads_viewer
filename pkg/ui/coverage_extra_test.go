@@ -139,6 +139,12 @@ func runEditorTrackerTestProcess() bool {
 				issue.Assignee = value
 			case "remove-label":
 				issue.Labels = slices.DeleteFunc(issue.Labels, func(l string) bool { return l == value })
+			case "set-metadata":
+				meta := map[string]any{}
+				_ = json.Unmarshal(issue.Metadata, &meta)
+				k, v, _ := strings.Cut(value, "=")
+				meta[k] = v
+				issue.Metadata, _ = json.Marshal(meta)
 			}
 		}
 		issue.UpdatedAt = issue.UpdatedAt.Add(time.Second)
@@ -152,6 +158,12 @@ func runEditorTrackerTestProcess() bool {
 			}
 		}
 		fmt.Println(string(data))
+	case "create":
+		// create --json --title=... : the call is captured above; answer with a new id.
+		if mode == "create-fail" {
+			fail(fmt.Errorf("controlled create failure"))
+		}
+		fmt.Println(`{"id":"local-new"}`)
 	case "comments":
 		// comments add -- <id> <text>: record the comment on the state issue.
 		if mode == "comment-fail" {
