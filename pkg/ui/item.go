@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/search"
 )
 
 // DiffStatus represents the diff state of an issue in time-travel mode
@@ -62,34 +63,9 @@ func (i IssueItem) Description() string {
 	return fmt.Sprintf("%s %s • %s", i.Issue.ID, i.Issue.Status, i.Issue.Assignee)
 }
 
+// FilterValue is the text the default list filter matches; see search.FilterText.
 func (i IssueItem) FilterValue() string {
-	// Enhanced filter value including labels, assignee, and repo prefix
-	var sb strings.Builder
-	sb.WriteString(i.Issue.Title)
-	sb.WriteString(" ")
-	sb.WriteString(i.Issue.ID)
-	sb.WriteString(" ")
-	sb.WriteString(string(i.Issue.Status))
-	sb.WriteString(" ")
-	sb.WriteString(string(i.Issue.IssueType))
-
-	if i.Issue.Assignee != "" {
-		sb.WriteString(" ")
-		sb.WriteString(i.Issue.Assignee)
-	}
-
-	if len(i.Issue.Labels) > 0 {
-		sb.WriteString(" ")
-		sb.WriteString(strings.Join(i.Issue.Labels, " "))
-	}
-
-	// Include repo prefix for filtering
-	if i.RepoPrefix != "" {
-		sb.WriteString(" ")
-		sb.WriteString(i.RepoPrefix)
-	}
-
-	return sb.String()
+	return search.FilterText(i.Issue, i.RepoPrefix)
 }
 
 // ExtractRepoPrefix extracts the repository prefix from a namespaced issue ID.

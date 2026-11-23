@@ -13,6 +13,7 @@ import (
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/search"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
 )
 
@@ -331,5 +332,39 @@ func TestSnapshotLoadParityWithWorker(t *testing.T) {
 				t.Fatal("tree shape differs")
 			}
 		})
+	}
+}
+
+// The list filter text and the blocker helpers moved to pkg/search and
+// pkg/snapshot; the TUI entry points must keep returning exactly what they do.
+func TestFilterValueAndBlockerHelpersDelegate(t *testing.T) {
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	issues := parityIssues(now)
+	issues[1].Assignee = "ada"
+	issues[1].Labels = []string{"x", "y"}
+	item := IssueItem{Issue: issues[1], RepoPrefix: "par"}
+	if got, want := item.FilterValue(), search.FilterText(item.Issue, item.RepoPrefix); got != want {
+		t.Fatalf("FilterValue %q != search.FilterText %q", got, want)
+	}
+
+	m := NewModel(cloneIssuesForAsync(issues), nil, "")
+	t.Cleanup(m.Stop)
+	readiness := m.analyzer.Readiness()
+	for i := range m.issues {
+		issue := m.issues[i]
+		wantA, wantR := snapshot.BlockerCounts(m.issueMap, readiness, issue)
+		if a, r := m.countIssueBlockers(issue); a != wantA || r != wantR {
+			t.Errorf("%s: countIssueBlockers=%d/%d, snapshot.BlockerCounts=%d/%d", issue.ID, a, r, wantA, wantR)
+		}
+		if got, want := m.countActiveDependents(issue.ID), snapshot.ActiveDependentsCount(m.issues, issue.ID); got != want {
+			t.Errorf("%s: countActiveDependents=%d, want %d", issue.ID, got, want)
+		}
+	}
+	// par-d is blocked by par-b (blocked, open) and par-b by par-a: both active.
+	if a, r := m.countIssueBlockers(*m.issueMap["par-d"]); a != 1 || r != 0 {
+		t.Fatalf("par-d blockers = %d/%d, want 1/0", a, r)
+	}
+	if !m.isIssueBlockerUnsatisfied("par-d", "par-b") || m.isIssueBlockerUnsatisfied("par-d", "") {
+		t.Fatal("isIssueBlockerUnsatisfied wrong")
 	}
 }

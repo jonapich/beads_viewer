@@ -31,6 +31,7 @@ import (
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/recipe"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/search"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/updater"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/watcher"
@@ -15151,58 +15152,24 @@ func formatReloadDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
+// issueReadiness returns the analyzer's readiness index, or nil without one.
+func (m *Model) issueReadiness() *model.ReadinessIndex {
+	if m.analyzer == nil {
+		return nil
+	}
+	return m.analyzer.Readiness()
+}
+
 func (m *Model) isIssueBlockerUnsatisfied(issueID, blockerID string) bool {
-	if blockerID == "" {
-		return false
-	}
-	if blocker, ok := m.issueMap[blockerID]; ok && blocker != nil {
-		return !isClosedLikeStatus(blocker.Status) && blocker.Status != model.StatusTombstone
-	}
-	if m.analyzer != nil {
-		if r := m.analyzer.Readiness(); r != nil {
-			if iss, ok := m.issueMap[issueID]; ok && iss != nil && (isClosedLikeStatus(iss.Status) || iss.Status == model.StatusTombstone) {
-				return !slices.Contains(r.ResolvedIDs(), blockerID)
-			}
-			return slices.Contains(r.Blockers(issueID), blockerID)
-		}
-	}
-	return true
+	return snapshot.IsBlockerUnsatisfied(m.issueMap, m.issueReadiness(), issueID, blockerID)
 }
 
 func (m *Model) countIssueBlockers(issue model.Issue) (active int, resolved int) {
-	seen := make(map[string]bool, len(issue.Dependencies))
-	for _, dep := range issue.Dependencies {
-		if dep == nil || !dep.Type.IsBlocking() || dep.DependsOnID == "" || seen[dep.DependsOnID] {
-			continue
-		}
-		seen[dep.DependsOnID] = true
-		if m.isIssueBlockerUnsatisfied(issue.ID, dep.DependsOnID) {
-			active++
-		} else {
-			resolved++
-		}
-	}
-	return active, resolved
+	return snapshot.BlockerCounts(m.issueMap, m.issueReadiness(), issue)
 }
 
 func (m *Model) countActiveDependents(issueID string) int {
-	if issueID == "" {
-		return 0
-	}
-	count := 0
-	for i := range m.issues {
-		iss := &m.issues[i]
-		if isClosedLikeStatus(iss.Status) || iss.Status == model.StatusTombstone {
-			continue
-		}
-		for _, dep := range iss.Dependencies {
-			if dep != nil && dep.Type.IsBlocking() && dep.DependsOnID == issueID {
-				count++
-				break
-			}
-		}
-	}
-	return count
+	return snapshot.ActiveDependentsCount(m.issues, issueID)
 }
 
 // focusedIssueForSessions returns the issue the current view has selected:
