@@ -4,7 +4,6 @@ package ui
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1005,21 +1004,6 @@ func (w *BackgroundWorker) HandleRefreshRequest(msg RefreshRequestMsg) {
 		return
 	}
 	w.TriggerRefresh()
-}
-
-func recipeFingerprint(r *recipe.Recipe) string {
-	if r == nil {
-		return ""
-	}
-
-	b, err := json.Marshal(r)
-	if err != nil {
-		// Fall back to name-only to preserve determinism.
-		return r.Name
-	}
-
-	sum := sha256.Sum256(b)
-	return fmt.Sprintf("%x", sum[:])
 }
 
 // SetProjectDir updates the project root directory used to resolve .bv/ config

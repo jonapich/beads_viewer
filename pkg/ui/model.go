@@ -1115,17 +1115,6 @@ func resolveHistoryCorrelationPath(beadsPath, repoPath string) string {
 	return beadsPath
 }
 
-func cloneIssuesForAsync(issues []model.Issue) []model.Issue {
-	if len(issues) == 0 {
-		return nil
-	}
-	clones := make([]model.Issue, len(issues))
-	for i := range issues {
-		clones[i] = issues[i].Clone()
-	}
-	return clones
-}
-
 // ReadinessScope keeps selected work separate from graph context. A nil
 // CandidateIDs map selects all issues; an empty map selects no work.
 type ReadinessScope struct {
