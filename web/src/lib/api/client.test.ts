@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getMeta, getMetaIfChanged } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -42,6 +42,23 @@ describe("api client", () => {
   it("returns data and the etag on a changed conditional GET", async () => {
     fetchMock.mockResolvedValue(json({ n: 1 }, { headers: { ETag: '"v2"' } }));
     await expect(getJSONIfChanged("/api/v1/x", null)).resolves.toEqual({ data: { n: 1 }, etag: '"v2"' });
+  });
+
+  it("getMeta reads /api/v1/meta", async () => {
+    fetchMock.mockResolvedValue(json({ phase2_ready: false }));
+    await expect(getMeta()).resolves.toEqual({ phase2_ready: false });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/meta");
+  });
+
+  it("getMetaIfChanged sends the etag and resolves null on 304", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    await expect(getMetaIfChanged('"h-p1"')).resolves.toBeNull();
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/meta");
+    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe('"h-p1"');
+
+    fetchMock.mockResolvedValue(json({ phase2_ready: true }, { headers: { ETag: '"h-p2"' } }));
+    await expect(getMetaIfChanged('"h-p1"')).resolves.toEqual({ data: { phase2_ready: true }, etag: '"h-p2"' });
   });
 
   it("maps 401 to signed-out with the server's error code", async () => {

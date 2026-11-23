@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/internal/datasource"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
@@ -25,7 +26,8 @@ type Source struct {
 	AuthorityComplete bool
 }
 
-func isSQLitePath(path string) bool {
+// IsSQLitePath reports whether path names a SQLite database by extension.
+func IsSQLitePath(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".db", ".sqlite", ".sqlite3":
 		return true
@@ -97,7 +99,7 @@ func LoadSourceSync(path string, opts loader.ParseOptions, degraded bool) (Sourc
 		complete = false
 	}
 	loader.AttachIssueOrigins(loaded.Issues, path, complete)
-	if !isSQLitePath(path) && len(loaded.Issues) > 0 {
+	if !IsSQLitePath(path) && len(loaded.Issues) > 0 {
 		if orig := loaded.Issues[0].Origin; orig != nil && orig.Tracker == "br" && orig.Database != "" {
 			sibSrc := datasource.DataSource{Type: datasource.SourceTypeSQLite, Path: orig.Database}
 			if datasource.ValidateSource(&sibSrc) != nil {
@@ -139,7 +141,7 @@ func LoadSource(ctx context.Context, path string, opts loader.ParseOptions, degr
 	if err := ctx.Err(); err != nil {
 		return Source{}, err
 	}
-	if !isSQLitePath(path) {
+	if !IsSQLitePath(path) {
 		loaded, err := LoadSourceSync(path, opts, degraded)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			loader.ReturnIssuePtrsToPool(loaded.PoolRefs)
@@ -210,7 +212,7 @@ func CountSource(ctx context.Context, path string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	if !isSQLitePath(path) {
+	if !IsSQLitePath(path) {
 		count, err := CountSourceSync(path)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return 0, ctxErr
@@ -328,6 +330,11 @@ type LoadOptions struct {
 	// AnalysisContext bounds the background Phase 2 analysis. Bind it to the
 	// owner's lifetime (server or store), not to a request. nil = never cancelled.
 	AnalysisContext context.Context
+	// Now overrides the analyzer's reference instant, which drives time-gated
+	// readiness, scoring and Snapshot.ReferenceTime. The zero value means the
+	// wall clock (or SOURCE_DATE_EPOCH), as before. Tests and golden fixtures
+	// set it to get deterministic output through the real Load path.
+	Now time.Time
 }
 
 // Load reads beadsPath and builds a Phase 1 Snapshot the way the TUI's
@@ -381,6 +388,9 @@ func Load(ctx context.Context, beadsPath string, opts LoadOptions) (*Snapshot, e
 		WithConfig(ConfigForTier(tier))
 	if opts.AnalysisContext != nil {
 		b.WithContext(opts.AnalysisContext)
+	}
+	if !opts.Now.IsZero() {
+		b.Analyzer().SetNow(opts.Now)
 	}
 	s := b.Build()
 

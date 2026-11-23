@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,6 +66,10 @@ func newServeTestFlagSet() *flag.FlagSet {
 	fs.Bool("robot-triage", false, "")
 	fs.String("export-pages", "", "")
 	fs.Bool("pages", false, "")
+	fs.String("workspace", "", "")
+	fs.String("as-of", "", "")
+	fs.StringP("label", "l", "", "")
+	fs.String("repo", "", "")
 	return fs
 }
 
@@ -107,6 +113,14 @@ func TestServeFlagValidation(t *testing.T) {
 	}
 	if err := validateServeFlags(parse("--serve", "--pages")); err == nil {
 		t.Error("--serve with --pages must be rejected")
+	}
+	// The GUI serves one tracker, so the other source selectors are rejected
+	// before anything loads.
+	for _, args := range [][]string{{"--serve", "--workspace", "ws.yaml"}, {"--serve", "--as-of", "HEAD~1"},
+		{"--serve", "--label", "x"}, {"--serve", "--repo", "api"}} {
+		if err := validateServeFlags(parse(args...)); err == nil || !strings.Contains(err.Error(), args[1]) {
+			t.Errorf("%v must be rejected: %v", args, err)
+		}
 	}
 	for _, port := range []string{"-1", "65536", "99999"} {
 		if err := validateServeFlags(parse("--serve", "--serve-port="+port)); err == nil || !strings.Contains(err.Error(), "out of range") {
@@ -341,8 +355,21 @@ func TestServeSubcommandBinary(t *testing.T) {
 		t.Skip("builds the bv binary")
 	}
 	exe := buildTestBinary(t)
+	// serve loads a tracker (beads-c2o.5), so the working directory needs one.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".beads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	issue := `{"id":"t-1","title":"Smoke","status":"open","priority":2,"issue_type":"task"}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ".beads", "issues.jsonl"), []byte(issue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Tracker discovery must find the temp tracker, not the developer's.
+	t.Setenv("BEADS_DIR", "")
+	t.Setenv("BEADS_DB", "")
 	cmd := exec.Command(exe, "serve", "--serve-no-open")
-	cmd.Dir = t.TempDir()
+	cmd.Env = append(os.Environ(), "BV_NO_BROWSER=1", "BV_TEST_MODE=1")
+	cmd.Dir = dir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -390,12 +417,38 @@ func TestServeSubcommandBinary(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(strings.ToLower(string(page)), "<html") {
 		t.Fatalf("placeholder page: %d %q", resp.StatusCode, page)
 	}
-	resp, err = client.Get(strings.SplitN(signIn, "/auth", 2)[0] + "/api/v1/health")
+	base := strings.SplitN(signIn, "/auth", 2)[0]
+	resp, err = client.Get(base + "/api/v1/health")
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("health: %d", resp.StatusCode)
+	}
+
+	// The data endpoints are backed by the tracker in the working directory.
+	resp, err = client.Get(base + "/api/v1/meta")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	var meta struct {
+		IssueCount int `json:"issue_count"`
+	}
+	etag := resp.Header.Get("ETag")
+	if resp.StatusCode != http.StatusOK || etag == "" || json.Unmarshal(body, &meta) != nil || meta.IssueCount != 1 {
+		t.Fatalf("meta: %d etag=%q %s", resp.StatusCode, etag, body)
+	}
+	req, _ := http.NewRequest(http.MethodGet, base+"/api/v1/meta", nil)
+	req.Header.Set("If-None-Match", etag)
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("meta with matching If-None-Match: %d, want 304", resp.StatusCode)
 	}
 }

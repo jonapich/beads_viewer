@@ -1,0 +1,30 @@
+{
+  "authority_complete": true,
+  "capabilities": {
+    "writes": false
+  },
+  "counts": {
+    "blocked": 0,
+    "closed": 1,
+    "open": 11,
+    "ready": 7
+  },
+  "data_hash": "d48bf0ecca5c02ad0cb3a952cf7152a97f07b8627ba7da9e0221df6b1b272943",
+  "issue_count": 12,
+  "load_warning_count": 0,
+  "loaded_open_only": false,
+  "phase2_ready": true,
+  "phase2_skipped": false,
+  "reference_time": "2026-03-10T12:00:00Z",
+  "source": {
+    "kind": "jsonl",
+    "path": "SOURCE",
+    "project_dir": "PROJECT",
+    "tracker": ""
+  },
+  "source_issue_count": 12,
+  "tier": "small",
+  "truncated_count": 0,
+  "version": "v9.9.9-test",
+  "view_count": 12
+}

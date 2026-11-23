@@ -1,0 +1,80 @@
+package api
+
+import (
+	"net/http"
+
+	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
+)
+
+// snapshotView is the common start of every snapshot-backed GET: it enforces
+// GET/HEAD and returns the current View, or writes the error and returns nil.
+// The caller must use the returned View for both the ETag and the body.
+func (s *server) snapshotView(w http.ResponseWriter, r *http.Request) *View {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
+		return nil
+	}
+	if s.cfg.Store != nil {
+		if v := s.cfg.Store.Current(); v != nil && v.Snap != nil {
+			return v
+		}
+	}
+	writeError(w, http.StatusServiceUnavailable, "not_ready", "no tracker data is loaded")
+	return nil
+}
+
+func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
+	v := s.snapshotView(w, r)
+	if v == nil {
+		return
+	}
+	writeView(w, r, v, func() any { return s.buildMeta(v) })
+}
+
+func (s *server) buildMeta(v *View) MetaResponse {
+	snap := v.Snap
+	m := MetaResponse{
+		Version:             s.cfg.Version,
+		DataHash:            snap.DataHash,
+		Phase2Ready:         v.Phase2Ready,
+		Phase2Skipped:       snap.Tier == snapshot.TierHuge,
+		Phase2Error:         v.Phase2Err,
+		Tier:                snap.Tier.String(),
+		IssueCount:          len(snap.Issues),
+		ViewCount:           len(snap.ViewIssues),
+		SourceIssueCount:    snap.SourceIssueCountHint,
+		LoadedOpenOnly:      snap.LoadedOpenOnly,
+		TruncatedCount:      snap.TruncatedCount,
+		LargeDatasetWarning: snap.LargeDatasetWarning,
+		LoadWarningCount:    snap.LoadWarningCount,
+		AuthorityComplete:   snap.AuthorityComplete,
+		ReferenceTime:       snap.ReferenceTime,
+		Source: MetaSource{
+			Path:       snap.BeadsPath,
+			Kind:       sourceKind(snap.BeadsPath),
+			ProjectDir: snap.ProjectDir,
+		},
+		Recipe: snap.RecipeName,
+		Counts: MetaCounts{
+			Open:    snap.CountOpen,
+			Ready:   snap.CountReady,
+			Blocked: snap.CountBlocked,
+			Closed:  snap.CountClosed,
+		},
+		Capabilities: MetaCaps{Writes: false},
+	}
+	if len(snap.Issues) > 0 {
+		m.Source.Tracker = tracker.CapabilitiesOf(snap.Issues[0].Origin).Tracker
+	}
+	return m
+}
+
+// sourceKind classifies a tracker path the way snapshot.Load does.
+func sourceKind(path string) string {
+	if snapshot.IsSQLitePath(path) {
+		return "sqlite"
+	}
+	return "jsonl"
+}

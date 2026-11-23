@@ -48,6 +48,10 @@ type Config struct {
 	// Vite dev server origins. The frontend then runs from `npm run dev`,
 	// proxying /api and /auth here.
 	Dev bool
+
+	// Store backs the data endpoints. Nil answers them with 503 not_ready.
+	// The caller owns the store and closes it after the server stops.
+	Store *Store
 }
 
 // NewHandler returns the complete `bv serve` handler: guard, headers, /auth,
@@ -106,13 +110,16 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// serveAPI dispatches an authenticated /api/* request. Later beads add their
+// serveAPI dispatches an authenticated /api/* request. Later slices add their
 // endpoints here; anything unknown is a JSON 404, never the SPA fallback.
+// Snapshot-backed GETs answer If-None-Match with 304 (see conditional.go).
 func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	switch r.URL.Path {
 	case "/api/v1/health":
 		s.handleHealth(w, r)
+	case "/api/v1/meta":
+		s.handleMeta(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such API endpoint")
 	}

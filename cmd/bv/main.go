@@ -2448,21 +2448,6 @@ func main() {
 			os.Exit(0)
 		}
 
-		// Handle --serve (beads-c2o.4): the local web GUI server. It needs no
-		// tracker yet (read endpoints arrive with beads-c2o.5), so it runs
-		// before project discovery and issue loading.
-		if *serveFlag {
-			if err := runServe(serveOptions{
-				Port:   *servePort,
-				NoOpen: *serveNoOpen,
-				Dev:    *serveDev,
-			}); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				exitCLI(1)
-			}
-			exitCLI(0)
-		}
-
 		// Resolve canonical project directory (handles nested subdirectory invocations)
 		projectDir, err := resolveCLIProjectDir()
 		if err != nil {
@@ -2483,6 +2468,12 @@ func main() {
 					fmt.Fprintf(os.Stderr, "No .beads directory found; using workspace %s\n", found)
 				}
 			}
+		}
+		// Workspace auto-discovery selected a workspace; bv serve serves one
+		// tracker, so fail now instead of loading the whole workspace first.
+		if *serveFlag && *workspaceConfig != "" {
+			fmt.Fprintf(os.Stderr, "Error: bv serve needs a single tracker; found workspace %s (workspaces are not supported yet)\n", *workspaceConfig)
+			exitCLI(1)
 		}
 		if *workspaceConfig != "" && *asOf == "" {
 			if wsRoot := workspace.ResolveWorkspaceBaseDir(*workspaceConfig); wsRoot != "" {
@@ -2941,6 +2932,30 @@ func main() {
 			// outside git repos and when BV_NO_GITIGNORE=1 is set.
 			// This is done silently and only in single-repo mode.
 			_ = loader.EnsureBVIgnored(projectDir)
+		}
+
+		// Handle --serve (beads-c2o.4, .5): the local web GUI server. It runs
+		// here, after project discovery and the load above, so it knows the
+		// tracker path, project root and recipe. The store re-reads the source
+		// through snapshot.Load (the path live reload will use), so startup
+		// reads it twice; one code path is worth one extra parse.
+		if *serveFlag {
+			if beadsPath == "" {
+				fmt.Fprintln(os.Stderr, "Error: bv serve needs a single tracker")
+				exitCLI(1)
+			}
+			if err := runServe(serveOptions{
+				Port:       *servePort,
+				NoOpen:     *serveNoOpen,
+				Dev:        *serveDev,
+				BeadsPath:  beadsPath,
+				ProjectDir: projectDir,
+				Recipe:     activeRecipe,
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				exitCLI(1)
+			}
+			exitCLI(0)
 		}
 		loadDuration := time.Since(loadStart)
 		if sourceAuthority == nil || !sourceAuthority.ClaimSafe {

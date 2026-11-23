@@ -276,3 +276,31 @@ func TestCompletePhase2(t *testing.T) {
 		t.Fatalf("nil receiver = %v, %v", got, err)
 	}
 }
+
+func TestLoadNowOverridesReferenceTime(t *testing.T) {
+	path := writeFixture(t, fixtureJSONL)
+	fixed := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	p1, err := Load(context.Background(), path, LoadOptions{Now: fixed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p1.ReferenceTime.Equal(fixed) || !p1.Analyzer.Now().Equal(fixed) {
+		t.Fatalf("phase 1 reference time = %v, analyzer now = %v, want %v", p1.ReferenceTime, p1.Analyzer.Now(), fixed)
+	}
+	p2, err := p1.CompletePhase2(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p2.ReferenceTime.Equal(fixed) {
+		t.Fatalf("phase 2 reference time = %v, want %v", p2.ReferenceTime, fixed)
+	}
+
+	// Zero keeps the wall clock.
+	wall, err := Load(context.Background(), path, LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wall.ReferenceTime.Equal(fixed) || wall.ReferenceTime.IsZero() {
+		t.Fatalf("zero Now must use the wall clock, got %v", wall.ReferenceTime)
+	}
+}

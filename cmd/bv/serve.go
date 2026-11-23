@@ -14,6 +14,8 @@ import (
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/api"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/export"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/recipe"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/version"
 	"github.com/Dicklesworthstone/beads_viewer/web"
 )
@@ -27,6 +29,12 @@ type serveOptions struct {
 	Port   int  // 0 = kernel-chosen
 	NoOpen bool // never open a browser
 	Dev    bool // API only; frontend comes from the Vite dev server
+
+	// BeadsPath is the single tracker file or database to serve. Empty serves
+	// no data: the data endpoints answer 503 not_ready.
+	BeadsPath  string
+	ProjectDir string         // project root for .bv/ config; empty derives it from BeadsPath
+	Recipe     *recipe.Recipe // optional recipe deriving the issue view
 
 	// Stdout receives the startup banner; nil means os.Stdout.
 	Stdout io.Writer
@@ -51,6 +59,9 @@ var serveExclusiveFlags = []string{
 	"hooks-info", "priority-brief", "agent-brief", "emit-script", "diff-since",
 	"debug-render", "profile-startup", "init-drift", "save-baseline", "baseline-info",
 	"check-drift", "feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show",
+	// The GUI serves one whole tracker; these select other sources or scope
+	// the session, and are not supported yet.
+	"workspace", "as-of", "label", "repo",
 }
 
 // validateServeFlags rejects an out-of-range --serve-port and --serve combined
@@ -92,6 +103,22 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 		return fmt.Errorf("--serve-port %d is out of range (0-65535)", opts.Port)
 	}
 
+	// Load the tracker before binding, so a bad tracker fails fast and holds no
+	// port. ctx bounds the store's background analysis: Ctrl+C cancels it.
+	var store *api.Store
+	if opts.BeadsPath != "" {
+		fmt.Fprintf(os.Stderr, "Loading %s...\n", opts.BeadsPath)
+		var err error
+		store, err = api.NewStore(ctx, opts.BeadsPath, snapshot.LoadOptions{
+			Recipe:     opts.Recipe,
+			ProjectDir: opts.ProjectDir,
+		})
+		if err != nil {
+			return fmt.Errorf("load %s: %w", opts.BeadsPath, err)
+		}
+		defer store.Close()
+	}
+
 	// Loopback only, never 0.0.0.0. Port 0 lets the kernel pick a free port;
 	// FindAvailablePort's probe-then-listen would race.
 	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(opts.Port)))
@@ -105,7 +132,7 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 		_ = ln.Close()
 		return err
 	}
-	cfg := api.Config{Port: port, Token: token, Version: version.Version, Dev: opts.Dev}
+	cfg := api.Config{Port: port, Token: token, Version: version.Version, Dev: opts.Dev, Store: store}
 	if !opts.Dev {
 		cfg.Assets = web.FS
 	}

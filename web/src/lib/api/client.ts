@@ -1,5 +1,5 @@
 import { session } from "../session.svelte";
-import type { ApiErrorBody, HealthResponse } from "./types";
+import type { ApiErrorBody, HealthResponse, MetaResponse } from "./types";
 
 export type ApiPath = `/api/v1/${string}`;
 
@@ -104,3 +104,12 @@ export async function getJSONIfChanged<T>(
 }
 
 export const getHealth = (signal?: AbortSignal) => getJSON<HealthResponse>("/api/v1/health", { signal });
+
+export const getMeta = (signal?: AbortSignal) => getJSON<MetaResponse>("/api/v1/meta", { signal });
+
+/**
+ * Conditional GET of /meta: null means unchanged. Views poll this (every ~2 s)
+ * while phase2_ready is false and refetch their data when the ETag changes.
+ */
+export const getMetaIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<MetaResponse>("/api/v1/meta", etag, { signal });
