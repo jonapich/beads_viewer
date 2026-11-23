@@ -9,9 +9,22 @@ Go modules only; dependencies are vendored (`vendor/`, patched modules in `third
 ```bash
 go build ./...
 go vet ./...
-gofmt -l cmd internal pkg tests
+gofmt -l cmd internal pkg tests web/embed.go web/embed_test.go
 go test ./...
 ```
+
+List the two `web/*.go` files explicitly: `gofmt` ignores the `go.mod` `ignore` directive, so pointing it at `web` would walk `web/node_modules`.
+
+### GUI frontend (`web/`)
+
+Svelte + Vite + TypeScript SPA (ADR `docs/adr/0001-gui-architecture.md`), embedded into `bv` by `web/embed.go` and served by `bv serve`. Needs Node 24 (`web/.nvmrc`) and npm.
+
+- Build: `make web` (or `npm --prefix web ci` then `npm --prefix web run build`) writes `web/dist/app`; the next `go build` embeds it. `make build`, `make install`, `make release-gate` and `make release-package` run it first.
+- Without it, `go build` still works with no Node installed, and `bv serve` shows the placeholder page (`web/dist/index.html`).
+- Only `web/dist/index.html` is tracked. Never commit `web/dist/app` or `web/node_modules`.
+- Checks: `npm --prefix web run check` (svelte-check, also compares the golden fixtures in `web/src/lib/api/__fixtures__` with `types.ts`) and `npm --prefix web test` (vitest, pure modules only).
+- CSP is `default-src 'self'`: no inline `<script>`/`<style>`, no `style=` attributes or `style:` directives in Svelte markup, no `data:` assets (the build sets `assetsInlineLimit: 0`).
+- Dev loop: run `go run ./cmd/bv serve --serve-dev --serve-port 7777 --serve-no-open` and `npm --prefix web run dev` (set `BV_API_PORT` if the port is not 7777), then open `http://localhost:5173/auth?token=...` with the token `bv` prints.
 
 ## Conventions enforced by tests
 

@@ -91,6 +91,14 @@ def source():
             h.update(bytes.fromhex(digest(path)))
         else:
             h.update(b"missing-or-non-file")
+    # The release binary embeds the gitignored frontend build, so bind it too.
+    # A rebuild that differs from the gated one (or a missing build) changes
+    # this digest and fails verify-source.
+    app = root / "web" / "dist" / "app"
+    if app.is_dir():
+        for path in sorted(p for p in app.rglob("*") if p.is_file()):
+            h.update(b"embed\0" + path.relative_to(root).as_posix().encode() + b"\0")
+            h.update(bytes.fromhex(digest(path)))
     dirty = run("git", "status", "--porcelain=v1", "--untracked-files=all")
     # Ignored Go/embed inputs still affect builds. Build caches outside these
     # declared source directories and non-embedded test artifacts (rapid .fail

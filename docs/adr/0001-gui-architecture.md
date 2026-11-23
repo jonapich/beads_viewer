@@ -85,7 +85,9 @@ web/embed.go         package web: //go:embed all:dist  -> exported fs.FS
 - **Embedding**: `go:embed` cannot reach parent directories, so the embed lives
   in `web/embed.go`. `web/dist/index.html` is committed as a placeholder page
   ("frontend not built, run `npm --prefix web run build`") so `go build ./...`
-  works on a machine with no Node. The rest of `web/dist` is gitignored.
+  works on a machine with no Node. The Vite build writes to `web/dist/app`
+  (gitignored, so the placeholder is never overwritten); `web/embed.go` serves
+  `dist/app` when it is built and the placeholder otherwise.
   Release builds run the frontend build first (new `make web` target, which the
   `build` and `release-*` targets depend on).
 
@@ -224,7 +226,7 @@ npm --prefix beads_viewer/web run dev
 - Open the Vite URL using the token path printed by bv:
   `http://localhost:5173/auth?token=...`. The proxy sets the cookie on the Vite
   origin.
-- Production: `npm --prefix web run build` → `web/dist`, then `go build`
+- Production: `make web` (`npm --prefix web run build`) → `web/dist/app`, then `go build`
   embeds it. Hashed assets are served with `Cache-Control: immutable`, and
   `index.html` with `no-store` (borrowed from preview's no-cache middleware).
   Unknown non-`/api` paths fall back to `index.html` (SPA routing).

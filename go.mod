@@ -3,6 +3,9 @@ module github.com/Dicklesworthstone/beads_viewer
 // Keep the source installers and documented minimum aligned with this version.
 go 1.26.11
 
+// The GUI frontend's npm tree is not Go code; keep ./... away from it.
+ignore ./web/node_modules
+
 require (
 	git.sr.ht/~sbinet/gg v0.8.0
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b

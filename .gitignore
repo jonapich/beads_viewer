@@ -8,7 +8,7 @@ cmd/bv/bv
 
 # Build artifacts
 dist/
-# The GUI frontend build lands in web/dist; only the placeholder page is committed
+# The GUI frontend build (`make web`) lands in web/dist/app; only the placeholder page is committed
 # (it keeps `go build` working without Node). The dist/ rule above would hide the
 # whole directory, so re-include it first, then ignore everything but index.html.
 !web/dist/
