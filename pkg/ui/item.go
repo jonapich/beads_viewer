@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/search"
@@ -68,22 +67,9 @@ func (i IssueItem) FilterValue() string {
 	return search.FilterText(i.Issue, i.RepoPrefix)
 }
 
-// ExtractRepoPrefix extracts the repository prefix from a namespaced issue ID.
-// For example, "api-AUTH-123" returns "api", "web-UI-1" returns "web".
-// If no prefix is detected (no separator), returns empty string.
-func ExtractRepoPrefix(id string) string {
-	// Try common separators: -, :, _
-	for _, sep := range []string{"-", ":", "_"} {
-		if idx := strings.Index(id, sep); idx > 0 {
-			// Check if what's before the separator looks like a short prefix (<=10 chars)
-			prefix := id[:idx]
-			if len(prefix) <= 10 && isAlphanumeric(prefix) {
-				return prefix
-			}
-		}
-	}
-	return ""
-}
+// ExtractRepoPrefix extracts the repository prefix from a namespaced issue ID
+// ("api-AUTH-123" returns "api"); see search.ExtractRepoPrefix.
+func ExtractRepoPrefix(id string) string { return search.ExtractRepoPrefix(id) }
 
 // isAlphanumeric checks if a string contains only alphanumeric characters
 func isAlphanumeric(s string) bool {

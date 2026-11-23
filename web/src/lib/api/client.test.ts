@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged, getMeta, getMetaIfChanged } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, search } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -59,6 +59,27 @@ describe("api client", () => {
 
     fetchMock.mockResolvedValue(json({ phase2_ready: true }, { headers: { ETag: '"h-p2"' } }));
     await expect(getMetaIfChanged('"h-p1"')).resolves.toEqual({ data: { phase2_ready: true }, etag: '"h-p2"' });
+  });
+
+  it("getIssues defaults to the tree view and names the view in the query", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json({ items: [] })));
+    await getIssues();
+    await getIssues("flat");
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(["/api/v1/issues?view=tree", "/api/v1/issues?view=flat"]);
+  });
+
+  it("getIssuesIfChanged sends the etag for the view", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    await expect(getIssuesIfChanged("flat", '"x~flat"')).resolves.toBeNull();
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/issues?view=flat");
+    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe('"x~flat"');
+  });
+
+  it("search percent-encodes the query", async () => {
+    fetchMock.mockResolvedValue(json({ query: "a b&c=d/é", total: 0, hits: [] }));
+    await search("a b&c=d/é");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/search?q=a%20b%26c%3Dd%2F%C3%A9");
   });
 
   it("maps 401 to signed-out with the server's error code", async () => {

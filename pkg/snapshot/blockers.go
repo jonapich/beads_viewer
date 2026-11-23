@@ -27,22 +27,42 @@ func IsBlockerUnsatisfied(issueMap map[string]*model.Issue, r *model.ReadinessIn
 	return true
 }
 
-// BlockerCounts counts the distinct blocking dependencies of issue that are
-// still unsatisfied (active) and already satisfied (resolved).
-func BlockerCounts(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue) (active int, resolved int) {
+// eachBlocker calls fn once per distinct blocking dependency of issue, in
+// Dependencies order, with whether the blocker is still unsatisfied.
+func eachBlocker(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue, fn func(id string, active bool)) {
 	seen := make(map[string]bool, len(issue.Dependencies))
 	for _, dep := range issue.Dependencies {
 		if dep == nil || !dep.Type.IsBlocking() || dep.DependsOnID == "" || seen[dep.DependsOnID] {
 			continue
 		}
 		seen[dep.DependsOnID] = true
-		if IsBlockerUnsatisfied(issueMap, r, issue.ID, dep.DependsOnID) {
+		fn(dep.DependsOnID, IsBlockerUnsatisfied(issueMap, r, issue.ID, dep.DependsOnID))
+	}
+}
+
+// BlockerCounts counts the distinct blocking dependencies of issue that are
+// still unsatisfied (active) and already satisfied (resolved).
+func BlockerCounts(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue) (active int, resolved int) {
+	eachBlocker(issueMap, r, issue, func(_ string, isActive bool) {
+		if isActive {
 			active++
 		} else {
 			resolved++
 		}
-	}
+	})
 	return active, resolved
+}
+
+// ActiveBlockerIDs returns the ids of issue's distinct, still unsatisfied
+// blocking dependencies, in Dependencies order. It never returns nil.
+func ActiveBlockerIDs(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue) []string {
+	ids := []string{}
+	eachBlocker(issueMap, r, issue, func(id string, active bool) {
+		if active {
+			ids = append(ids, id)
+		}
+	})
+	return ids
 }
 
 // ActiveDependentsCount counts the open issues that have a blocking dependency
@@ -65,4 +85,31 @@ func ActiveDependentsCount(issues []model.Issue, id string) int {
 		}
 	}
 	return count
+}
+
+// ActiveDependentsCounts is ActiveDependentsCount for every id at once, in one
+// pass over issues instead of one pass per id. Ids with no active dependents
+// are absent from the map.
+func ActiveDependentsCounts(issues []model.Issue) map[string]int {
+	counts := make(map[string]int)
+	for i := range issues {
+		iss := &issues[i]
+		if isClosedLikeStatus(iss.Status) || iss.Status == model.StatusTombstone {
+			continue
+		}
+		var seen map[string]bool
+		for _, dep := range iss.Dependencies {
+			if dep == nil || !dep.Type.IsBlocking() || dep.DependsOnID == "" {
+				continue
+			}
+			if seen == nil {
+				seen = make(map[string]bool, len(iss.Dependencies))
+			}
+			if !seen[dep.DependsOnID] {
+				seen[dep.DependsOnID] = true
+				counts[dep.DependsOnID]++
+			}
+		}
+	}
+	return counts
 }

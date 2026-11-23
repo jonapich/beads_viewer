@@ -189,3 +189,20 @@ func newGatedStore(t *testing.T, path string, gate <-chan struct{}) *Store {
 	t.Cleanup(func() { store.Close(); cancel() })
 	return store
 }
+
+func TestGoldenIssuesTreeAndSearch(t *testing.T) {
+	store := goldenStore(t, writeGoldenTracker(t))
+	waitPhase2(t, store)
+
+	issues, code := getGolden(t, store, "/api/v1/issues?view=tree")
+	if code != http.StatusOK {
+		t.Fatalf("issues: %d", code)
+	}
+	testutil.NewGoldenFile(t, goldenDir, "issues-tree.json").AssertJSON(issues)
+
+	hits, code := getGolden(t, store, "/api/v1/search?q=cart")
+	if code != http.StatusOK {
+		t.Fatalf("search: %d", code)
+	}
+	testutil.NewGoldenFile(t, goldenDir, "search.json").AssertJSON(hits)
+}

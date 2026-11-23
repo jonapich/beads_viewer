@@ -120,6 +120,10 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleHealth(w, r)
 	case "/api/v1/meta":
 		s.handleMeta(w, r)
+	case "/api/v1/issues":
+		s.handleIssues(w, r)
+	case "/api/v1/search":
+		s.handleSearch(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such API endpoint")
 	}

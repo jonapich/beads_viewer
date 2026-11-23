@@ -1,0 +1,277 @@
+{
+  "items": [
+    {
+      "assignee": "ada",
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 1,
+      "id": "fx-a",
+      "issue_type": "task",
+      "labels": [],
+      "parent_id": "fx-epic",
+      "priority": 1,
+      "ready": true,
+      "status": "in_progress",
+      "title": "Cart model",
+      "triage_score": 0.02249398936064175,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 3,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-epic",
+      "issue_type": "epic",
+      "labels": [
+        "checkout"
+      ],
+      "priority": 1,
+      "ready": true,
+      "status": "open",
+      "title": "Checkout epic",
+      "triage_score": 0.18859708955952167,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 1,
+      "id": "fx-x",
+      "issue_type": "task",
+      "labels": [],
+      "parent_id": "fx-epic2",
+      "priority": 1,
+      "quick_win": true,
+      "ready": true,
+      "status": "open",
+      "title": "Upgrade gateway SDK",
+      "triage_score": 0.26828415652207843,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": true,
+      "blocked_by": [
+        "fx-a",
+        "fx-x"
+      ],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-b",
+      "issue_type": "task",
+      "labels": [],
+      "parent_id": "fx-epic",
+      "priority": 2,
+      "ready": false,
+      "status": "open",
+      "title": "Payment form",
+      "triage_score": 0.1359121067002781,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-decide",
+      "issue_type": "task",
+      "labels": [
+        "needs-decision"
+      ],
+      "priority": 2,
+      "quick_win": true,
+      "ready": true,
+      "status": "open",
+      "title": "Pick a payment provider",
+      "triage_score": 0.17156738226375934,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 1,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-epic2",
+      "issue_type": "epic",
+      "labels": [],
+      "priority": 2,
+      "ready": true,
+      "status": "open",
+      "title": "Platform epic",
+      "triage_score": 0.13145423241666454,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-found",
+      "issue_type": "bug",
+      "labels": [],
+      "priority": 2,
+      "quick_win": true,
+      "ready": true,
+      "status": "open",
+      "title": "Rounding bug found in cart",
+      "triage_score": 0.13145423241666454,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-c",
+      "issue_type": "task",
+      "labels": [],
+      "parent_id": "fx-epic",
+      "priority": 3,
+      "quick_win": true,
+      "ready": true,
+      "status": "open",
+      "title": "Receipt email",
+      "triage_score": 0.11121613717856929,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": true,
+      "blocked_by": [
+        "fx-cy2"
+      ],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 1,
+      "id": "fx-cy1",
+      "is_blocker": true,
+      "issue_type": "task",
+      "labels": [],
+      "priority": 3,
+      "ready": false,
+      "status": "open",
+      "title": "Cycle one",
+      "triage_score": 0.3421609289528183,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": true,
+      "blocked_by": [
+        "fx-cy1"
+      ],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 1,
+      "id": "fx-cy2",
+      "is_blocker": true,
+      "issue_type": "task",
+      "labels": [],
+      "priority": 3,
+      "ready": false,
+      "status": "open",
+      "title": "Cycle two",
+      "triage_score": 0.3421609289528183,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "created_at": "2026-03-01T10:00:00Z",
+      "defer_until": "2026-03-30T09:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-later",
+      "issue_type": "feature",
+      "labels": [],
+      "priority": 4,
+      "ready": false,
+      "status": "open",
+      "title": "Gift cards",
+      "triage_score": 0.041714326926307686,
+      "updated_at": "2026-03-02T10:00:00Z"
+    },
+    {
+      "blocked": false,
+      "blocked_by": [],
+      "child_count": 0,
+      "closed_at": "2026-03-03T09:00:00Z",
+      "created_at": "2026-03-01T10:00:00Z",
+      "dependent_count": 0,
+      "id": "fx-done",
+      "issue_type": "feature",
+      "labels": [
+        "needs-signoff"
+      ],
+      "priority": 2,
+      "ready": false,
+      "signoff": "pending",
+      "status": "closed",
+      "title": "Ship the cart",
+      "updated_at": "2026-03-02T10:00:00Z"
+    }
+  ],
+  "phase2_ready": true,
+  "total": 12,
+  "tree": {
+    "children": {
+      "fx-a": [
+        {
+          "id": "fx-b",
+          "kind": "block"
+        }
+      ],
+      "fx-cy1": [
+        {
+          "id": "fx-cy2",
+          "kind": "block"
+        }
+      ],
+      "fx-cy2": [
+        {
+          "id": "fx-cy1",
+          "kind": "block"
+        }
+      ],
+      "fx-epic": [
+        {
+          "id": "fx-a",
+          "kind": "child"
+        },
+        {
+          "id": "fx-c",
+          "kind": "child"
+        }
+      ],
+      "fx-epic2": [
+        {
+          "id": "fx-x",
+          "kind": "child"
+        }
+      ],
+      "fx-x": [
+        {
+          "id": "fx-b",
+          "kind": "block"
+        }
+      ]
+    },
+    "roots": [
+      "fx-epic",
+      "fx-decide",
+      "fx-epic2",
+      "fx-found",
+      "fx-later",
+      "fx-done",
+      "fx-cy1"
+    ]
+  }
+}

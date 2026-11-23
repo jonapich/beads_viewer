@@ -1,0 +1,26 @@
+{
+  "hits": [
+    {
+      "id": "fx-a",
+      "score": 40
+    },
+    {
+      "id": "fx-found",
+      "score": 27
+    },
+    {
+      "id": "fx-done",
+      "score": 21
+    },
+    {
+      "id": "fx-later",
+      "score": -6
+    },
+    {
+      "id": "fx-decide",
+      "score": -27
+    }
+  ],
+  "query": "cart",
+  "total": 5
+}

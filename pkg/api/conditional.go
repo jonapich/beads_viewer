@@ -32,8 +32,21 @@ func notModified(w http.ResponseWriter, r *http.Request, etag string) bool {
 // client's If-None-Match already names v's ETag (build is then not called).
 // Errors never carry an ETag, so they do not go through here.
 func writeView(w http.ResponseWriter, r *http.Request, v *View, build func() any) {
-	if notModified(w, r, v.ETag) {
+	writeViewTagged(w, r, v.ETag, build)
+}
+
+// writeViewTagged is writeView with an explicit ETag, for endpoints whose body
+// also depends on the request (see variantETag).
+func writeViewTagged(w http.ResponseWriter, r *http.Request, etag string, build func() any) {
+	if notModified(w, r, etag) {
 		return
 	}
 	writeJSON(w, http.StatusOK, build())
+}
+
+// variantETag derives the ETag of one representation of a View from the View's
+// ETag, so a validator from /issues?view=tree never matches view=flat and one
+// from /search?q=a never matches q=b.
+func variantETag(etag, variant string) string {
+	return strings.TrimSuffix(etag, `"`) + "~" + variant + `"`
 }

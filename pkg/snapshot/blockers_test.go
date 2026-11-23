@@ -93,3 +93,35 @@ func TestActiveDependentsCount(t *testing.T) {
 		t.Fatalf("empty id = %d", got)
 	}
 }
+
+func TestActiveBlockerIDs(t *testing.T) {
+	issues, m := blockerFixture()
+	got := ActiveBlockerIDs(m, nil, issues[2])
+	if len(got) != 1 || got[0] != "open-blk" {
+		t.Fatalf("ActiveBlockerIDs(work) = %v, want [open-blk]", got)
+	}
+	// Never nil, so API arrays serialize as [].
+	if got := ActiveBlockerIDs(m, nil, issues[0]); got == nil || len(got) != 0 {
+		t.Fatalf("no blockers = %#v, want empty non-nil", got)
+	}
+	// Agrees with BlockerCounts for every fixture issue.
+	for _, iss := range issues {
+		active, _ := BlockerCounts(m, nil, iss)
+		if n := len(ActiveBlockerIDs(m, nil, iss)); n != active {
+			t.Errorf("%s: %d active ids, BlockerCounts says %d", iss.ID, n, active)
+		}
+	}
+}
+
+func TestActiveDependentsCountsMatchesPerID(t *testing.T) {
+	issues, _ := blockerFixture()
+	counts := ActiveDependentsCounts(issues)
+	for _, iss := range issues {
+		if got, want := counts[iss.ID], ActiveDependentsCount(issues, iss.ID); got != want {
+			t.Errorf("%s: batch %d, per-id %d", iss.ID, got, want)
+		}
+	}
+	if counts["open-blk"] != 1 || counts[""] != 0 {
+		t.Fatalf("counts = %v", counts)
+	}
+}

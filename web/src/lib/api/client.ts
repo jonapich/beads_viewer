@@ -1,5 +1,5 @@
 import { session } from "../session.svelte";
-import type { ApiErrorBody, HealthResponse, MetaResponse } from "./types";
+import type { ApiErrorBody, HealthResponse, IssuesResponse, MetaResponse, SearchResponse } from "./types";
 
 export type ApiPath = `/api/v1/${string}`;
 
@@ -113,3 +113,17 @@ export const getMeta = (signal?: AbortSignal) => getJSON<MetaResponse>("/api/v1/
  */
 export const getMetaIfChanged = (etag: string | null, signal?: AbortSignal) =>
   getJSONIfChanged<MetaResponse>("/api/v1/meta", etag, { signal });
+
+export type IssuesView = "tree" | "flat";
+
+/** Every issue of the current view; `tree` adds the adjacency. Filter client-side. */
+export const getIssues = (view: IssuesView = "tree", signal?: AbortSignal) =>
+  getJSON<IssuesResponse>(`/api/v1/issues?view=${view}`, { signal });
+
+/** Conditional GET of /issues: null means the cached copy for this view is current. */
+export const getIssuesIfChanged = (view: IssuesView, etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<IssuesResponse>(`/api/v1/issues?view=${view}`, etag, { signal });
+
+/** The TUI's fuzzy list filter: every hit in rank order. q must be 1..256 bytes. */
+export const search = (q: string, signal?: AbortSignal) =>
+  getJSON<SearchResponse>(`/api/v1/search?q=${encodeURIComponent(q)}`, { signal });

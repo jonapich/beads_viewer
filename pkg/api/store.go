@@ -31,6 +31,13 @@ type View struct {
 	// Phase2Err is set when Phase 2 failed; the view then keeps serving the
 	// phase 1 data.
 	Phase2Err string
+
+	// Lazily built per-view state; see list.go. Handlers reach it through
+	// list() and listTree(), never directly.
+	listOnce sync.Once
+	listIdx  *listIndex
+	treeOnce sync.Once
+	tree     *ListTree
 }
 
 func newView(snap *snapshot.Snapshot, suffix string, phase2Ready bool, phase2Err string) *View {
