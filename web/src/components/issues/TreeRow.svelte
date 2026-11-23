@@ -2,6 +2,7 @@
   import type { ListItem } from "../../lib/api/types";
   import { awaitsSignoff, displayStatus, needsAnswer, type IssueIndex } from "../../lib/issues/model";
   import { ago, triageText } from "../../lib/issues/present";
+  import type { PeekSection } from "../../lib/issues/peek";
   import type { IssueRow } from "../../lib/issues/tree";
   import AssigneeDot from "./AssigneeDot.svelte";
   import LabelChips from "./LabelChips.svelte";
@@ -18,18 +19,33 @@
     now: number;
     selected: boolean;
     flash: boolean;
+    /** The list is narrower than the breakpoint: two-line rows (title, then id/chip/priority). */
+    narrow: boolean;
     ontoggle: (id: string) => void;
-    onpeek: (id: string) => void;
+    onpeek: (id: string, section?: PeekSection) => void;
   }
 
-  let { row, item, index, via, now, selected, flash, ontoggle, onpeek }: Props = $props();
+  let { row, item, index, via, now, selected, flash, narrow, ontoggle, onpeek }: Props = $props();
+
+  /** Narrow rows indent 12px per level and stop at depth 4; deeper rows show "+n" instead. */
+  const visualDepth = $derived(Math.min(row.depth, 4));
 
   const status = $derived(displayStatus(item, now));
   const edge = $derived(row.edges[row.edges.length - 1]);
   const attention = $derived(awaitsSignoff(item) ? "Sign off" : needsAnswer(item) ? "Answer" : null);
 </script>
 
-<div class="row" class:closed={item.status === "closed"} class:ctx={row.context} class:sel={selected} class:flash data-row data-id={item.id}>
+<div
+  class="row"
+  class:closed={item.status === "closed"}
+  class:ctx={row.context}
+  class:sel={selected}
+  class:flash
+  class:narrow
+  data-depth={visualDepth}
+  data-row
+  data-id={item.id}
+>
   <div class="rl1">
     <span class="indent">
       {#each row.edges as e, k (k)}<span class="g" class:gb={e === "block"}></span>{/each}
@@ -49,12 +65,13 @@
       <span class="caret-sp"></span>
     {/if}
     <StatusGlyph {status} dim={row.context} />
+    {#if narrow && row.depth > 4}<span class="deep" title="Nesting level {row.depth + 1}">+{row.depth - 4}</span>{/if}
     <TitleLine {item} {index} {row} muted={item.status === "closed" || row.context} {onpeek} />
   </div>
   <div class="rl2">
     <span class="c-id" class:dim={row.context} title={item.id}>{item.id}</span>
     {#if attention}
-      <button type="button" class="att" data-kind={attention === "Sign off" ? "sign" : "answer"} onclick={() => onpeek(item.id)}>{attention}</button>
+      <button type="button" class="att" data-kind={attention === "Sign off" ? "sign" : "answer"} onclick={() => onpeek(item.id, attention === "Sign off" ? "signoff" : "answer")}>{attention}</button>
     {/if}
     <LabelChips labels={item.labels} />
     <AssigneeDot assignee={item.assignee} />
@@ -209,13 +226,62 @@
       display: block;
     }
   }
-  /* Stopgap for narrow lists: the two-line row layout (rl1/rl2) comes with the narrow-layout
-     slice. Until then drop the columns that would overflow the single line. */
+  .deep {
+    order: 4;
+    flex: none;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+  }
   @container list (max-width: 559px) {
-    .c-tri,
-    .c-id,
-    .att {
+    .c-tri {
       display: none;
     }
   }
-</style>
+
+  /* Narrow lists (the scroller is under 560px, see lib/issues/rows.ts): a fixed-height two-line
+     row. Line 1: caret, glyph, one-line title. Line 2: id, attention chip, priority. */
+  .row.narrow {
+    display: block;
+    padding: 4px 8px 0;
+  }
+  .row.narrow .rl1,
+  .row.narrow .rl2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .row.narrow .rl1 {
+    height: 26px;
+  }
+  .row.narrow .rl2 {
+    height: 20px;
+    gap: 8px;
+  }
+  .row.narrow .g {
+    width: 12px;
+  }
+  .row.narrow .g:nth-child(n + 5) {
+    display: none;
+  }
+  .row.narrow .c-id {
+    width: auto;
+  }
+  .row.narrow .c-upd {
+    display: none;
+  }
+  /* Line 2 starts under the title: indent gap 6 + caret 24 + gap 6 + glyph 16 + gap 6, plus 12 per level. */
+  .row.narrow[data-depth="0"] .rl2 {
+    padding-left: 58px;
+  }
+  .row.narrow[data-depth="1"] .rl2 {
+    padding-left: 70px;
+  }
+  .row.narrow[data-depth="2"] .rl2 {
+    padding-left: 82px;
+  }
+  .row.narrow[data-depth="3"] .rl2 {
+    padding-left: 94px;
+  }
+  .row.narrow[data-depth="4"] .rl2 {
+    padding-left: 106px;
+  }</style>

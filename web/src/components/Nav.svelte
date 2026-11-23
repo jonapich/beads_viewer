@@ -40,6 +40,20 @@
     color: var(--text);
     text-decoration: none;
   }
+  @media (max-width: 639px) {
+    nav {
+      width: auto;
+      flex-direction: row;
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 4px var(--space-2);
+    }
+    a {
+      white-space: nowrap;
+      flex: none;
+    }
+  }
   a:hover {
     background: var(--bg-hover);
   }

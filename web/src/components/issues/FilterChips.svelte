@@ -25,14 +25,15 @@
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      e.preventDefault(); // so the drawer's Esc handler leaves this press alone
       open = null;
       root?.querySelector<HTMLButtonElement>(`[data-chip="${current}"]`)?.focus();
     };
     document.addEventListener("pointerdown", onPointer, true);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("pointerdown", onPointer, true);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
     };
   });
 </script>

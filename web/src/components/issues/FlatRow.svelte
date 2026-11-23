@@ -3,6 +3,7 @@
   import { ancestors, crumbLabel } from "../../lib/issues/breadcrumb";
   import { highlight } from "../../lib/issues/highlight";
   import { awaitsSignoff, displayStatus, needsAnswer, type IssueIndex } from "../../lib/issues/model";
+  import type { PeekSection } from "../../lib/issues/peek";
   import { ago, triageText } from "../../lib/issues/present";
   import AssigneeDot from "./AssigneeDot.svelte";
   import LabelChips from "./LabelChips.svelte";
@@ -17,12 +18,14 @@
     query: string;
     now: number;
     selected: boolean;
-    onpeek: (id: string) => void;
+    /** The list is narrower than the breakpoint: two-line rows. */
+    narrow: boolean;
+    onpeek: (id: string, section?: PeekSection) => void;
     /** "Show in tree" and the breadcrumb segments: reveal this id in the tree. */
     onreveal: (id: string) => void;
   }
 
-  let { item, index, query, now, selected, onpeek, onreveal }: Props = $props();
+  let { item, index, query, now, selected, narrow, onpeek, onreveal }: Props = $props();
 
   const status = $derived(displayStatus(item, now));
   const crumbs = $derived(ancestors(item.id, index.byId));
@@ -30,7 +33,7 @@
   const attention = $derived(awaitsSignoff(item) ? "Sign off" : needsAnswer(item) ? "Answer" : null);
 </script>
 
-<div class="row" class:closed={item.status === "closed"} class:sel={selected} data-row data-id={item.id}>
+<div class="row" class:closed={item.status === "closed"} class:sel={selected} class:narrow data-row data-id={item.id}>
   <div class="rl1">
     <StatusGlyph {status} />
     <TitleLine {item} {index} muted={item.status === "closed"} {query} {onpeek} below={crumb} />
@@ -38,7 +41,7 @@
   <div class="rl2">
     <span class="c-id" title={item.id}>{#each idSegments as s, i (i)}{#if s.m}<mark>{s.t}</mark>{:else}{s.t}{/if}{/each}</span>
     {#if attention}
-      <button type="button" class="att" data-kind={attention === "Sign off" ? "sign" : "answer"} onclick={() => onpeek(item.id)}>{attention}</button>
+      <button type="button" class="att" data-kind={attention === "Sign off" ? "sign" : "answer"} onclick={() => onpeek(item.id, attention === "Sign off" ? "signoff" : "answer")}>{attention}</button>
     {/if}
     <LabelChips labels={item.labels} />
     <AssigneeDot assignee={item.assignee} />
@@ -189,13 +192,37 @@
       display: block;
     }
   }
-  /* Stopgap for narrow lists, as in TreeRow: the two-line layout comes with the narrow slice. */
   @container list (max-width: 559px) {
-    .c-tri,
-    .c-id,
-    .att,
-    .showtree {
+    .c-tri {
       display: none;
     }
   }
-</style>
+
+  /* Narrow lists: a fixed-height two-line row. Line 1: glyph, title and breadcrumb. Line 2: id,
+     attention chip, priority, Show in tree. */
+  .row.narrow {
+    display: block;
+    padding: 4px 8px 0;
+  }
+  .row.narrow .rl1 {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    height: 38px;
+  }
+  .row.narrow .rl2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 20px;
+    padding-left: 22px;
+  }
+  .row.narrow .c-id {
+    width: auto;
+  }
+  .row.narrow .c-upd {
+    display: none;
+  }
+  .row.narrow .showtree {
+    margin-left: auto;
+  }</style>

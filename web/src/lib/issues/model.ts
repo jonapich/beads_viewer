@@ -50,13 +50,16 @@ export function buildIndex(resp: IssuesResponse): IssueIndex {
 /** Shown status: bd's glyph set (what `bd list` prints). */
 export type DisplayStatus = "open" | "in_progress" | "blocked" | "closed" | "deferred";
 
-export function deferredNow(item: ListItem, now: number): boolean {
+export function deferredNow(item: Pick<ListItem, "defer_until">, now: number): boolean {
   if (!item.defer_until) return false;
   const t = Date.parse(item.defer_until);
   return Number.isFinite(t) && t > now;
 }
 
-export function displayStatus(item: ListItem, now: number = Date.now()): DisplayStatus {
+export function displayStatus(
+  item: Pick<ListItem, "status" | "blocked" | "defer_until">,
+  now: number = Date.now(),
+): DisplayStatus {
   if (item.status === "closed") return "closed";
   if (item.status === "deferred" || deferredNow(item, now)) return "deferred";
   if (item.status === "in_progress") return "in_progress";

@@ -75,6 +75,16 @@
     display: flex;
     flex-direction: column;
   }
+  /* Phones: the nav becomes a strip above the content and the content padding shrinks, so a
+     list gets nearly the full width (the narrow row layout needs it). */
+  @media (max-width: 639px) {
+    .body {
+      flex-direction: column;
+    }
+    main {
+      padding: var(--space-3);
+    }
+  }
   .banner {
     flex: none;
     display: flex;

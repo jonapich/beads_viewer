@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import FilterChips from "../components/issues/FilterChips.svelte";
+  import PeekDrawer from "../components/issues/PeekDrawer.svelte";
   import FlatRowView from "../components/issues/FlatRow.svelte";
   import ListEmpty from "../components/issues/ListEmpty.svelte";
   import ListSkeleton from "../components/issues/ListSkeleton.svelte";
@@ -14,7 +15,8 @@
   import { IssueListState } from "../lib/issues/list-state.svelte";
   import { buildIndex } from "../lib/issues/model";
   import { loadPrefs, prefsKey, savePrefs, serializePrefs, type Prefs } from "../lib/issues/persist";
-  import { ROW_H } from "../lib/issues/rows";
+  import { isNarrow, rowHeight } from "../lib/issues/rows";
+  import type { PeekSection } from "../lib/issues/peek";
   import { SearchRunner } from "../lib/issues/search.svelte";
   import { comparator, effectiveSort } from "../lib/issues/sort";
   import { summarize } from "../lib/issues/summary";
@@ -185,6 +187,23 @@
   );
   const canIncludeClosed = $derived(["active", "open", "ready"].includes(list.filters.state));
 
+  // The list scroller's measured width: under the breakpoint rows turn into two lines.
+  let listWidth = $state(0);
+  const narrow = $derived(isNarrow(listWidth));
+
+  // Set when the peeked issue turned out to be gone (404): shown above the list until dismissed.
+  let missingNotice = $state<string | null>(null);
+
+  function openPeek(id: string, section?: PeekSection): void {
+    missingNotice = null;
+    list.openPeek(id, section ?? null);
+  }
+
+  function peekMissing(id: string): void {
+    missingNotice = `${id} is no longer in the tracker.`;
+    list.closePeek();
+  }
+
   type ListApi = {
     getScrollTop: () => number;
     setScrollTop: (px: number) => void;
@@ -252,7 +271,7 @@
     const target = e.target as Element | null;
     if (!target || target.closest("button, a")) return;
     const id = target.closest("[data-row]")?.getAttribute("data-id");
-    if (id) list.openPeek(id);
+    if (id) openPeek(id);
   }
 
   const key = (r: Row) => r.key;
@@ -297,6 +316,12 @@
           />
         </div>
       {/if}
+      {#if missingNotice}
+        <p class="notice" role="status">
+          {missingNotice}
+          <button type="button" class="dismiss" onclick={() => (missingNotice = null)}>Dismiss</button>
+        </p>
+      {/if}
       {#if flat.rows.length === 0 && hasQuery && list.rank === null && runner.pending}
         <div class="body"><ListSkeleton /></div>
       {:else if flat.rows.length === 0}
@@ -319,7 +344,8 @@
           <VirtualList
             bind:this={vl}
             items={flat.rows}
-            rowHeight={list.mode === "flat" ? ROW_H.flat : ROW_H.tree}
+            rowHeight={rowHeight(list.mode, narrow)}
+            bind:width={listWidth}
             {key}
             row={renderRow}
             label="Issues"
@@ -329,13 +355,25 @@
       {/if}
     {/if}
   </div>
+  {#if list.peek && ready && index}
+    <PeekDrawer
+      id={list.peek}
+      item={index.byId.get(list.peek)}
+      section={list.peekSection}
+      {now}
+      reloadKey={feed.data}
+      onclose={() => list.closePeek()}
+      onopen={(id) => openPeek(id)}
+      onmissing={peekMissing}
+    />
+  {/if}
 </section>
 
 {#snippet renderRow(r: Row)}
   {#if index}
     {@const item = index.byId.get(r.id)}
     {#if r.kind === "cycle"}
-      <CycleRowView row={r} {item} />
+      <CycleRowView row={r} {item} {narrow} />
     {:else if item && r.kind === "flat"}
       <FlatRowView
         {item}
@@ -343,7 +381,8 @@
         query={list.query}
         {now}
         selected={list.peek === r.id}
-        onpeek={(id) => list.openPeek(id)}
+        {narrow}
+        onpeek={openPeek}
         onreveal={(id) => void reveal(id)}
       />
     {:else if item && r.kind === "issue"}
@@ -355,8 +394,9 @@
         {now}
         selected={list.peek === r.id}
         flash={list.flashId === r.id}
+        {narrow}
         ontoggle={(id) => list.toggle(id)}
-        onpeek={(id) => list.openPeek(id)}
+        onpeek={openPeek}
       />
     {/if}
   {/if}
@@ -423,6 +463,15 @@
     background: var(--warning-subtle);
     color: var(--warning);
     font-size: var(--text-sm);
+  }
+  .dismiss {
+    margin-left: var(--space-2);
+    border: 0;
+    background: none;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
   }
   .sr {
     position: absolute;

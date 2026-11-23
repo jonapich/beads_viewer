@@ -224,3 +224,26 @@ describe("IssueListState reveal and back", () => {
     expect(s.backTo).toBeNull();
   });
 });
+
+describe("IssueListState peek", () => {
+  it("opens with an optional section and closes both", () => {
+    const s = new IssueListState();
+    s.openPeek("a", "signoff");
+    expect(s.peek).toBe("a");
+    expect(s.peekSection).toBe("signoff");
+    s.openPeek("b");
+    expect(s.peekSection).toBeNull();
+    s.openPeek("c", "answer");
+    s.closePeek();
+    expect(s.peek).toBeNull();
+    expect(s.peekSection).toBeNull();
+  });
+
+  it("applyUrl adopts the peek and forgets the section", () => {
+    const s = new IssueListState();
+    s.openPeek("a", "answer");
+    s.applyUrl(fromQuery(new URLSearchParams("peek=z")));
+    expect(s.peek).toBe("z");
+    expect(s.peekSection).toBeNull();
+  });
+});

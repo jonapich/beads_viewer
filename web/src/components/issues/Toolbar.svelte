@@ -121,6 +121,12 @@
     position: relative;
     height: 32px;
   }
+  @media (max-width: 639px) {
+    .search {
+      flex-basis: 100%;
+      max-width: none;
+    }
+  }
   .mag {
     position: absolute;
     left: 9px;

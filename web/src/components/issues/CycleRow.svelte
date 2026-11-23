@@ -2,10 +2,10 @@
   import type { ListItem } from "../../lib/api/types";
   import type { CycleRow as CycleRowModel } from "../../lib/issues/tree";
 
-  let { row, item }: { row: CycleRowModel; item: ListItem | undefined } = $props();
+  let { row, item, narrow }: { row: CycleRowModel; item: ListItem | undefined; narrow: boolean } = $props();
 </script>
 
-<div class="row" data-id={row.id}>
+<div class="row" class:narrow data-id={row.id}>
   <span class="indent">
     {#each row.edges as e, k (k)}<span class="g" class:gb={e === "block"}></span>{/each}
   </span>
@@ -38,6 +38,12 @@
   }
   .g.gb {
     border-left: 1px dashed color-mix(in srgb, var(--danger) 50%, transparent);
+  }
+  .row.narrow .g {
+    width: 12px;
+  }
+  .row.narrow .g:nth-child(n + 5) {
+    display: none;
   }
   .caret-sp {
     width: 24px;

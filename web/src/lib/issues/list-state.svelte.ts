@@ -8,6 +8,7 @@ import {
   type Mode,
 } from "./filter";
 import type { Prefs } from "./persist";
+import type { PeekSection } from "./peek";
 import type { SortKey } from "./sort";
 import { defaultExpanded } from "./tree";
 import type { UrlState } from "./url";
@@ -35,6 +36,8 @@ export class IssueListState {
   /** Explicit Tree/Flat choice; null = automatic. */
   modePick = $state<Mode | null>(null);
   peek = $state<string | null>(null);
+  /** The drawer block to scroll to when it opens from a row chip ("Sign off", "Answer"). Not in the URL. */
+  peekSection = $state<PeekSection | null>(null);
   expanded = $state.raw<Set<string>>(new Set());
   /** Tree + filters (the user forced Tree): ids the user collapsed from the all-open view. */
   pruneCollapsed = $state.raw<Set<string>>(new Set());
@@ -75,6 +78,7 @@ export class IssueListState {
     this.sortPick = u.sortPick ?? rememberedSort;
     this.modePick = nextModePick(u.modePick, this.triggered);
     this.peek = u.peek;
+    this.peekSection = null;
     this.pruneCollapsed = new Set();
     this.backTo = null;
   }
@@ -162,11 +166,13 @@ export class IssueListState {
     return b.scrollTop;
   }
 
-  openPeek(id: string): void {
+  openPeek(id: string, section: PeekSection | null = null): void {
     this.peek = id;
+    this.peekSection = section;
   }
 
   closePeek(): void {
     this.peek = null;
+    this.peekSection = null;
   }
 }
