@@ -374,3 +374,14 @@ func DecisionComment(opt *Option, free string) string {
 		return "Decision: " + free
 	}
 }
+
+// Question returns the "Question: ...?" sentence of a description (question
+// mark included), or "" when it has none. It is the same match ParseOptions
+// uses for two-way "Question: X or Y?" decisions.
+func Question(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	if m := questionLine.FindStringSubmatch(text); m != nil {
+		return strings.TrimSpace(m[1]) + "?"
+	}
+	return ""
+}

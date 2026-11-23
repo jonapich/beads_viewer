@@ -124,7 +124,13 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleIssues(w, r)
 	case "/api/v1/search":
 		s.handleSearch(w, r)
+	case "/api/v1/signoff":
+		s.handleSignoff(w, r)
 	default:
+		if strings.HasPrefix(r.URL.Path, issuesPathPrefix) {
+			s.handleIssueDetail(w, r)
+			return
+		}
 		writeError(w, http.StatusNotFound, "not_found", "no such API endpoint")
 	}
 }

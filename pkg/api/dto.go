@@ -1,6 +1,11 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/Dicklesworthstone/beads_viewer/pkg/agentdesk"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
+)
 
 // GUI-specific response types (ADR 0001 section 3). Rules, mirrored by
 // web/src/lib/api/types.ts:
@@ -144,4 +149,188 @@ type SearchResponse struct {
 type SearchHit struct {
 	ID    string `json:"id"`
 	Score int    `json:"score"`
+}
+
+// IssueRef points at another issue with just enough to render a row: id, title,
+// status glyph and priority. Missing is true (and the rest absent) when the id
+// is not loaded: a dangling dependency, or an issue outside the loaded set.
+type IssueRef struct {
+	ID        string `json:"id"`
+	Title     string `json:"title,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Priority  *int   `json:"priority,omitempty"` // a pointer: P0 must not be dropped
+	IssueType string `json:"issue_type,omitempty"`
+	Missing   bool   `json:"missing,omitempty"`
+}
+
+// DepRef is an IssueRef in a blocking relation. For blocked_by, Active is true
+// while the blocker still blocks (it is not closed); for blocks, true while the
+// dependent is still blocked by this issue.
+type DepRef struct {
+	IssueRef
+	Active bool `json:"active"`
+}
+
+// RelatedRef is a non-blocking, non-parent link (related, discovered-from, ...).
+// Direction "out" means this issue declared it, "in" that the other issue did.
+type RelatedRef struct {
+	IssueRef
+	Type      string `json:"type"`
+	Direction string `json:"direction"`
+}
+
+// BlockerCountsDTO counts the distinct blocking dependencies of an issue.
+type BlockerCountsDTO struct {
+	Active   int `json:"active"`
+	Resolved int `json:"resolved"`
+}
+
+// DetailTriage is the issue's triage data; absent when triage was not computed.
+type DetailTriage struct {
+	Score       float64                 `json:"score"`
+	Reasons     *analysis.TriageReasons `json:"reasons,omitempty"`
+	QuickWin    bool                    `json:"quick_win"`
+	IsBlocker   bool                    `json:"is_blocker"`
+	UnblocksIDs []string                `json:"unblocks_ids"`
+}
+
+// DetailGraph is the issue's graph metrics; present only once Phase 2 is done
+// (and never on the huge tier, which skips them).
+type DetailGraph struct {
+	PageRank    float64 `json:"pagerank"`
+	Betweenness float64 `json:"betweenness"`
+	Eigenvector float64 `json:"eigenvector"`
+	Hub         float64 `json:"hub"`
+	Authority   float64 `json:"authority"`
+	// CriticalPathScore is the analysis critical-path score: higher means more
+	// work is chained behind this issue.
+	CriticalPathScore float64 `json:"critical_path_score"`
+}
+
+// DecisionInfo is the data behind the "Needs your decision" card of an open bead
+// labelled needs-decision or needs-design (the agent-desk inbox rules).
+type DecisionInfo struct {
+	// Label is the awaiting label an answer removes: needs-decision when
+	// present, else needs-design.
+	Label string `json:"label"`
+	// ReadyToJudge is true when a mock or artifact link is attached.
+	ReadyToJudge bool `json:"ready_to_judge"`
+	// WaitingOn names the artifact a needs-design bead still lacks.
+	WaitingOn string `json:"waiting_on,omitempty"`
+	// Question is the description's "Question: ...?" sentence; absent when it
+	// has none (the client falls back to the title).
+	Question string `json:"question,omitempty"`
+	// Options are parsed from the description; empty when it offers none, in
+	// which case an answer needs free text.
+	Options []agentdesk.Option `json:"options"`
+}
+
+// CommentDTO is one comment, with its bd kind header split off. Text is the
+// body after the header. Collapsible comments (kinded, or with a JSON object
+// body) render as a one-line Summary that expands; the client keeps signoff,
+// user, answer and plain comments expanded. Data is the JSON object body, if any.
+type CommentDTO struct {
+	ID          string         `json:"id"`
+	Author      string         `json:"author"`
+	CreatedAt   time.Time      `json:"created_at"`
+	Kind        string         `json:"kind,omitempty"`
+	Text        string         `json:"text"`
+	Summary     string         `json:"summary,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
+	Collapsible bool           `json:"collapsible"`
+}
+
+// IssueDetail is GET /api/v1/issues/{id}: the whole issue under the model's JSON
+// names, its relations, and what the detail view's cards need.
+type IssueDetail struct {
+	Phase2Ready bool `json:"phase2_ready"`
+
+	ID                 string     `json:"id"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description"`
+	Design             string     `json:"design,omitempty"`
+	AcceptanceCriteria string     `json:"acceptance_criteria,omitempty"`
+	Notes              string     `json:"notes,omitempty"`
+	Status             string     `json:"status"`
+	Priority           int        `json:"priority"`
+	IssueType          string     `json:"issue_type"`
+	Assignee           string     `json:"assignee,omitempty"`
+	EstimatedMinutes   *int       `json:"estimated_minutes,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	CreatedBy          string     `json:"created_by,omitempty"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	DueDate            *time.Time `json:"due_date,omitempty"`
+	DeferUntil         *time.Time `json:"defer_until,omitempty"`
+	ClosedAt           *time.Time `json:"closed_at,omitempty"`
+	CloseReason        string     `json:"close_reason,omitempty"`
+	ExternalRef        string     `json:"external_ref,omitempty"`
+	StartedAt          *time.Time `json:"started_at,omitempty"`
+	LeaseExpiresAt     *time.Time `json:"lease_expires_at,omitempty"`
+	HeartbeatAt        *time.Time `json:"heartbeat_at,omitempty"`
+	Labels             []string   `json:"labels"`
+	SourceRepo         string     `json:"source_repo,omitempty"`
+
+	// Metadata is the decoded metadata object (bd keeps the pipeline stage,
+	// stage_at.<stage> and signoff_at timestamps, link.<kind> and claim data
+	// there). The History timeline is built from it plus the dates above.
+	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// Parent is the first loaded parent-child target. Children are the issues
+	// that declare this one as their parent, in snapshot order.
+	Parent   *IssueRef  `json:"parent,omitempty"`
+	Children []IssueRef `json:"children"`
+	// BlockedBy lists every distinct blocking dependency, active ones first.
+	BlockedBy []DepRef `json:"blocked_by"`
+	// Blocks lists the open issues with a blocking dependency on this one.
+	Blocks  []DepRef     `json:"blocks"`
+	Related []RelatedRef `json:"related"`
+
+	BlockerCounts    BlockerCountsDTO `json:"blocker_counts"`
+	ActiveDependents int              `json:"active_dependents"`
+	Ready            bool             `json:"ready"`
+	// Blocked is true for an open issue with status blocked or an active blocker.
+	Blocked bool `json:"blocked"`
+
+	Triage *DetailTriage `json:"triage,omitempty"`
+	Graph  *DetailGraph  `json:"graph,omitempty"`
+
+	// Signoff is present when the issue is in the sign-off flow (any state).
+	Signoff  *SignoffDTO      `json:"signoff,omitempty"`
+	Decision *DecisionInfo    `json:"decision,omitempty"`
+	Links    []agentdesk.Link `json:"links"`
+	Comments []CommentDTO     `json:"comments"`
+
+	// ReadOnlyReason says why bv cannot write to this issue's tracker; absent
+	// when it can.
+	ReadOnlyReason string `json:"read_only_reason,omitempty"`
+}
+
+// SignoffCall is one "call made on your behalf": what was decided, what it was
+// chosen over, and why. The sign-off card shows each as a row.
+type SignoffCall struct {
+	Call        string `json:"call"`
+	Alternative string `json:"alternative,omitempty"`
+	Why         string `json:"why,omitempty"`
+}
+
+// SignoffDTO is agentdesk.SignoffItem plus Calls. SignoffItem.CallsMade
+// flattens structured calls into sorted "key: value" lines (the robot output
+// depends on that shape, so pkg/agentdesk keeps it); Calls keeps the rows.
+type SignoffDTO struct {
+	agentdesk.SignoffItem
+	Calls []SignoffCall `json:"calls"`
+}
+
+// SignoffGroupDTO is the pending sign-offs of one epic.
+type SignoffGroupDTO struct {
+	Epic      string       `json:"epic"`
+	EpicTitle string       `json:"epic_title,omitempty"`
+	Items     []SignoffDTO `json:"items"`
+}
+
+// SignoffResponse is GET /api/v1/signoff: the closed beads pending sign-off,
+// grouped by epic, in agentdesk.BuildSignoffs order.
+type SignoffResponse struct {
+	Total  int               `json:"total"`
+	Groups []SignoffGroupDTO `json:"groups"`
 }

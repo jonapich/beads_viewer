@@ -15,7 +15,7 @@
       "ready": true,
       "status": "in_progress",
       "title": "Cart model",
-      "triage_score": 0.02249398936064175,
+      "triage_score": 0.022182318241408164,
       "updated_at": "2026-03-02T10:00:00Z"
     },
     {
@@ -51,7 +51,7 @@
       "ready": true,
       "status": "open",
       "title": "Upgrade gateway SDK",
-      "triage_score": 0.26828415652207843,
+      "triage_score": 0.2644995786456706,
       "updated_at": "2026-03-02T10:00:00Z"
     },
     {
@@ -196,7 +196,7 @@
       "ready": false,
       "status": "open",
       "title": "Gift cards",
-      "triage_score": 0.041714326926307686,
+      "triage_score": 0.0417143269263077,
       "updated_at": "2026-03-02T10:00:00Z"
     },
     {
@@ -205,7 +205,7 @@
       "child_count": 0,
       "closed_at": "2026-03-03T09:00:00Z",
       "created_at": "2026-03-01T10:00:00Z",
-      "dependent_count": 0,
+      "dependent_count": 1,
       "id": "fx-done",
       "issue_type": "feature",
       "labels": [

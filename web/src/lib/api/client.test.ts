@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, search } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, search } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -80,6 +80,29 @@ describe("api client", () => {
     fetchMock.mockResolvedValue(json({ query: "a b&c=d/é", total: 0, hits: [] }));
     await search("a b&c=d/é");
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/search?q=a%20b%26c%3Dd%2F%C3%A9");
+  });
+
+  it("getIssue percent-encodes the id", async () => {
+    fetchMock.mockResolvedValue(json({ id: "a b/c#d?e" }));
+    await getIssue("a b/c#d?e");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/issues/a%20b%2Fc%23d%3Fe");
+  });
+
+  it("getIssueIfChanged sends the etag and getSignoff reads /signoff", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    await expect(getIssueIfChanged("x-1", '"t"')).resolves.toBeNull();
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/issues/x-1");
+    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe('"t"');
+
+    fetchMock.mockResolvedValue(json({ total: 0, groups: [] }));
+    await expect(getSignoff()).resolves.toEqual({ total: 0, groups: [] });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v1/signoff");
+  });
+
+  it("getIssue surfaces the not_found envelope", async () => {
+    fetchMock.mockResolvedValue(json({ error: { code: "not_found", message: "no such issue" } }, { status: 404 }));
+    await expect(getIssue("nope")).rejects.toMatchObject({ status: 404, code: "not_found" });
   });
 
   it("maps 401 to signed-out with the server's error code", async () => {

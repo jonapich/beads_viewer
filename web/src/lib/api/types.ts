@@ -152,3 +152,227 @@ export interface SearchResponse {
   total: number;
   hits: SearchHit[];
 }
+
+/** A URL attached to a bead (pkg/agentdesk Link). */
+export interface Link {
+  /** "mock" | "artifact" | "capture" | "commit" | "doc" | "url" | other typed kinds */
+  kind: string;
+  url: string;
+  note?: string;
+  /** RFC 3339 */
+  at?: string;
+  by?: string;
+  /** "typed" (metadata link.<kind>) | "comment" (a URL found in a comment) */
+  source: string;
+}
+
+/** One answer an awaiting bead offers (pkg/agentdesk Option). */
+export interface DecisionOption {
+  /** Lower-case letter: a, b, c... */
+  key: string;
+  text: string;
+  recommended?: boolean;
+}
+
+/** One "call made on your behalf": the call, what it was chosen over, and why. */
+export interface SignoffCall {
+  call: string;
+  alternative?: string;
+  why?: string;
+}
+
+/**
+ * A closed bead awaiting sign-off (pkg/api SignoffDTO: pkg/agentdesk
+ * SignoffItem plus `calls`). The parts are lists of lines; `calls` is the
+ * structured form of calls_made, which flattens objects into sorted
+ * "key: value" lines.
+ */
+export interface SignoffItem {
+  id: string;
+  title: string;
+  epic?: string;
+  priority: number;
+  closed_at?: string;
+  /** "pending" | "approved" | "disputed" | "waived" */
+  state: string;
+  has_signoff_comment: boolean;
+  /** Structured calls for the sign-off card rows; [] when none. */
+  calls: SignoffCall[];
+  calls_made?: string[];
+  what_changed?: string[];
+  removed_or_renamed?: string[];
+  where_to_see?: string[];
+  commits?: string[];
+  captures?: string[];
+  links?: Link[];
+  /** The comment body when it fits none of the parts. */
+  raw?: string;
+}
+
+export interface SignoffGroup {
+  /** Epic id; "" for beads with no epic. */
+  epic: string;
+  epic_title?: string;
+  items: SignoffItem[];
+}
+
+/** GET /api/v1/signoff: closed beads pending sign-off, grouped by epic. */
+export interface SignoffResponse {
+  total: number;
+  groups: SignoffGroup[];
+}
+
+/**
+ * Another issue, with just enough to render a row. When `missing` is true the
+ * id is not loaded and everything else is absent. `priority` can be 0.
+ */
+export interface IssueRef {
+  id: string;
+  title?: string;
+  status?: string;
+  priority?: number;
+  issue_type?: string;
+  missing?: boolean;
+}
+
+/**
+ * An IssueRef in a blocking relation. For blocked_by, `active` is true while
+ * the blocker still blocks; for blocks, while the dependent is still blocked.
+ */
+export interface DepRef extends IssueRef {
+  active: boolean;
+}
+
+/** A non-blocking, non-parent link. direction "out": this issue declared it. */
+export interface RelatedRef extends IssueRef {
+  /** "related" | "discovered-from" | ... */
+  type: string;
+  /** "out" | "in" */
+  direction: string;
+}
+
+export interface BlockerCounts {
+  active: number;
+  resolved: number;
+}
+
+export interface TriageReasons {
+  primary: string;
+  all: string[];
+  action_hint: string;
+}
+
+/** Absent from IssueDetail when triage was not computed. */
+export interface DetailTriage {
+  score: number;
+  reasons?: TriageReasons;
+  quick_win: boolean;
+  is_blocker: boolean;
+  unblocks_ids: string[];
+}
+
+/** Present only once Phase 2 is done, and never on the huge tier. */
+export interface DetailGraph {
+  pagerank: number;
+  betweenness: number;
+  eigenvector: number;
+  hub: number;
+  authority: number;
+  /** Analysis critical-path score; higher means more work is chained behind this issue. */
+  critical_path_score: number;
+}
+
+/** The "Needs your decision" card data (open bead labelled needs-decision/needs-design). */
+export interface DecisionInfo {
+  /** The awaiting label an answer removes. */
+  label: string;
+  /** A mock or artifact link is attached. */
+  ready_to_judge: boolean;
+  /** For needs-design: the artifact still missing. */
+  waiting_on?: string;
+  /** The description's "Question: ...?" sentence; absent when it has none (fall back to the title). */
+  question?: string;
+  /** Empty when the description offers none: an answer then needs free text. */
+  options: DecisionOption[];
+}
+
+/**
+ * A comment with its bd kind header split off. `text` is the body after the
+ * header. Collapsible comments render as a one-line `summary`; the client keeps
+ * signoff, user, answer and plain comments expanded. `data` is the JSON object
+ * body, when there is one.
+ */
+export interface IssueComment {
+  id: string;
+  author: string;
+  created_at: string;
+  kind?: string;
+  text: string;
+  summary?: string;
+  data?: Record<string, unknown>;
+  collapsible: boolean;
+}
+
+/** GET /api/v1/issues/{id} (pkg/api/dto.go IssueDetail). */
+export interface IssueDetail {
+  phase2_ready: boolean;
+
+  id: string;
+  title: string;
+  description: string;
+  design?: string;
+  acceptance_criteria?: string;
+  notes?: string;
+  status: string;
+  priority: number;
+  issue_type: string;
+  assignee?: string;
+  estimated_minutes?: number;
+  created_at: string;
+  created_by?: string;
+  updated_at: string;
+  due_date?: string;
+  defer_until?: string;
+  closed_at?: string;
+  close_reason?: string;
+  external_ref?: string;
+  started_at?: string;
+  lease_expires_at?: string;
+  heartbeat_at?: string;
+  labels: string[];
+  source_repo?: string;
+
+  /**
+   * The decoded metadata object: stage, stage_at.<stage> and signoff_at
+   * timestamps, link.<kind> and claim data. The History timeline is built from
+   * it plus the dates above.
+   */
+  metadata?: Record<string, unknown>;
+
+  parent?: IssueRef;
+  /** Issues that declare this one as their parent, in snapshot order. */
+  children: IssueRef[];
+  /** Every distinct blocking dependency, active ones first. */
+  blocked_by: DepRef[];
+  /** Open issues with a blocking dependency on this one. */
+  blocks: DepRef[];
+  related: RelatedRef[];
+
+  blocker_counts: BlockerCounts;
+  active_dependents: number;
+  ready: boolean;
+  blocked: boolean;
+
+  triage?: DetailTriage;
+  graph?: DetailGraph;
+
+  /** Present when the issue is in the sign-off flow, in any state. */
+  signoff?: SignoffItem;
+  decision?: DecisionInfo;
+  links: Link[];
+  /** Oldest first, as bd lists them. */
+  comments: IssueComment[];
+
+  /** Why bv cannot write to this issue's tracker; absent when it can. */
+  read_only_reason?: string;
+}

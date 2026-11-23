@@ -53,6 +53,23 @@ func BlockerCounts(issueMap map[string]*model.Issue, r *model.ReadinessIndex, is
 	return active, resolved
 }
 
+// BlockerRef is one blocking dependency of an issue and whether it still blocks.
+type BlockerRef struct {
+	ID     string
+	Active bool
+}
+
+// Blockers returns issue's distinct blocking dependencies in Dependencies
+// order, active or not. It never returns nil. BlockerCounts and
+// ActiveBlockerIDs are views of the same walk.
+func Blockers(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue) []BlockerRef {
+	refs := []BlockerRef{}
+	eachBlocker(issueMap, r, issue, func(id string, active bool) {
+		refs = append(refs, BlockerRef{ID: id, Active: active})
+	})
+	return refs
+}
+
 // ActiveBlockerIDs returns the ids of issue's distinct, still unsatisfied
 // blocking dependencies, in Dependencies order. It never returns nil.
 func ActiveBlockerIDs(issueMap map[string]*model.Issue, r *model.ReadinessIndex, issue model.Issue) []string {

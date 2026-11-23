@@ -1,0 +1,86 @@
+{
+  "active_dependents": 0,
+  "blocked": false,
+  "blocked_by": [],
+  "blocker_counts": {
+    "active": 0,
+    "resolved": 0
+  },
+  "blocks": [],
+  "children": [],
+  "comments": [
+    {
+      "author": "jon",
+      "collapsible": true,
+      "created_at": "2026-03-02T11:00:00Z",
+      "id": "c2",
+      "kind": "brief",
+      "summary": "brief GOAL: choose a provider.",
+      "text": "GOAL: choose a provider."
+    },
+    {
+      "author": "claude",
+      "collapsible": true,
+      "created_at": "2026-03-02T12:00:00Z",
+      "id": "c3",
+      "kind": "advice",
+      "summary": "advice Go with Stripe.",
+      "text": "Go with Stripe."
+    }
+  ],
+  "created_at": "2026-03-01T10:00:00Z",
+  "decision": {
+    "label": "needs-decision",
+    "options": [
+      {
+        "key": "a",
+        "recommended": true,
+        "text": "Stripe: lowest effort"
+      },
+      {
+        "key": "b",
+        "text": "Adyen: better EU rates"
+      }
+    ],
+    "question": "Which provider should we use?",
+    "ready_to_judge": false
+  },
+  "description": "Question: Which provider should we use?\n\nOptions:\n(a, recommended) Stripe: lowest effort\n(b) Adyen: better EU rates",
+  "graph": {
+    "authority": 0,
+    "betweenness": 0,
+    "critical_path_score": 0,
+    "eigenvector": 0,
+    "hub": 0,
+    "pagerank": 0.04135105801713347
+  },
+  "id": "fx-decide",
+  "issue_type": "task",
+  "labels": [
+    "needs-decision"
+  ],
+  "links": [],
+  "phase2_ready": true,
+  "priority": 2,
+  "read_only_reason": "source is read-only: source has no readable tracker metadata",
+  "ready": true,
+  "related": [],
+  "status": "open",
+  "title": "Pick a payment provider",
+  "triage": {
+    "is_blocker": false,
+    "quick_win": true,
+    "reasons": {
+      "action_hint": "Start work on this issue",
+      "all": [
+        "⚠️ Label 'needs-decision' needs attention (health: 45/100)",
+        "📅 Last updated 8 days ago",
+        "✅ Currently unclaimed - available for work"
+      ],
+      "primary": "⚠️ Label 'needs-decision' needs attention (health: 45/100)"
+    },
+    "score": 0.17156738226375934,
+    "unblocks_ids": []
+  },
+  "updated_at": "2026-03-02T10:00:00Z"
+}

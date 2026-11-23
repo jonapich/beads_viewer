@@ -1,5 +1,13 @@
 import { session } from "../session.svelte";
-import type { ApiErrorBody, HealthResponse, IssuesResponse, MetaResponse, SearchResponse } from "./types";
+import type {
+  ApiErrorBody,
+  HealthResponse,
+  IssueDetail,
+  IssuesResponse,
+  MetaResponse,
+  SearchResponse,
+  SignoffResponse,
+} from "./types";
 
 export type ApiPath = `/api/v1/${string}`;
 
@@ -127,3 +135,14 @@ export const getIssuesIfChanged = (view: IssuesView, etag: string | null, signal
 /** The TUI's fuzzy list filter: every hit in rank order. q must be 1..256 bytes. */
 export const search = (q: string, signal?: AbortSignal) =>
   getJSON<SearchResponse>(`/api/v1/search?q=${encodeURIComponent(q)}`, { signal });
+
+/** One issue in full. The id is percent-encoded; an unknown id rejects with ApiError 404 "not_found". */
+export const getIssue = (id: string, signal?: AbortSignal) =>
+  getJSON<IssueDetail>(`/api/v1/issues/${encodeURIComponent(id)}`, { signal });
+
+/** Conditional GET of one issue: null means the cached copy is current. */
+export const getIssueIfChanged = (id: string, etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<IssueDetail>(`/api/v1/issues/${encodeURIComponent(id)}`, etag, { signal });
+
+/** Closed beads awaiting sign-off, grouped by epic. */
+export const getSignoff = (signal?: AbortSignal) => getJSON<SignoffResponse>("/api/v1/signoff", { signal });

@@ -1,0 +1,36 @@
+{
+  "groups": [
+    {
+      "epic": "",
+      "items": [
+        {
+          "calls": [
+            {
+              "alternative": "force accounts",
+              "call": "kept the guest checkout",
+              "why": "fewer drop-offs"
+            }
+          ],
+          "calls_made": [
+            "alternative: force accounts",
+            "call: kept the guest checkout",
+            "why: fewer drop-offs"
+          ],
+          "closed_at": "2026-03-03T09:00:00Z",
+          "commits": [
+            "abc1234"
+          ],
+          "has_signoff_comment": true,
+          "id": "fx-done",
+          "priority": 2,
+          "state": "pending",
+          "title": "Ship the cart",
+          "what_changed": [
+            "the cart ships"
+          ]
+        }
+      ]
+    }
+  ],
+  "total": 1
+}

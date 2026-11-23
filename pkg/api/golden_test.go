@@ -50,7 +50,8 @@ func goldenIssues() []model.Issue {
 	// fx-b is blocked by two open blockers, one of them in another epic: the
 	// list tree shows it under both.
 	b := child("fx-b", "Payment form", model.StatusOpen, 2)
-	b.Dependencies = append(b.Dependencies, dep("fx-b", "fx-a", model.DepBlocks), dep("fx-b", "fx-x", model.DepBlocks))
+	b.Dependencies = append(b.Dependencies, dep("fx-b", "fx-a", model.DepBlocks), dep("fx-b", "fx-x", model.DepBlocks),
+		dep("fx-b", "fx-done", model.DepBlocks)) // fx-done is closed: a resolved blocker
 	c := child("fx-c", "Receipt email", model.StatusOpen, 3)
 
 	otherEpic := issue("fx-epic2", "Platform epic", model.StatusOpen, 2, model.TypeEpic)
@@ -71,12 +72,12 @@ func goldenIssues() []model.Issue {
 	signoff.Labels = []string{"needs-signoff"}
 	signoff.Comments = []*model.Comment{{
 		ID: "c1", IssueID: "fx-done", Author: "claude", CreatedAt: ts(3, 9),
-		Text: "bd-kind: signoff\nWhat changed: the cart ships.\n\n**Calls made on your behalf:**\n- kept the guest checkout",
+		Text: "bd-kind: signoff\n" + `{"what_changed":"the cart ships","calls_made":[{"call":"kept the guest checkout","alternative":"force accounts","why":"fewer drop-offs"}],"commits":["abc1234"]}`,
 	}}
 
 	decision := issue("fx-decide", "Pick a payment provider", model.StatusOpen, 2, model.TypeTask)
 	decision.Labels = []string{"needs-decision"}
-	decision.Description = "Which provider?\n\nOptions:\n(a, recommended) Stripe: lowest effort\n(b) Adyen: better EU rates"
+	decision.Description = "Question: Which provider should we use?\n\nOptions:\n(a, recommended) Stripe: lowest effort\n(b) Adyen: better EU rates"
 	decision.Comments = []*model.Comment{
 		{ID: "c2", IssueID: "fx-decide", Author: "jon", Text: "bd-kind: brief\nGOAL: choose a provider.", CreatedAt: ts(2, 11)},
 		{ID: "c3", IssueID: "fx-decide", Author: "claude", Text: "bd-kind: advice\nGo with Stripe.", CreatedAt: ts(2, 12)},
@@ -84,6 +85,8 @@ func goldenIssues() []model.Issue {
 
 	deferred := issue("fx-later", "Gift cards", model.StatusOpen, 4, model.TypeFeature)
 	deferred.DeferUntil = tsp(30, 9)
+	// A dangling related link: the target is not in the tracker.
+	deferred.Dependencies = []*model.Dependency{dep("fx-later", "fx-gone", model.DepRelated)}
 
 	related := issue("fx-found", "Rounding bug found in cart", model.StatusOpen, 2, model.TypeBug)
 	related.Dependencies = []*model.Dependency{dep("fx-found", "fx-a", model.DepDiscoveredFrom)}
@@ -205,4 +208,30 @@ func TestGoldenIssuesTreeAndSearch(t *testing.T) {
 		t.Fatalf("search: %d", code)
 	}
 	testutil.NewGoldenFile(t, goldenDir, "search.json").AssertJSON(hits)
+}
+
+func TestGoldenIssueDetailAndSignoff(t *testing.T) {
+	store := goldenStore(t, writeGoldenTracker(t))
+	waitPhase2(t, store)
+
+	// The blocked child (parent, active and resolved blockers, triage, graph),
+	// the decision bead (kinded comments, options), and the signoff bead.
+	for target, name := range map[string]string{
+		"/api/v1/issues/fx-b":      "issue-detail.json",
+		"/api/v1/issues/fx-decide": "issue-detail-decision.json",
+		"/api/v1/issues/fx-done":   "issue-detail-signoff.json",
+		"/api/v1/signoff":          "signoff.json",
+	} {
+		got, code := getGolden(t, store, target)
+		if code != http.StatusOK {
+			t.Fatalf("%s: %d", target, code)
+		}
+		testutil.NewGoldenFile(t, goldenDir, name).AssertJSON(got)
+	}
+
+	missing, code := getGolden(t, store, "/api/v1/issues/no-such-issue")
+	if code != http.StatusNotFound {
+		t.Fatalf("unknown id: %d", code)
+	}
+	testutil.NewGoldenFile(t, goldenDir, "error-not-found.json").AssertJSON(missing)
 }

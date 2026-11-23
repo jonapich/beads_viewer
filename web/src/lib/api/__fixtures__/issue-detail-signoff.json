@@ -1,0 +1,96 @@
+{
+  "active_dependents": 1,
+  "blocked": false,
+  "blocked_by": [],
+  "blocker_counts": {
+    "active": 0,
+    "resolved": 0
+  },
+  "blocks": [
+    {
+      "active": false,
+      "id": "fx-b",
+      "issue_type": "task",
+      "priority": 2,
+      "status": "open",
+      "title": "Payment form"
+    }
+  ],
+  "children": [],
+  "close_reason": "done",
+  "closed_at": "2026-03-03T09:00:00Z",
+  "comments": [
+    {
+      "author": "claude",
+      "collapsible": true,
+      "created_at": "2026-03-03T09:00:00Z",
+      "data": {
+        "calls_made": [
+          {
+            "alternative": "force accounts",
+            "call": "kept the guest checkout",
+            "why": "fewer drop-offs"
+          }
+        ],
+        "commits": [
+          "abc1234"
+        ],
+        "what_changed": "the cart ships"
+      },
+      "id": "c1",
+      "kind": "signoff",
+      "summary": "signoff {calls_made, commits, what_changed}",
+      "text": "{\"what_changed\":\"the cart ships\",\"calls_made\":[{\"call\":\"kept the guest checkout\",\"alternative\":\"force accounts\",\"why\":\"fewer drop-offs\"}],\"commits\":[\"abc1234\"]}"
+    }
+  ],
+  "created_at": "2026-03-01T10:00:00Z",
+  "description": "Ship the cart description.",
+  "graph": {
+    "authority": 0.5773502289530971,
+    "betweenness": 0,
+    "critical_path_score": 0,
+    "eigenvector": 0,
+    "hub": 0,
+    "pagerank": 0.053067220226021394
+  },
+  "id": "fx-done",
+  "issue_type": "feature",
+  "labels": [
+    "needs-signoff"
+  ],
+  "links": [],
+  "phase2_ready": true,
+  "priority": 2,
+  "read_only_reason": "source is read-only: source has no readable tracker metadata",
+  "ready": false,
+  "related": [],
+  "signoff": {
+    "calls": [
+      {
+        "alternative": "force accounts",
+        "call": "kept the guest checkout",
+        "why": "fewer drop-offs"
+      }
+    ],
+    "calls_made": [
+      "alternative: force accounts",
+      "call: kept the guest checkout",
+      "why: fewer drop-offs"
+    ],
+    "closed_at": "2026-03-03T09:00:00Z",
+    "commits": [
+      "abc1234"
+    ],
+    "has_signoff_comment": true,
+    "id": "fx-done",
+    "priority": 2,
+    "state": "pending",
+    "title": "Ship the cart",
+    "what_changed": [
+      "the cart ships"
+    ]
+  },
+  "status": "closed",
+  "title": "Ship the cart",
+  "updated_at": "2026-03-02T10:00:00Z"
+}

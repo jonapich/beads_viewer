@@ -125,3 +125,40 @@ func TestActiveDependentsCountsMatchesPerID(t *testing.T) {
 		t.Fatalf("counts = %v", counts)
 	}
 }
+
+func TestBlockersMatchesCountsAndActiveIDs(t *testing.T) {
+	issues, m := blockerFixture()
+	for _, iss := range issues {
+		refs := Blockers(m, nil, iss)
+		if refs == nil {
+			t.Fatalf("%s: Blockers must never be nil", iss.ID)
+		}
+		var active, resolved int
+		var activeIDs []string
+		seen := map[string]bool{}
+		for _, ref := range refs {
+			if seen[ref.ID] {
+				t.Errorf("%s: duplicate blocker %s", iss.ID, ref.ID)
+			}
+			seen[ref.ID] = true
+			if ref.Active {
+				active++
+				activeIDs = append(activeIDs, ref.ID)
+			} else {
+				resolved++
+			}
+		}
+		wantActive, wantResolved := BlockerCounts(m, nil, iss)
+		if active != wantActive || resolved != wantResolved {
+			t.Errorf("%s: Blockers tally %d/%d, BlockerCounts %d/%d", iss.ID, active, resolved, wantActive, wantResolved)
+		}
+		if got := ActiveBlockerIDs(m, nil, iss); len(got) != len(activeIDs) || (len(got) > 0 && got[0] != activeIDs[0]) {
+			t.Errorf("%s: active ids %v vs ActiveBlockerIDs %v", iss.ID, activeIDs, got)
+		}
+	}
+	// Dependencies order: the closed blocker listed second stays second.
+	work := Blockers(m, nil, issues[2])
+	if len(work) != 2 || work[0] != (BlockerRef{"open-blk", true}) || work[1] != (BlockerRef{"closed-blk", false}) {
+		t.Fatalf("work blockers = %+v", work)
+	}
+}
