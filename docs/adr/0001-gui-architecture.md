@@ -30,7 +30,7 @@ What the code gives us today:
 | Analysis | `pkg/analysis` (`NewAnalyzer`, `ComputeTriage*`, insights, plan, ...) | yes |
 | Change watching | `pkg/watcher.Watcher` (fsnotify with polling fallback, `Changed()` chan) | yes |
 | TUI data pipeline | `pkg/ui/snapshot.go`: `SnapshotBuilder` → `DataSnapshot` (sorted issues, ID map, counts open/ready/blocked/closed, analyzer + `GraphStats`, insights, triage scores/reasons, quick-win/blocker sets, unblocks map, parent/child tree, board columns, data hash, two-phase analysis). Built off the UI thread | mostly. It mixes in `bubbles/list` items and graph layout |
-| Robot JSON | `cmd/bv/robot_registry.go` etc. Agent-facing. Adds agent-only behaviour (feedback-tuned weights, triage history, `--brief`, usage hints, pinned-clock stabilisation) on top of `pkg/analysis` | no (package main), and **not used by the GUI** |
+| Robot JSON | `cmd/bv/robot_registry.go` etc. Agent-facing. Adds agent-only behaviour (triage history, `--brief`, usage hints, pinned-clock stabilisation) on top of `pkg/analysis` | no (package main), and **not used by the GUI** |
 | Writes | `pkg/ui/model.go` (`runEditorTracker`, `runTrackerOps`, `runIssueUpdateCmd`), `pkg/ui/agent_desk_model.go` (`signoffDeskBead`, `postDeskAnswer`) | **no** (returns `tea.Cmd`) |
 | Tracker origin | `pkg/loader` (`IssueOrigin`, executable/db/workdir resolution, `RefreshBDExport`) | yes |
 | Local HTTP plumbing | `pkg/export/preview.go` (127.0.0.1 listener, `previewRequestGuard` Host/Origin check, no-cache middleware), `livereload.go` (SSE hub), `github.go` (`prepareBrowserOpen`, honours `BV_NO_BROWSER`) | yes |
@@ -116,9 +116,10 @@ Read (beads-c2o.5):
 | Endpoint | Source |
 |---|---|
 | `GET /api/v1/meta` | data hash, source path, tracker kind (bd/br), capabilities (e.g. bd `signoff` available) |
-| `GET /api/v1/issues?view=tree\|flat` | snapshot issues + `TreeRoots`, projected to a slim list DTO (id, title, status, priority, type, assignee, labels, counts, triage score, ready/blocked flags) |
+| `GET /api/v1/issues?view=tree\|flat` | snapshot issues + a tree adjacency (`roots`, `children` edges of kind child/block; an open blocked issue sits under each of its blockers), projected to a slim list DTO (id, title, status, priority, type, assignee, labels, counts, triage score, ready/blocked flags) |
 | `GET /api/v1/issues/{id}` | full issue + deps/dependents + comments + unblocks + triage reasons, the same data as the TUI detail pane |
-| `GET /api/v1/triage`, `/insights` | snapshot triage/insights (TUI options) |
+| `GET /api/v1/triage` | snapshot triage (TUI options, feedback-tuned weights as in the TUI), without `meta` timing, `commands` or per-recommendation `actions` (they carry local paths). 503 `analysis_pending` with `Retry-After: 2` until triage exists (large/huge tiers before phase 2); 500 `analysis_failed` when phase 2 failed without it. Small/medium tiers serve it at phase 1 with `phase2_ready: false` |
+| `GET /api/v1/insights?limit=N` | snapshot insights (TUI options). `limit` defaults to 25, 1..500, else 400; every list is capped, `orphan_count`/`cycle_count` are the pre-cap totals, and `skipped` maps a list name to the reason its metric was skipped or timed out (as the TUI insights panels show; filled once phase 2 is done). Lists may be empty or partial until `phase2_ready` |
 | `GET /api/v1/search?q=` | the TUI's search path (`pkg/search`) |
 | `GET /api/v1/signoff` | the TUI agent-desk data (lifted with the snapshot if it lives in `pkg/ui`) |
 | `GET /api/v1/events` | SSE (§4) |
@@ -147,7 +148,12 @@ Conventions:
   behind an `atomic.Pointer`. It is built with the same two-phase approach as
   the TUI: phase 1 is served immediately, and phase 2 swaps in and fires an SSE
   event when ready.
-  Responses carry `ETag: <data hash>` so the client can use `If-None-Match`.
+  Snapshot-backed responses carry an `ETag` so the client can use `If-None-Match`:
+  `"<data hash>-p1"` for phase 1, `-p2` once phase 2 is swapped in, `-p1e` when
+  phase 2 failed. The data hash alone does not change at phase 2, so the suffix
+  is what makes phase 2 visible (with `meta.phase2_ready`) until the SSE event
+  exists. Endpoints whose body depends on the request add `~<variant>`:
+  `view=`, `q=`, `limit=` and the issue id. Errors carry no ETag.
 - **Writes are serialised** behind a mutex, the same model as the TUI (one bd
   process at a time). After a successful write the server runs `RefreshExport`,
   reloads, and swaps the snapshot before it responds. The response contains the

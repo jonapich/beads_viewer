@@ -334,3 +334,82 @@ type SignoffResponse struct {
 	Total  int               `json:"total"`
 	Groups []SignoffGroupDTO `json:"groups"`
 }
+
+// TriageResponse is GET /api/v1/triage: close to robot-triage, but GUI-specific
+// (no generated_at or compute time, which would change every response; no
+// commands or per-recommendation actions, which carry local paths).
+type TriageResponse struct {
+	Phase2Ready bool `json:"phase2_ready"`
+	// Phase2Error is set when Phase 2 failed but triage is still served from
+	// phase 1 (small and medium tiers); phase2_ready then stays false.
+	Phase2Error     string                 `json:"phase2_error,omitempty"`
+	IssueCount      int                    `json:"issue_count"`
+	QuickRef        analysis.QuickRef      `json:"quick_ref"`
+	Recommendations []TriageRecommendation `json:"recommendations"`
+	QuickWins       []analysis.QuickWin    `json:"quick_wins"`
+	BlockersToClear []analysis.BlockerItem `json:"blockers_to_clear"`
+	// ProjectHealth.counts.by_priority has integer keys, which JSON writes as
+	// strings: Record<string, number> on the client.
+	ProjectHealth analysis.ProjectHealth `json:"project_health"`
+	Alerts        []analysis.Alert       `json:"alerts,omitempty"`
+}
+
+// TriageRecommendation is analysis.Recommendation without its Actions (bd argv
+// and working directories) and without the breakdown's risk signals.
+type TriageRecommendation struct {
+	ID          string                  `json:"id"`
+	Title       string                  `json:"title"`
+	Type        string                  `json:"type"`
+	Status      string                  `json:"status"`
+	Assignee    string                  `json:"assignee,omitempty"`
+	Priority    int                     `json:"priority"`
+	Labels      []string                `json:"labels"`
+	DeferUntil  *time.Time              `json:"defer_until,omitempty"`
+	Score       float64                 `json:"score"`
+	Breakdown   analysis.ScoreBreakdown `json:"breakdown"`
+	Action      string                  `json:"action"`
+	Reasons     []string                `json:"reasons"`
+	UnblocksIDs []string                `json:"unblocks_ids"`
+	BlockedBy   []string                `json:"blocked_by,omitempty"`
+	Claimable   bool                    `json:"claimable"`
+}
+
+// InsightEntry is one row of an insight list: an issue and its metric value.
+type InsightEntry struct {
+	ID    string  `json:"id"`
+	Title string  `json:"title,omitempty"`
+	Value float64 `json:"value"`
+}
+
+// InsightsResponse is GET /api/v1/insights?limit=N. Every list is capped at N
+// (default 25, at most 500). The metric lists may be empty or partial until
+// phase2_ready (the small and medium tiers fill some at load) and stay empty
+// on the huge tier (phase2_skipped). Skipped names the lists whose metric was
+// skipped or timed out, with the reason; project velocity is in the triage
+// response (project_health.velocity), not here.
+type InsightsResponse struct {
+	Phase2Ready    bool    `json:"phase2_ready"`
+	Phase2Skipped  bool    `json:"phase2_skipped"`
+	Phase2Error    string  `json:"phase2_error,omitempty"`
+	ClusterDensity float64 `json:"cluster_density"`
+
+	Bottlenecks  []InsightEntry `json:"bottlenecks"`
+	Keystones    []InsightEntry `json:"keystones"`
+	Influencers  []InsightEntry `json:"influencers"`
+	Hubs         []InsightEntry `json:"hubs"`
+	Authorities  []InsightEntry `json:"authorities"`
+	Cores        []InsightEntry `json:"cores"`
+	Slack        []InsightEntry `json:"slack"`
+	Articulation []string       `json:"articulation"`
+	Orphans      []string       `json:"orphans"`
+	// OrphanCount and CycleCount are the totals before the cap.
+	OrphanCount int        `json:"orphan_count"`
+	Cycles      [][]string `json:"cycles"`
+	CycleCount  int        `json:"cycle_count"`
+
+	// Skipped maps a list name (bottlenecks, hubs, authorities, cycles,
+	// keystones, slack, influencers, cores, articulation) to the reason its
+	// metric was skipped or timed out. Always an object; filled once
+	// phase2_ready.
+	Skipped map[string]string `json:"skipped"`
+}

@@ -2,11 +2,13 @@ import { session } from "../session.svelte";
 import type {
   ApiErrorBody,
   HealthResponse,
+  InsightsResponse,
   IssueDetail,
   IssuesResponse,
   MetaResponse,
   SearchResponse,
   SignoffResponse,
+  TriageResponse,
 } from "./types";
 
 export type ApiPath = `/api/v1/${string}`;
@@ -146,3 +148,25 @@ export const getIssueIfChanged = (id: string, etag: string | null, signal?: Abor
 
 /** Closed beads awaiting sign-off, grouped by epic. */
 export const getSignoff = (signal?: AbortSignal) => getJSON<SignoffResponse>("/api/v1/signoff", { signal });
+
+/**
+ * Triage. Rejects with ApiError 503 "analysis_pending" while it is still being
+ * computed (retry after ~2 s), 500 "analysis_failed" if Phase 2 failed.
+ */
+export const getTriage = (signal?: AbortSignal) => getJSON<TriageResponse>("/api/v1/triage", { signal });
+
+/** Conditional GET of triage: null means the cached copy is current. */
+export const getTriageIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<TriageResponse>("/api/v1/triage", etag, { signal });
+
+/** Graph insights; each list holds at most `limit` entries (server default 25, max 500). */
+export const getInsights = (limit?: number, signal?: AbortSignal) =>
+  getJSON<InsightsResponse>(limit === undefined ? "/api/v1/insights" : `/api/v1/insights?limit=${limit}`, { signal });
+
+/** Conditional GET of insights for one limit: null means the cached copy is current. */
+export const getInsightsIfChanged = (limit: number | undefined, etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<InsightsResponse>(
+    limit === undefined ? "/api/v1/insights" : `/api/v1/insights?limit=${limit}`,
+    etag,
+    { signal },
+  );

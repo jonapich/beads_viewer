@@ -235,3 +235,18 @@ func TestGoldenIssueDetailAndSignoff(t *testing.T) {
 	}
 	testutil.NewGoldenFile(t, goldenDir, "error-not-found.json").AssertJSON(missing)
 }
+
+func TestGoldenTriageAndInsights(t *testing.T) {
+	store := goldenStore(t, writeGoldenTracker(t))
+	waitPhase2(t, store)
+	for target, name := range map[string]string{
+		"/api/v1/triage":           "triage.json",
+		"/api/v1/insights?limit=3": "insights.json",
+	} {
+		got, code := getGolden(t, store, target)
+		if code != http.StatusOK {
+			t.Fatalf("%s: %d", target, code)
+		}
+		testutil.NewGoldenFile(t, goldenDir, name).AssertJSON(got)
+	}
+}

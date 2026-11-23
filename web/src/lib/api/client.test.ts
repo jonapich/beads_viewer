@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, search } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getInsights, getInsightsIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, getTriage, getTriageIfChanged, search } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -103,6 +103,33 @@ describe("api client", () => {
   it("getIssue surfaces the not_found envelope", async () => {
     fetchMock.mockResolvedValue(json({ error: { code: "not_found", message: "no such issue" } }, { status: 404 }));
     await expect(getIssue("nope")).rejects.toMatchObject({ status: 404, code: "not_found" });
+  });
+
+  it("getInsights adds ?limit only when given", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json({})));
+    await getInsights();
+    await getInsights(5);
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(["/api/v1/insights", "/api/v1/insights?limit=5"]);
+  });
+
+  it("getInsightsIfChanged sends the etag for the limit", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    await expect(getInsightsIfChanged(7, '"i~l7"')).resolves.toBeNull();
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/insights?limit=7");
+    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe('"i~l7"');
+    await getInsightsIfChanged(undefined, null);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v1/insights");
+  });
+
+  it("getTriage surfaces analysis_pending and supports conditional reads", async () => {
+    fetchMock.mockResolvedValue(json({ error: { code: "analysis_pending", message: "still computing" } }, { status: 503 }));
+    await expect(getTriage()).rejects.toMatchObject({ status: 503, code: "analysis_pending" });
+
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    await expect(getTriageIfChanged('"t"')).resolves.toBeNull();
+    const init = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe('"t"');
   });
 
   it("maps 401 to signed-out with the server's error code", async () => {

@@ -376,3 +376,214 @@ export interface IssueDetail {
   /** Why bv cannot write to this issue's tracker; absent when it can. */
   read_only_reason?: string;
 }
+
+export interface TopPick {
+  id: string;
+  title: string;
+  score: number;
+  reasons: string[];
+  /** How many items this unblocks. */
+  unblocks: number;
+}
+
+/** Counts at a glance (pkg/analysis QuickRef). open_count and blocked_count are strict status counts. */
+export interface QuickRef {
+  open_count: number;
+  actionable_count: number;
+  blocked_count: number;
+  in_progress_count: number;
+  not_closed_count: number;
+  not_actionable_count: number;
+  readiness_blocked_count: number;
+  deferred_or_parked_count: number;
+  /** Top 3 recommended items. */
+  top_picks: TopPick[];
+}
+
+/** The weighted score factors behind a recommendation (the risk signals are not sent). */
+export interface ScoreBreakdown {
+  pagerank: number;
+  betweenness: number;
+  blocker_ratio: number;
+  staleness: number;
+  priority_boost: number;
+  time_to_impact: number;
+  urgency: number;
+  risk: number;
+  pagerank_norm: number;
+  betweenness_norm: number;
+  blocker_ratio_norm: number;
+  staleness_norm: number;
+  priority_boost_norm: number;
+  time_to_impact_norm: number;
+  urgency_norm: number;
+  risk_norm: number;
+  time_to_impact_explanation?: string;
+  urgency_explanation?: string;
+  risk_explanation?: string;
+}
+
+/** pkg/analysis Recommendation without its actions (bd argv, working directories). */
+export interface TriageRecommendation {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  assignee?: string;
+  priority: number;
+  labels: string[];
+  defer_until?: string;
+  score: number;
+  breakdown: ScoreBreakdown;
+  /** Suggested next action, human-readable. */
+  action: string;
+  reasons: string[];
+  unblocks_ids: string[];
+  blocked_by?: string[];
+  /** The robot top-pick gate: open, unblocked, unassigned, not deferred, not a container. */
+  claimable: boolean;
+}
+
+export interface QuickWin {
+  id: string;
+  title: string;
+  status: string;
+  score: number;
+  reason: string;
+  unblocks_ids?: string[];
+}
+
+export interface BlockerItem {
+  id: string;
+  title: string;
+  unblocks_count: number;
+  unblocks_ids: string[];
+  /** Can this blocker be worked on now? */
+  actionable: boolean;
+  blocked_by?: string[];
+}
+
+export interface HealthCounts {
+  total: number;
+  open: number;
+  closed: number;
+  blocked: number;
+  actionable: number;
+  not_closed: number;
+  dependency_blocked: number;
+  by_status: Record<string, number>;
+  by_type: Record<string, number>;
+  /** Keys are the priorities as strings ("0".."4"). */
+  by_priority: Record<string, number>;
+}
+
+export interface GraphHealth {
+  node_count: number;
+  edge_count: number;
+  density: number;
+  has_cycles: boolean;
+  cycle_count?: number;
+  phase2_ready: boolean;
+}
+
+export interface VelocityWeek {
+  /** RFC 3339, UTC Monday */
+  week_start: string;
+  closed: number;
+}
+
+export interface Velocity {
+  closed_last_7_days: number;
+  closed_last_30_days: number;
+  avg_days_to_close: number;
+  /** Newest first. */
+  weekly?: VelocityWeek[];
+  /** True when computed from the current snapshot only. */
+  estimated?: boolean;
+}
+
+export interface Staleness {
+  stale_count: number;
+  stalest_issue_id: string;
+  stalest_issue_days: number;
+  threshold_days: number;
+}
+
+export interface ProjectHealth {
+  counts: HealthCounts;
+  graph: GraphHealth;
+  velocity?: Velocity;
+  staleness?: Staleness;
+}
+
+export interface Alert {
+  /** "stale" | "velocity_drop" | "cycle" | "duplicate" | ... */
+  type: string;
+  /** "info" | "warning" | "error" | "critical" */
+  severity: string;
+  message: string;
+  issue_id?: string;
+  issue_ids?: string[];
+}
+
+/**
+ * GET /api/v1/triage (pkg/api/dto.go TriageResponse). 503 "analysis_pending"
+ * (Retry-After: 2) until triage exists on the large and huge tiers; on the
+ * small and medium tiers it is served at phase 1 with phase2_ready false and
+ * the ETag changes when Phase 2 lands. 500 "analysis_failed" when Phase 2
+ * failed and there is no triage. A tracker with nothing to triage answers 200
+ * with empty lists once Phase 2 is done.
+ */
+export interface TriageResponse {
+  phase2_ready: boolean;
+  /** Phase 2 failed but triage is still served from phase 1; phase2_ready then stays false. */
+  phase2_error?: string;
+  issue_count: number;
+  quick_ref: QuickRef;
+  recommendations: TriageRecommendation[];
+  quick_wins: QuickWin[];
+  blockers_to_clear: BlockerItem[];
+  project_health: ProjectHealth;
+  alerts?: Alert[];
+}
+
+/** One row of an insight list. */
+export interface InsightEntry {
+  id: string;
+  title?: string;
+  value: number;
+}
+
+/**
+ * GET /api/v1/insights?limit=N (pkg/api/dto.go InsightsResponse). Every list
+ * holds at most N entries (default 25, 1..500). The lists may be empty or
+ * partial until phase2_ready (the small and medium tiers fill some at load), and
+ * stay empty when phase2_skipped (huge tier).
+ */
+export interface InsightsResponse {
+  phase2_ready: boolean;
+  phase2_skipped: boolean;
+  phase2_error?: string;
+  cluster_density: number;
+  bottlenecks: InsightEntry[];
+  keystones: InsightEntry[];
+  influencers: InsightEntry[];
+  hubs: InsightEntry[];
+  authorities: InsightEntry[];
+  cores: InsightEntry[];
+  slack: InsightEntry[];
+  articulation: string[];
+  orphans: string[];
+  /** Total orphans before the cap. */
+  orphan_count: number;
+  cycles: string[][];
+  /** Total cycles before the cap. */
+  cycle_count: number;
+  /**
+   * List name -> reason its metric was skipped or timed out (e.g. keystones and
+   * slack when the graph has a cycle, bottlenecks on a big graph), so an empty
+   * list can be told from "none found". Filled once phase2_ready. Project
+   * velocity is in the triage response (project_health.velocity).
+   */
+  skipped: Record<string, string>;
+}

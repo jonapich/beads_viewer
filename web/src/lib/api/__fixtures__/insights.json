@@ -1,0 +1,97 @@
+{
+  "articulation": [
+    "fx-b"
+  ],
+  "authorities": [
+    {
+      "id": "fx-a",
+      "title": "Cart model",
+      "value": 0.5773502289530971
+    },
+    {
+      "id": "fx-done",
+      "title": "Ship the cart",
+      "value": 0.5773502289530971
+    },
+    {
+      "id": "fx-x",
+      "title": "Upgrade gateway SDK",
+      "value": 0.5773502289530971
+    }
+  ],
+  "bottlenecks": [],
+  "cluster_density": 0.03787878787878788,
+  "cores": [
+    {
+      "id": "fx-a",
+      "title": "Cart model",
+      "value": 1
+    },
+    {
+      "id": "fx-b",
+      "title": "Payment form",
+      "value": 1
+    },
+    {
+      "id": "fx-cy1",
+      "title": "Cycle one",
+      "value": 1
+    }
+  ],
+  "cycle_count": 1,
+  "cycles": [
+    [
+      "fx-cy1",
+      "fx-cy2",
+      "fx-cy1"
+    ]
+  ],
+  "hubs": [
+    {
+      "id": "fx-b",
+      "title": "Payment form",
+      "value": 0.9999999767694276
+    },
+    {
+      "id": "fx-cy1",
+      "title": "Cycle one",
+      "value": 0.0001524157867351665
+    },
+    {
+      "id": "fx-cy2",
+      "title": "Cycle two",
+      "value": 0.0001524157867351665
+    }
+  ],
+  "influencers": [
+    {
+      "id": "fx-cy1",
+      "title": "Cycle one",
+      "value": 0.7071067811865476
+    },
+    {
+      "id": "fx-cy2",
+      "title": "Cycle two",
+      "value": 0.7071067811865476
+    },
+    {
+      "id": "fx-a",
+      "title": "Cart model",
+      "value": 0
+    }
+  ],
+  "keystones": [],
+  "orphan_count": 9,
+  "orphans": [
+    "fx-a",
+    "fx-c",
+    "fx-decide"
+  ],
+  "phase2_ready": true,
+  "phase2_skipped": false,
+  "skipped": {
+    "keystones": "dependency graph contains a cycle; topological order unavailable",
+    "slack": "dependency graph contains a cycle; topological order unavailable"
+  },
+  "slack": []
+}

@@ -5,10 +5,12 @@ import type {
   ApiErrorBody,
   HealthResponse,
   IssueDetail,
+  InsightsResponse,
   IssuesResponse,
   MetaResponse,
   SearchResponse,
   SignoffResponse,
+  TriageResponse,
 } from "./types";
 import health from "./__fixtures__/health.json";
 import unauthorized from "./__fixtures__/error-unauthorized.json";
@@ -21,6 +23,8 @@ import issueDetailDecision from "./__fixtures__/issue-detail-decision.json";
 import issueDetailSignoff from "./__fixtures__/issue-detail-signoff.json";
 import signoff from "./__fixtures__/signoff.json";
 import notFound from "./__fixtures__/error-not-found.json";
+import triage from "./__fixtures__/triage.json";
+import insights from "./__fixtures__/insights.json";
 
 export const healthFixture: HealthResponse = health;
 export const unauthorizedFixture: ApiErrorBody = unauthorized;
@@ -33,3 +37,5 @@ export const issueDetailDecisionFixture: IssueDetail = issueDetailDecision;
 export const issueDetailSignoffFixture: IssueDetail = issueDetailSignoff;
 export const signoffFixture: SignoffResponse = signoff;
 export const notFoundFixture: ApiErrorBody = notFound;
+export const triageFixture: TriageResponse = triage;
+export const insightsFixture: InsightsResponse = insights;

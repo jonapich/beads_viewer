@@ -126,6 +126,10 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSearch(w, r)
 	case "/api/v1/signoff":
 		s.handleSignoff(w, r)
+	case "/api/v1/triage":
+		s.handleTriage(w, r)
+	case "/api/v1/insights":
+		s.handleInsights(w, r)
 	default:
 		if strings.HasPrefix(r.URL.Path, issuesPathPrefix) {
 			s.handleIssueDetail(w, r)
