@@ -91,6 +91,7 @@ var canonicalHeadlessFlags = []string{
 	"rollback",
 	"save-baseline",
 	"search",
+	"serve",
 	"update",
 	"update-dry-run",
 	"version",
@@ -120,7 +121,7 @@ var nonInteractiveSubcommandSet = map[string]struct{}{
 	"orphans": {}, "pick": {}, "plan": {}, "priorities": {},
 	"priority": {}, "recipes": {}, "recommend": {}, "recommendations": {},
 	"related": {}, "schema": {}, "schemas": {}, "search": {},
-	"self-update": {}, "selfupdate": {}, "sprint": {}, "sprint-list": {},
+	"self-update": {}, "selfupdate": {}, "serve": {}, "sprint": {}, "sprint-list": {},
 	"sprint-show": {}, "sprints": {}, "suggest": {}, "suggestions": {},
 	"triage": {}, "upgrade": {}, "version": {}, "what-if": {}, "whatif": {},
 }

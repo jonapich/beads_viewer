@@ -166,6 +166,10 @@ func modifierRecoveryExamples(modifier string) []string {
 		return []string{"bv --preview-pages ./bv-pages --no-live-reload"}
 	case "watch-export":
 		return []string{"bv --export-pages ./bv-pages --watch-export"}
+	case "serve-port":
+		return []string{"bv serve --serve-port 8080"}
+	case "serve-no-open", "serve-dev":
+		return []string{"bv serve --" + modifier}
 	case "debug-width", "debug-height":
 		return []string{"bv --debug-render triage --debug-width 120 --debug-height 40"}
 	default:
@@ -554,6 +558,10 @@ func rewriteAgentIntentCommand(args []string) ([]string, bool) {
 		return append([]string{"--check-drift", "--robot-drift"}, rewriteAgentIntentFlagAliases(rest, "drift")...), true
 	case "version":
 		return append([]string{"--version"}, rewriteAgentIntentFlagAliases(rest, "version")...), true
+	case "serve":
+		// `bv serve [--serve-port N] [--serve-no-open] [--serve-dev]`: the
+		// remaining tokens are already real flags, so pass them through.
+		return append([]string{"--serve"}, rest...), true
 	case "file-beads":
 		return rewriteRobotValueIntent(rest, "file-beads", "", "--robot-file-beads", ""), true
 	case "commit":
@@ -996,6 +1004,7 @@ var knownValueTakingCLIFlags = map[string]bool{
 	"pages-title":               true,
 	"pages-subtitle":            true,
 	"preview-pages":             true,
+	"serve-port":                true,
 	"debug-render":              true,
 	"debug-width":               true,
 	"debug-height":              true,
@@ -1095,7 +1104,7 @@ func hasNonRobotPrimaryArg(args []string) bool {
 		if isDoubleDash || len(name) > 1 {
 			switch name {
 			case "version", "help", "check-update", "update", "update-dry-run", "rollback",
-				"pages", "export-pages", "preview-pages", "export", "export-md", "export-graph", "hooks-info",
+				"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
 				"priority-brief", "agent-brief", "emit-script", "debug-render", "profile-startup",
 				"init-drift", "save-baseline", "baseline-info", "check-drift",
 				"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show":
@@ -1187,6 +1196,7 @@ func agentIntentCommandNames() []string {
 		"drift",
 		"orphans",
 		"version",
+		"serve",
 		"upgrade",
 		"self-update",
 		"selfupdate",
@@ -1550,6 +1560,12 @@ func defaultFlagSections() []flagSection {
 			},
 		},
 		{
+			Title: "Web GUI",
+			Match: func(name string) bool {
+				return name == "serve" || strings.HasPrefix(name, "serve-")
+			},
+		},
+		{
 			Title: "Debug Flags",
 			Match: func(name string) bool {
 				switch name {
@@ -1812,6 +1828,11 @@ func main() {
 	pagesIncludeHistory := flag.Bool("pages-include-history", true, "Include git history for time-travel (default: true)")
 	previewPages := flag.String("preview-pages", "", "Preview existing static site bundle")
 	previewNoLiveReload := flag.Bool("no-live-reload", false, "Disable live-reload in preview mode")
+	// Local web GUI server (beads-c2o.4). `bv serve` is rewritten to --serve.
+	serveFlag := flag.Bool("serve", false, "Start the local web GUI server (127.0.0.1 only; prints a sign-in URL with a per-run token)")
+	servePort := flag.Int("serve-port", 0, "Port for --serve (0 = pick a free port)")
+	serveNoOpen := flag.Bool("serve-no-open", false, "With --serve: do not open the browser (BV_NO_BROWSER also suppresses it)")
+	serveDev := flag.Bool("serve-dev", false, "With --serve: API only, no embedded frontend; allows the Vite dev server origin (http://localhost:5173)")
 	watchExport := flag.Bool("watch-export", false, "Watch for beads changes and auto-regenerate export (use with --export-pages)")
 	pagesWizard := flag.Bool("pages", false, "Launch interactive Pages deployment wizard")
 	// Debug rendering flag (for diagnosing TUI issues)
@@ -1968,7 +1989,7 @@ func main() {
 		if !isNonTUICLIInvocation {
 			for _, nonTUIFlag := range []string{
 				"version", "help", "check-update", "update", "update-dry-run", "rollback",
-				"pages", "export-pages", "preview-pages", "export", "export-md", "export-graph", "hooks-info",
+				"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
 				"priority-brief", "agent-brief", "emit-script", "profile-startup", "diff-since",
 				"init-drift", "save-baseline", "baseline-info", "check-drift",
 				"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show",
@@ -2074,6 +2095,7 @@ func main() {
 			{modifier: "debug-width", requires: []string{"debug-render"}},
 			{modifier: "debug-height", requires: []string{"debug-render"}},
 		}
+		modifierRules = append(modifierRules, serveModifierRules()...)
 		if isNonTUICLIInvocation {
 			modifierRules = append(modifierRules,
 				modifierFlagRule{modifier: "search-mode", requires: []string{"search"}},
@@ -2133,6 +2155,7 @@ func main() {
 			{flags: []string{"robot-forecast"}},
 			{flags: []string{"robot-burndown"}},
 			{flags: []string{"robot-capacity"}},
+			{flags: []string{"serve"}},
 		}
 		if err := validateModifierFlags(flag.CommandLine, modifierRules); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -2143,6 +2166,10 @@ func main() {
 			os.Exit(1)
 		}
 		if err := validateExclusivePrimaryCommands(flag.CommandLine, primaryRobotCommandGroups); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := validateServeFlags(flag.CommandLine); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -2419,6 +2446,21 @@ func main() {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		}
+
+		// Handle --serve (beads-c2o.4): the local web GUI server. It needs no
+		// tracker yet (read endpoints arrive with beads-c2o.5), so it runs
+		// before project discovery and issue loading.
+		if *serveFlag {
+			if err := runServe(serveOptions{
+				Port:   *servePort,
+				NoOpen: *serveNoOpen,
+				Dev:    *serveDev,
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				exitCLI(1)
+			}
+			exitCLI(0)
 		}
 
 		// Resolve canonical project directory (handles nested subdirectory invocations)

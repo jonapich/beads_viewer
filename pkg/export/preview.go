@@ -12,16 +12,16 @@ import (
 	iofs "io/fs"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/Dicklesworthstone/beads_viewer/internal/localhttp"
 )
 
 // PreviewServer serves a static site bundle locally for previewing.
@@ -236,67 +236,15 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 // previewRequestGuard binds browser access to the listener's local origin.
 // Loopback binding alone does not reject a hostile Host after DNS rebinding.
 // Apply this outside the mux so data, status and live-reload share the policy.
+//
+// The policy itself lives in internal/localhttp, shared with `bv serve`; the
+// preview serves a static bundle, so it stays GET/HEAD-only.
 func previewRequestGuard(port int, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
-		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
-		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		authority, allowed := previewAuthority(r.Host, port)
-		origins := r.Header.Values("Origin")
-		if allowed && len(origins) != 0 {
-			allowed = len(origins) == 1
-			if allowed {
-				origin, err := url.Parse(origins[0])
-				allowed = err == nil && origin.Scheme == "http" && origin.User == nil && origin.Opaque == "" &&
-					origin.Path == "" && origin.RawQuery == "" && !origin.ForceQuery && !strings.Contains(origins[0], "#")
-				if allowed {
-					originAuthority, local := previewAuthority(origin.Host, port)
-					allowed = local && originAuthority == authority
-				}
-			}
-		}
-		if !allowed {
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "preview requests must use the local preview origin", http.StatusForbidden)
-			return
-		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func previewAuthority(authority string, port int) (string, bool) {
-	host, rawPort, err := net.SplitHostPort(authority)
-	if err != nil {
-		// An omitted port means HTTP's default, not the preview's chosen port.
-		if strings.ContainsAny(authority, ":[]") {
-			return "", false
-		}
-		host, rawPort = authority, "80"
-	}
-	for _, digit := range rawPort {
-		if digit < '0' || digit > '9' {
-			return "", false
-		}
-	}
-	parsedPort, err := strconv.Atoi(rawPort)
-	if err != nil || parsedPort != port || port <= 0 || port > 65535 {
-		return "", false
-	}
-	host = strings.ToLower(host)
-	if host != "localhost" {
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			return "", false
-		}
-		host = ip.String()
-	}
-	return net.JoinHostPort(host, strconv.Itoa(port)), true
+	return localhttp.Guard(port, localhttp.Options{
+		ReadOnly:         true,
+		EmbedderPolicy:   true,
+		ForbiddenMessage: "preview requests must use the local preview origin",
+	}, next)
 }
 
 type safePreviewDir struct {
