@@ -38,7 +38,8 @@ export class IssueListState {
   expanded = $state.raw<Set<string>>(new Set());
   /** Tree + filters (the user forced Tree): ids the user collapsed from the all-open view. */
   pruneCollapsed = $state.raw<Set<string>>(new Set());
-  backTo = $state.raw<{ scrollTop: number } | null>(null);
+  /** Set when "Show in tree" left flat results: where to return to (scroll offset and the mode pick). */
+  backTo = $state.raw<{ scrollTop: number; modePick: Mode | null } | null>(null);
   flashId = $state<string | null>(null);
   /** Search hits in rank order (id -> position); null = no query. */
   rank = $state.raw<Map<string, number> | null>(null);
@@ -75,17 +76,20 @@ export class IssueListState {
     this.modePick = nextModePick(u.modePick, this.triggered);
     this.peek = u.peek;
     this.pruneCollapsed = new Set();
+    this.backTo = null;
   }
   isExpanded(id: string): boolean {
     return this.pruning ? !this.pruneCollapsed.has(id) : this.expanded.has(id);
   }
 
   setQuery(q: string): void {
+    this.backTo = null;
     this.query = q;
     this.modePick = nextModePick(this.modePick, this.triggered);
   }
 
   setFilters(f: ListFilters): void {
+    this.backTo = null;
     this.filters = f;
     this.modePick = nextModePick(this.modePick, this.triggered);
   }
@@ -95,6 +99,7 @@ export class IssueListState {
   }
 
   setMode(m: Mode): void {
+    this.backTo = null;
     this.modePick = nextModePick(m, this.triggered);
   }
 
@@ -124,6 +129,37 @@ export class IssueListState {
   collapseAll(ids: ReadonlySet<string>): void {
     this.expanded = new Set();
     if (this.pruning) this.pruneCollapsed = new Set(ids);
+  }
+
+  /**
+   * First step of "Show in tree": switch to the tree, remembering where the flat
+   * results were so "Back to results" can return. The caller then waits for the
+   * rows to settle, finds the path with findPath and calls expandPath.
+   */
+  beginReveal(scrollTop: number): void {
+    this.backTo = this.mode === "flat" ? { scrollTop, modePick: this.modePick } : null;
+    this.modePick = nextModePick("tree", this.triggered);
+  }
+
+  /** Opens exactly these ancestors, in both expansion models (plain and the pruned view). */
+  expandPath(ids: readonly string[]): void {
+    const expanded = new Set(this.expanded);
+    for (const id of ids) expanded.add(id);
+    this.expanded = expanded;
+    if (this.pruneCollapsed.size > 0) {
+      const pruned = new Set(this.pruneCollapsed);
+      for (const id of ids) pruned.delete(id);
+      this.pruneCollapsed = pruned;
+    }
+  }
+
+  /** "Back to results": restores the mode pick; returns the scroll offset to restore, or null. */
+  back(): number | null {
+    const b = this.backTo;
+    if (!b) return null;
+    this.backTo = null;
+    this.modePick = b.modePick;
+    return b.scrollTop;
   }
 
   openPeek(id: string): void {

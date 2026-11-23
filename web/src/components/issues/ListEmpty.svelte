@@ -1,14 +1,22 @@
 <script lang="ts">
   interface Props {
-    /** "empty": the tracker has no issues. "active": the default view has nothing. "filters": the user's filters match nothing. */
-    kind: "empty" | "active" | "filters";
+    /**
+     * "empty": the tracker has no issues. "active": the default view has nothing.
+     * "filters": the filters match nothing. "query": the search matches nothing.
+     */
+    kind: "empty" | "active" | "filters" | "query";
+    /** The text search, for the "query" message. */
+    query?: string;
     /** State excludes closed issues, so offering them can help. */
     canIncludeClosed: boolean;
+    /** Some filter is non-default. */
+    canClearFilters: boolean;
+    onclearsearch: () => void;
     onclearfilters: () => void;
     onincludeclosed: () => void;
   }
 
-  let { kind, canIncludeClosed, onclearfilters, onincludeclosed }: Props = $props();
+  let { kind, query = "", canIncludeClosed, canClearFilters, onclearsearch, onclearfilters, onincludeclosed }: Props = $props();
 </script>
 
 <div class="empty">
@@ -17,18 +25,22 @@
     <p>Create one with</p>
     <p><code>bd create "My first issue"</code></p>
   {:else}
-    <h3>{kind === "filters" ? "Nothing matches these filters" : "No active issues"}</h3>
+    <h3>
+      {#if kind === "query"}No issues match “{query.trim()}”{:else if kind === "filters"}Nothing matches these filters{:else}No active issues{/if}
+    </h3>
     <div class="acts">
-      {#if kind === "filters"}
-        <button type="button" class="btn" onclick={onclearfilters}>Clear filters</button>
+      {#if kind === "query"}
+        <button type="button" class="btn" onclick={onclearsearch}>Clear search</button>
       {/if}
       {#if canIncludeClosed}
         <button type="button" class="btn" onclick={onincludeclosed}>Include closed</button>
       {/if}
+      {#if canClearFilters}
+        <button type="button" class="btn" onclick={onclearfilters}>Clear filters</button>
+      {/if}
     </div>
   {/if}
 </div>
-
 <style>
   .empty {
     padding: 40px 16px;

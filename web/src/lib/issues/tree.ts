@@ -264,3 +264,33 @@ export function defaultExpanded(tree: ListTree): Set<string> {
 export function idsWithKids(tree: ListTree): Set<string> {
   return new Set(Object.keys(tree.children).filter((id) => (tree.children[id]?.length ?? 0) > 0));
 }
+
+/**
+ * The ancestors (outermost first) of the first row where `target` appears in
+ * display order, or null when it is not visible in the tree. Expanding exactly
+ * these makes that row render. Follows the same order, visibility and cycle
+ * guard as flattenTree; subtrees already searched without success are skipped,
+ * so it costs O(V+E).
+ */
+export function findPath(order: TreeOrder, info: (id: string) => SubtreeInfo, target: string): string[] | null {
+  const onPath = new Set<string>();
+  const dead = new Set<string>();
+  const path: string[] = [];
+  const dfs = (id: string): boolean => {
+    if (id === target) return true;
+    if (dead.has(id) || onPath.has(id)) return false;
+    onPath.add(id);
+    path.push(id);
+    for (const k of order.kids(id)) {
+      if (!onPath.has(k.id) && info(k.id).hasMatch && dfs(k.id)) return true;
+    }
+    onPath.delete(id);
+    path.pop();
+    dead.add(id);
+    return false;
+  };
+  for (const r of order.roots()) {
+    if (info(r).hasMatch && dfs(r)) return [...path];
+  }
+  return null;
+}

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import type { ListItem } from "../../lib/api/types";
+  import { highlight } from "../../lib/issues/highlight";
   import type { IssueIndex } from "../../lib/issues/model";
   import { percent } from "../../lib/issues/present";
   import type { EdgeKind, IssueRow } from "../../lib/issues/tree";
@@ -10,10 +12,16 @@
     /** Tree rows only: the placement, for the collapsed count and the "Blocked by" tag. */
     row?: IssueRow;
     muted?: boolean;
+    /** Flat results: the search text to mark in the title. */
+    query?: string;
+    /** Flat results: a second line under the title (the breadcrumb). */
+    below?: Snippet;
     onpeek: (id: string) => void;
   }
 
-  let { item, index, row, muted = false, onpeek }: Props = $props();
+  let { item, index, row, muted = false, query = "", below, onpeek }: Props = $props();
+
+  const segments = $derived(highlight(item.title, query));
 
   const epic = $derived(item.issue_type === "epic");
   const kids = $derived(epic ? (index.childrenByParent.get(item.id)?.length ?? 0) : 0);
@@ -29,7 +37,7 @@
 <span class="c-title">
   <span class="t-line">
     {#if ready}<span class="tag ready">Ready</span>{/if}
-    <button type="button" class="t-btn" class:muted class:epic onclick={() => onpeek(item.id)}>{item.title}</button>
+    <button type="button" class="t-btn" class:muted class:epic onclick={() => onpeek(item.id)}>{#each segments as s, i (i)}{#if s.m}<mark>{s.t}</mark>{:else}{s.t}{/if}{/each}</button>
     {#if item.issue_type !== "task"}
       <span class="tag type" class:bug={item.issue_type === "bug"}>{item.issue_type}</span>
     {/if}
@@ -51,6 +59,7 @@
       {/if}
     {/if}
   </span>
+  {#if below}{@render below()}{/if}
 </span>
 
 <style>
@@ -143,5 +152,10 @@
     display: block;
     height: 100%;
     background: var(--success);
+  }
+  mark {
+    background: var(--warning-subtle);
+    color: inherit;
+    border-radius: 2px;
   }
 </style>

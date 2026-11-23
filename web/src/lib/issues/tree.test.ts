@@ -4,7 +4,7 @@ import type { IssuesResponse, ListItem } from "../api/types";
 import { defaultFilters, passesFilters, type ListFilters } from "./filter";
 import { buildIndex, type IssueIndex } from "./model";
 import { comparator } from "./sort";
-import { defaultExpanded, flattenTree, idsWithKids, makeTreeOrder, subtreeInfo, type TreeRow } from "./tree";
+import { defaultExpanded, findPath, flattenTree, idsWithKids, makeTreeOrder, subtreeInfo, type TreeRow } from "./tree";
 import { mkItem, mkResponse } from "./test-helpers";
 
 const fx: IssuesResponse = fixture;
@@ -241,5 +241,53 @@ describe("limits and caching", () => {
   it("treats a prototype-named id as an ordinary leaf", () => {
     const resp = mkResponse([mkItem("constructor"), mkItem("toString")], ["constructor", "toString"]);
     expect(shape(run(buildIndex(resp)).rows)).toEqual(["constructor", "toString"]);
+  });
+});
+
+describe("findPath", () => {
+  const setup = (resp: IssuesResponse, filters = defaultFilters()) => {
+    const ix = buildIndex(resp);
+    const matches = new Set(ix.items.filter((i) => passesFilters(i, filters)).map((i) => i.id));
+    return { ix, order: makeTreeOrder(ix.tree, ix.byId, compare), info: subtreeInfo(ix.tree.children, ix.byId, matches) };
+  };
+
+  it("returns the ancestors of the first placement in display order", () => {
+    const { order, info } = setup(fx);
+    expect(findPath(order, info, "fx-epic")).toEqual([]);
+    expect(findPath(order, info, "fx-a")).toEqual(["fx-epic"]);
+    // fx-b sits under fx-a (inside fx-epic, which sorts first) and under fx-x
+    expect(findPath(order, info, "fx-b")).toEqual(["fx-epic", "fx-a"]);
+    expect(findPath(order, info, "fx-x")).toEqual(["fx-epic2"]);
+    expect(findPath(order, info, "fx-cy2")).toEqual(["fx-cy1"]);
+  });
+
+  it("expanding the path makes the row render", () => {
+    const { ix, order, info } = setup(fx);
+    const path = new Set(findPath(order, info, "fx-b"));
+    const matches = new Set(ix.items.map((i) => i.id));
+    const { rows } = flattenTree({
+      roots: ix.tree.roots,
+      children: ix.tree.children,
+      byId: ix.byId,
+      matches,
+      isExpanded: (id) => path.has(id),
+      compare,
+      order,
+      info,
+    });
+    expect(shape(rows)).toContain("fx-b");
+  });
+
+  it("is null for an id that is not in the visible tree", () => {
+    const { order, info } = setup(fx, { ...defaultFilters(), type: ["bug"] });
+    expect(findPath(order, info, "fx-a")).toBeNull();
+    expect(findPath(order, info, "nope")).toBeNull();
+    expect(findPath(order, info, "fx-found")).toEqual([]);
+  });
+
+  it("terminates on cycles", () => {
+    const resp = mkResponse([mkItem("p"), mkItem("q"), mkItem("r")], ["p"], { p: [["q", "block"]], q: [["p", "block"], ["r", "child"]] });
+    const { order, info } = setup(resp);
+    expect(findPath(order, info, "r")).toEqual(["p", "q"]);
   });
 });

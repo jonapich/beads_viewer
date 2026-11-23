@@ -167,3 +167,60 @@ describe("IssueListState.applyUrl", () => {
     expect(s.sortPick).toBe("updated");
   });
 });
+describe("IssueListState reveal and back", () => {
+  it("leaves flat results, opens the path, and Back restores the mode", () => {
+    const s = new IssueListState();
+    s.hydrate(args(""));
+    s.setQuery("x");
+    expect(s.mode).toBe("flat");
+    s.beginReveal(120);
+    expect(s.mode).toBe("tree");
+    expect(s.backTo).toEqual({ scrollTop: 120, modePick: null });
+    expect(s.pruning).toBe(true);
+    s.toggle("e"); // collapsed from the all-open view
+    s.expandPath(["e"]);
+    expect(s.isExpanded("e")).toBe(true);
+    expect(s.expanded.has("e")).toBe(true);
+
+    expect(s.back()).toBe(120);
+    expect(s.backTo).toBeNull();
+    expect(s.mode).toBe("flat");
+    expect(s.back()).toBeNull();
+  });
+
+  it("restores an explicit Flat pick on Back", () => {
+    const s = new IssueListState();
+    s.hydrate(args(""));
+    s.setMode("flat");
+    s.beginReveal(0);
+    expect(s.mode).toBe("tree");
+    s.back();
+    expect(s.modePick).toBe("flat");
+    expect(s.mode).toBe("flat");
+  });
+
+  it("does not offer Back when revealing from the tree, and clears it on any manual change", () => {
+    const s = new IssueListState();
+    s.hydrate(args(""));
+    s.beginReveal(5);
+    expect(s.backTo).toBeNull();
+    s.setQuery("x");
+    s.beginReveal(5);
+    expect(s.backTo).not.toBeNull();
+    s.setQuery("y");
+    expect(s.backTo).toBeNull();
+    s.setQuery("");
+    s.setMode("flat");
+    s.beginReveal(1);
+    s.setMode("flat");
+    expect(s.backTo).toBeNull();
+    s.setMode("flat");
+    s.beginReveal(1);
+    s.setFilters({ ...defaultFilters(), state: "all" });
+    expect(s.backTo).toBeNull();
+    s.setMode("flat");
+    s.beginReveal(1);
+    s.applyUrl(fromQuery(new URLSearchParams("")));
+    expect(s.backTo).toBeNull();
+  });
+});
