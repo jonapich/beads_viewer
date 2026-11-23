@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"context"
 	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/loader"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/recipe"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
@@ -181,4 +183,44 @@ func (s *DataSnapshot) coreView() *snapshot.Snapshot {
 		ExplicitWeights:      s.explicitWeights,
 	}
 	return c
+}
+
+// reloadIssueData is the raw result of reading the tracker source; see
+// snapshot.LoadSource.
+type reloadIssueData = snapshot.Source
+
+func loadIssuesForReload(path string, opts loader.ParseOptions) (reloadIssueData, error) {
+	return snapshot.LoadSourceSync(path, opts, false)
+}
+
+func loadIssuesForReloadWithDegraded(path string, opts loader.ParseOptions, sourceDegraded bool) (reloadIssueData, error) {
+	return snapshot.LoadSourceSync(path, opts, sourceDegraded)
+}
+
+func loadIssuesForReloadContext(ctx context.Context, path string, opts loader.ParseOptions) (reloadIssueData, error) {
+	return snapshot.LoadSource(ctx, path, opts, false)
+}
+
+func loadIssuesForReloadContextWithDegraded(ctx context.Context, path string, opts loader.ParseOptions, sourceDegraded bool) (reloadIssueData, error) {
+	return snapshot.LoadSource(ctx, path, opts, sourceDegraded)
+}
+
+func countIssuesForReload(path string) (int, error) {
+	return snapshot.CountSourceSync(path)
+}
+
+func countIssuesForReloadContext(ctx context.Context, path string) (int, error) {
+	return snapshot.CountSource(ctx, path)
+}
+
+func countJSONLLines(path string) (int, error) {
+	return snapshot.CountJSONLLines(path)
+}
+
+func recipeIncludesClosedStatuses(r *recipe.Recipe) bool {
+	return snapshot.IncludesClosedStatuses(r)
+}
+
+func largeDatasetWarning(tier datasetTier, sourceHint, loaded int, openOnly bool) string {
+	return snapshot.LargeDatasetWarning(tier, sourceHint, loaded, openOnly)
 }

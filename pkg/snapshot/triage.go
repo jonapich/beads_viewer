@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
@@ -19,6 +20,18 @@ func FeedbackWeights(beadsDir string) *analysis.Weights {
 	}
 	w := fb.Weights()
 	return &w
+}
+
+// FeedbackWeightsForBeadsPath loads .beads/feedback.json next to the issue file
+// and returns the adjusted factor weights when enough accept/ignore samples
+// exist to apply them (analysis.MinFeedbackSamples); nil otherwise. This is the
+// one definition the TUI and the API share, so both rank issues the same way
+// --robot-triage does.
+func FeedbackWeightsForBeadsPath(beadsPath string) *analysis.Weights {
+	if strings.TrimSpace(beadsPath) == "" {
+		return nil
+	}
+	return FeedbackWeights(filepath.Dir(beadsPath))
 }
 
 // ExtractTriageMaps flattens a triage result into the per-issue lookup maps the

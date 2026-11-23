@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"runtime"
@@ -1796,80 +1795,6 @@ func (w *BackgroundWorker) buildSnapshotResultContext(ctx context.Context, force
 	}
 
 	return snapshotBuildResult{snapshot: snapshot, clearError: true}
-}
-
-func recipeIncludesClosedStatuses(r *recipe.Recipe) bool {
-	if r == nil {
-		return false
-	}
-	for _, s := range r.Filters.Status {
-		switch strings.TrimSpace(strings.ToLower(s)) {
-		case string(model.StatusClosed), string(model.StatusTombstone):
-			return true
-		}
-	}
-	return false
-}
-
-func largeDatasetWarning(tier datasetTier, sourceHint, loaded int, openOnly bool) string {
-	switch tier {
-	case datasetTierLarge:
-		n := loaded
-		if sourceHint > 0 {
-			n = sourceHint
-		}
-		return fmt.Sprintf("⚠ large %s issues", compactCount(n))
-	case datasetTierHuge:
-		if openOnly && sourceHint > 0 {
-			return fmt.Sprintf("⚠ huge open-only %s/%s", compactCount(loaded), compactCount(sourceHint))
-		}
-		n := loaded
-		if sourceHint > 0 {
-			n = sourceHint
-		}
-		return fmt.Sprintf("⚠ huge %s issues", compactCount(n))
-	default:
-		return ""
-	}
-}
-
-func countJSONLLines(path string) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	const bufSize = 32 * 1024
-	buf := make([]byte, bufSize)
-	lines := 0
-	sawAny := false
-	lastByte := byte(0)
-
-	for {
-		n, readErr := f.Read(buf)
-		if n > 0 {
-			sawAny = true
-			lastByte = buf[n-1]
-			for _, b := range buf[:n] {
-				if b == '\n' {
-					lines++
-				}
-			}
-		}
-		if readErr == nil {
-			continue
-		}
-		if readErr == io.EOF {
-			break
-		}
-		return 0, readErr
-	}
-
-	if sawAny && lastByte != '\n' {
-		lines++
-	}
-	return lines, nil
 }
 
 func envMaxLineSizeBytes() int {

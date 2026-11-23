@@ -4,7 +4,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -70,17 +69,6 @@ func snapshotBuildConfigForTier(tier datasetTier) snapshotBuildConfig {
 		PrecomputeGraphLayout: precomputeUI,
 		PrecomputeInsights:    core.PrecomputeInsights,
 		SkipPhase2:            core.SkipPhase2,
-	}
-}
-
-func compactCount(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%dm", n/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%dk", n/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
 	}
 }
 
@@ -444,10 +432,7 @@ func feedbackWeightsForBeadsDir(beadsDir string) *analysis.Weights {
 // priority hints (p) and the actionable view rank issues the same way
 // --robot-triage does.
 func feedbackWeightsForBeadsPath(beadsPath string) *analysis.Weights {
-	if strings.TrimSpace(beadsPath) == "" {
-		return nil
-	}
-	return feedbackWeightsForBeadsDir(filepath.Dir(beadsPath))
+	return snapshot.FeedbackWeightsForBeadsPath(beadsPath)
 }
 
 // WithContext binds Phase 2 async analysis to the caller's lifecycle context.

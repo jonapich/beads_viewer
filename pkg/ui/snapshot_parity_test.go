@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -252,5 +255,81 @@ func TestDataSnapshotCoreAdaptersCoverAllFields(t *testing.T) {
 		if !reflect.DeepEqual(cv.Field(i).Interface(), got.Field(i).Interface()) {
 			t.Errorf("snapshot.Snapshot.%s is not carried through dataSnapshotFromCore/coreView", name)
 		}
+	}
+}
+
+// TestSnapshotLoadParityWithWorker: snapshot.Load (what the API store uses) and
+// the TUI's background worker must produce the same load metadata and core data
+// for the same file, at every tier the worker's fixtures reach cheaply.
+func TestSnapshotLoadParityWithWorker(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		count int
+		tier  datasetTier
+	}{
+		{"small", 12, datasetTierSmall},
+		{"large", 5200, datasetTierLarge},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var sb strings.Builder
+			for i := 0; i < tc.count; i++ {
+				status := "open"
+				if i%5 == 0 {
+					status = "closed"
+				}
+				dep := ""
+				if i > 0 && i%3 == 0 {
+					dep = fmt.Sprintf(`,"dependencies":[{"issue_id":"issue-%d","depends_on_id":"issue-%d","type":"parent-child"}]`, i, i-1)
+				}
+				fmt.Fprintf(&sb, `{"id":"issue-%d","title":"Issue %d","status":"%s","priority":%d,"issue_type":"task"%s}`+"\n", i, i, status, i%4, dep)
+			}
+			path := filepath.Join(t.TempDir(), "beads.jsonl")
+			if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			worker, err := NewBackgroundWorker(WorkerConfig{BeadsPath: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer worker.Stop()
+			ds := worker.buildSnapshot(true)
+			if ds == nil {
+				t.Fatal("worker built no snapshot")
+			}
+			core, err := snapshot.Load(context.Background(), path, snapshot.LoadOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ds.DatasetTier != tc.tier || core.Tier != tc.tier {
+				t.Fatalf("tier ui=%v core=%v want %v", ds.DatasetTier, core.Tier, tc.tier)
+			}
+			if ds.DataHash != core.DataHash || ds.AuthorityHash != core.AuthorityHash || ds.AuthorityComplete != core.AuthorityComplete {
+				t.Fatalf("hashes differ: data %q/%q authority %q/%q", ds.DataHash, core.DataHash, ds.AuthorityHash, core.AuthorityHash)
+			}
+			if ds.SourceIssueCountHint != core.SourceIssueCountHint || ds.LoadedOpenOnly != core.LoadedOpenOnly ||
+				ds.TruncatedCount != core.TruncatedCount || ds.LargeDatasetWarning != core.LargeDatasetWarning ||
+				ds.LoadWarningCount != core.LoadWarningCount {
+				t.Fatalf("load metadata (hint/openOnly/truncated/warning/warnings) differs: ui=%d/%v/%d/%q/%d core=%d/%v/%d/%q/%d",
+					ds.SourceIssueCountHint, ds.LoadedOpenOnly, ds.TruncatedCount, ds.LargeDatasetWarning, ds.LoadWarningCount,
+					core.SourceIssueCountHint, core.LoadedOpenOnly, core.TruncatedCount, core.LargeDatasetWarning, core.LoadWarningCount)
+			}
+			if !reflect.DeepEqual(issueIDs(ds.Issues), issueIDs(core.Issues)) {
+				t.Fatal("issue order differs")
+			}
+			if ds.CountOpen != core.CountOpen || ds.CountReady != core.CountReady ||
+				ds.CountBlocked != core.CountBlocked || ds.CountClosed != core.CountClosed {
+				t.Fatalf("counts differ: ui=%d/%d/%d/%d core=%d/%d/%d/%d",
+					ds.CountOpen, ds.CountReady, ds.CountBlocked, ds.CountClosed,
+					core.CountOpen, core.CountReady, core.CountBlocked, core.CountClosed)
+			}
+			if (ds.TriageScores == nil) != (core.TriageScores == nil) || len(ds.TriageScores) != len(core.TriageScores) {
+				t.Fatalf("triage presence differs: ui=%d core=%d", len(ds.TriageScores), len(core.TriageScores))
+			}
+			if treeShape(ds.TreeRoots) != treeShape(core.TreeRoots) {
+				t.Fatal("tree shape differs")
+			}
+		})
 	}
 }

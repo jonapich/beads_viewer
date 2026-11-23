@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Dicklesworthstone/beads_viewer/internal/datasource"
 	"github.com/Dicklesworthstone/beads_viewer/internal/env"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/analysis"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/baseline"
@@ -616,113 +615,6 @@ func WatchFileCmd(w *watcher.Watcher) tea.Cmd {
 		case <-w.Done():
 			return nil
 		}
-	}
-}
-
-type reloadIssueData struct {
-	loader.PooledIssues
-	Authority         *model.ReadinessIndex
-	AuthorityHash     string
-	AuthorityComplete bool
-}
-
-func loadIssuesForReload(path string, opts loader.ParseOptions) (reloadIssueData, error) {
-	return loadIssuesForReloadWithDegraded(path, opts, false)
-}
-
-func loadIssuesForReloadWithDegraded(path string, opts loader.ParseOptions, sourceDegraded bool) (reloadIssueData, error) {
-	var loaded loader.PooledIssues
-	var err error
-	complete := true
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".db", ".sqlite", ".sqlite3":
-		source, ok, err := datasource.SourceFromFile(path)
-		if err != nil {
-			return reloadIssueData{}, err
-		}
-		if !ok {
-			return reloadIssueData{}, fmt.Errorf("unsupported SQLite source path: %s", path)
-		}
-		reader, err := datasource.NewSQLiteReader(source)
-		if err != nil {
-			return reloadIssueData{}, err
-		}
-		defer reader.Close()
-		loaded.Issues, err = reader.LoadIssueAuthority()
-		if err != nil {
-			return reloadIssueData{}, err
-		}
-		report := reader.LoadReport()
-		complete = report.Errors == 0 && report.ReadErrors == 0 && !report.Stale && len(report.AuthorityWarnings) == 0
-	default:
-		fullOpts := opts
-		fullOpts.IssueFilter = nil
-		var stats loader.ParseStats
-		if fullOpts.Stats == nil {
-			fullOpts.Stats = &stats
-		}
-		loaded, err = loader.LoadIssuesFromFileWithOptionsPooled(path, fullOpts)
-		complete = fullOpts.Stats.Errors == 0
-	}
-	if err != nil {
-		return reloadIssueData{}, err
-	}
-	if sourceDegraded {
-		complete = false
-	}
-	loader.AttachIssueOrigins(loaded.Issues, path, complete)
-	if !isSQLiteReloadPath(path) && len(loaded.Issues) > 0 {
-		if orig := loaded.Issues[0].Origin; orig != nil && orig.Tracker == "br" && orig.Database != "" {
-			sibSrc := datasource.DataSource{Type: datasource.SourceTypeSQLite, Path: orig.Database}
-			if datasource.ValidateSource(&sibSrc) != nil {
-				complete = false
-				for i := range loaded.Issues {
-					if loaded.Issues[i].Origin != nil {
-						loaded.Issues[i].Origin.Database = ""
-						loaded.Issues[i].Origin.ReadOnlyReason = "sibling SQLite database is corrupt"
-					}
-				}
-			}
-		}
-	}
-	result := reloadIssueData{
-		Authority:         model.NewReadinessIndex(loaded.Issues),
-		AuthorityHash:     analysis.ComputeDataHash(loaded.Issues),
-		AuthorityComplete: complete,
-	}
-	loaded.Issues = issuesWithoutTombstones(loaded.Issues)
-	if opts.IssueFilter != nil {
-		visible := loaded.Issues[:0]
-		for i := range loaded.Issues {
-			if opts.IssueFilter(&loaded.Issues[i]) {
-				visible = append(visible, loaded.Issues[i])
-			}
-		}
-		clear(loaded.Issues[len(visible):])
-		loaded.Issues = visible
-	}
-	result.PooledIssues = loaded
-	return result, nil
-}
-
-func countIssuesForReload(path string) (int, error) {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".db", ".sqlite", ".sqlite3":
-		source, ok, err := datasource.SourceFromFile(path)
-		if err != nil {
-			return 0, err
-		}
-		if !ok {
-			return 0, fmt.Errorf("unsupported SQLite source path: %s", path)
-		}
-		reader, err := datasource.NewReader(source)
-		if err != nil {
-			return 0, err
-		}
-		defer reader.Close()
-		return reader.CountIssues()
-	default:
-		return countJSONLLines(path)
 	}
 }
 
