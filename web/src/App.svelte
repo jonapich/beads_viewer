@@ -35,7 +35,7 @@
     <Header />
     <div class="body">
       <Nav />
-      <main>
+      <main class:fill={route.def?.fill}>
         {#if session.status === "offline"}
           <div class="banner" role="alert">
             <span>Can't reach bv serve. It may have stopped.</span>
@@ -68,7 +68,15 @@
     overflow: auto;
     padding: var(--space-5);
   }
+  /* A view that scrolls inside itself (a virtualised list): main stops scrolling and the
+     view's root grows to fill it. */
+  main.fill {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
   .banner {
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: space-between;

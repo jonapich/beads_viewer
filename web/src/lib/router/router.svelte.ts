@@ -6,6 +6,11 @@ export interface RouteDef {
   title: string;
   component: Component<any>;
   props?: Record<string, unknown>;
+  /**
+   * The view fills <main> and scrolls inside itself (a virtualised list):
+   * <main> stops scrolling and becomes a flex column the view's root grows in.
+   */
+  fill?: boolean;
 }
 
 export const route = $state({
@@ -41,6 +46,20 @@ export function navigate(to: string, opts: { replace?: boolean } = {}): void {
   resolve(url);
   // <main> is the scroll container; the window itself never scrolls.
   document.querySelector("main")?.scrollTo(0, 0);
+}
+
+/**
+ * Rewrites the query string of the current URL in place, for view state such as
+ * filters. Unlike navigate() it adds no history entry (Back leaves the view
+ * rather than undoing a filter step), does not re-resolve the route (the view
+ * stays mounted) and does not scroll <main>. Updates route.query to match.
+ */
+export function replaceQuery(params: URLSearchParams): void {
+  const url = new URL(location.href);
+  url.search = params.toString();
+  if (url.href === location.href) return;
+  history.replaceState(history.state, "", url);
+  route.query = new URLSearchParams(url.search);
 }
 
 function onClick(e: MouseEvent): void {
