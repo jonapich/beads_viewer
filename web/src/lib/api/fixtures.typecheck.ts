@@ -10,12 +10,14 @@ import type {
   MetaResponse,
   SearchResponse,
   SignoffResponse,
+  SnapshotEvent,
   TriageResponse,
 } from "./types";
 import health from "./__fixtures__/health.json";
 import unauthorized from "./__fixtures__/error-unauthorized.json";
 import meta from "./__fixtures__/meta.json";
 import metaPhase1 from "./__fixtures__/meta-phase1.json";
+import eventSnapshot from "./__fixtures__/event-snapshot.json";
 import issuesTree from "./__fixtures__/issues-tree.json";
 import searchResult from "./__fixtures__/search.json";
 import issueDetail from "./__fixtures__/issue-detail.json";
@@ -30,6 +32,7 @@ export const healthFixture: HealthResponse = health;
 export const unauthorizedFixture: ApiErrorBody = unauthorized;
 export const metaFixture: MetaResponse = meta;
 export const metaPhase1Fixture: MetaResponse = metaPhase1;
+export const eventSnapshotFixture: SnapshotEvent = eventSnapshot;
 export const issuesTreeFixture: IssuesResponse = issuesTree;
 export const searchFixture: SearchResponse = searchResult;
 export const issueDetailFixture: IssueDetail = issueDetail;

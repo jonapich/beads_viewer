@@ -43,6 +43,27 @@ type MetaResponse struct {
 	Recipe        string     `json:"recipe,omitempty"`
 	Counts        MetaCounts `json:"counts"`
 	Capabilities  MetaCaps   `json:"capabilities"`
+
+	// Generation is the store generation: 1 at startup, plus one per published
+	// reload. A phase 2 swap does not change it.
+	Generation uint64 `json:"generation"`
+	// LoadedAt is when the served snapshot was built.
+	LoadedAt time.Time `json:"loaded_at"`
+	// ReloadError is set while the last reload failed; the data above is then
+	// the last good load.
+	ReloadError   string     `json:"reload_error,omitempty"`
+	ReloadErrorAt *time.Time `json:"reload_error_at,omitempty"`
+}
+
+// SnapshotEvent is the data of a GET /api/v1/events "snapshot" message. It is a
+// signal: the client refetches what it shows.
+type SnapshotEvent struct {
+	Generation uint64 `json:"generation"`
+	Hash       string `json:"hash"`
+	// Phase is "phase1", "phase2" or "phase2_error".
+	Phase string `json:"phase"`
+	// ReloadError is set while the last reload failed.
+	ReloadError string `json:"reload_error,omitempty"`
 }
 
 // MetaSource says where the data came from.
@@ -67,6 +88,9 @@ type MetaCounts struct {
 type MetaCaps struct {
 	// Writes is false until the write endpoints land (beads-c2o.19).
 	Writes bool `json:"writes"`
+	// Events is true while the server watches the tracker and serves
+	// GET /api/v1/events.
+	Events bool `json:"events"`
 }
 
 // IssuesResponse is GET /api/v1/issues?view=tree|flat: every issue of the

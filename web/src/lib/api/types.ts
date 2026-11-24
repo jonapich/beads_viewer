@@ -39,6 +39,18 @@ export interface MetaCounts {
 export interface MetaCaps {
   /** False until the write endpoints land (beads-c2o.19). */
   writes: boolean;
+  /** True while the server watches the tracker and serves GET /api/v1/events. */
+  events: boolean;
+}
+
+/** Data of a GET /api/v1/events "snapshot" message (pkg/api/dto.go SnapshotEvent). A signal: refetch what you show. */
+export interface SnapshotEvent {
+  generation: number;
+  hash: string;
+  /** "phase1" | "phase2" | "phase2_error" */
+  phase: string;
+  /** Set while the last reload failed; the served data is the last good load. */
+  reload_error?: string;
 }
 
 /** GET /api/v1/meta (pkg/api/dto.go MetaResponse). */
@@ -69,6 +81,14 @@ export interface MetaResponse {
   recipe?: string;
   counts: MetaCounts;
   capabilities: MetaCaps;
+  /** Store generation: 1 at startup, plus one per published reload. */
+  generation: number;
+  /** RFC 3339 instant the served snapshot was built. */
+  loaded_at: string;
+  /** Set while the last reload failed; the data is then the last good load. */
+  reload_error?: string;
+  /** RFC 3339 */
+  reload_error_at?: string;
 }
 
 /** One row of the issue list (pkg/api/dto.go ListItem). */

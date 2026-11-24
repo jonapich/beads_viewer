@@ -149,11 +149,16 @@ Conventions:
   the TUI: phase 1 is served immediately, and phase 2 swaps in and fires an SSE
   event when ready.
   Snapshot-backed responses carry an `ETag` so the client can use `If-None-Match`:
-  `"<data hash>-p1"` for phase 1, `-p2` once phase 2 is swapped in, `-p1e` when
-  phase 2 failed. The data hash alone does not change at phase 2, so the suffix
-  is what makes phase 2 visible (with `meta.phase2_ready`) until the SSE event
-  exists. Endpoints whose body depends on the request add `~<variant>`:
-  `view=`, `q=`, `limit=` and the issue id. Errors carry no ETag.
+  `"<data hash>-g<generation>-<phase>"`, where the phase is `p1` for phase 1,
+  `p2` once phase 2 is swapped in and `p1e` when phase 2 failed. The data hash
+  alone does not change at phase 2, so the suffix is what makes phase 2 visible
+  (with `meta.phase2_ready`). The generation is 1 at startup and goes up once
+  per published reload (a phase 2 swap keeps it); it keeps a moved reference
+  time from reusing a tag when the data hash is unchanged. `/meta` adds a
+  `~e<seq>` variant while the last reload failed (`seq` goes up per failure), so
+  its tag changes without touching the data endpoints' tags. Endpoints whose
+  body depends on the request add `~<variant>`: `view=`, `q=`, `limit=` and the
+  issue id. Errors carry no ETag.
 - **Writes are serialised** behind a mutex, the same model as the TUI (one bd
   process at a time). After a successful write the server runs `RefreshExport`,
   reloads, and swaps the snapshot before it responds. The response contains the
@@ -168,9 +173,15 @@ Conventions:
   same debounce, so the polling fallback carries over for free). On change it
   reloads, swaps the snapshot, and broadcasts.
 - `GET /api/v1/events` is SSE. Events are signals only, not data:
-  `event: snapshot` / `data: {"hash": "..."}`. The client refetches whatever
-  the current view needs. A heartbeat comment every 25 s keeps proxies and
-  Wails from dropping the stream.
+  `event: snapshot` / `data: {"generation": n, "hash": "...", "phase":
+  "phase1"|"phase2"|"phase2_error", "reload_error"?: "..."}`. The client
+  refetches whatever the current view needs. The stream starts with a
+  `retry: 2000` hint and one `snapshot` event on connect, so a reconnecting
+  client catches up on what it missed; after that there is one event per
+  published reload, phase 2 swap or reload-error change (a failed reload is a
+  `snapshot` event with `reload_error` set, not a separate event type). A burst
+  coalesces: the payload is read from the store when it is written. A heartbeat
+  comment every 25 s keeps proxies and Wails from dropping the stream.
 - The hub is a small new type in `pkg/api`, modelled on
   `export.LiveReloadHub`'s fan-out (non-blocking send per client). We don't
   reuse it directly: it watches a static bundle directory and has no payload.

@@ -52,6 +52,10 @@ type Config struct {
 	// Store backs the data endpoints. Nil answers them with 503 not_ready.
 	// The caller owns the store and closes it after the server stops.
 	Store *Store
+
+	// heartbeat is the events stream's keep-alive interval; 0 means 25 s. Tests
+	// shorten it.
+	heartbeat time.Duration
 }
 
 // NewHandler returns the complete `bv serve` handler: guard, headers, /auth,
@@ -120,6 +124,8 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleHealth(w, r)
 	case "/api/v1/meta":
 		s.handleMeta(w, r)
+	case "/api/v1/events":
+		s.handleEvents(w, r)
 	case "/api/v1/issues":
 		s.handleIssues(w, r)
 	case "/api/v1/search":
@@ -176,6 +182,11 @@ func Serve(ctx context.Context, ln net.Listener, handler http.Handler) error {
 		Handler:           handler,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
+		// Every request context ends when ctx does, so long-lived handlers (the
+		// events stream) return at once instead of holding Shutdown for the
+		// grace period. Handlers that must finish work during shutdown need
+		// context.WithoutCancel.
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()

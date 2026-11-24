@@ -136,9 +136,13 @@ func getGolden(t *testing.T, store *Store, target string) (any, int) {
 	return v, rec.Code
 }
 
-// scrubSource replaces the machine-specific paths so fixtures are portable.
+// scrubSource replaces the machine-specific paths and the load time (the wall
+// clock of the load) so fixtures are portable and stable.
 func scrubSource(t *testing.T, v any) {
 	t.Helper()
+	if m, ok := v.(map[string]any); ok {
+		m["loaded_at"] = goldenNow.Format(time.RFC3339)
+	}
 	src, ok := v.(map[string]any)["source"].(map[string]any)
 	if !ok {
 		t.Fatalf("meta has no source object: %v", v)
@@ -170,6 +174,21 @@ func TestGoldenMeta(t *testing.T) {
 	}
 	scrubSource(t, phase2)
 	testutil.NewGoldenFile(t, goldenDir, "meta.json").AssertJSON(phase2)
+}
+
+// TestGoldenSnapshotEvent pins the data of the events "snapshot" message.
+func TestGoldenSnapshotEvent(t *testing.T) {
+	store := goldenStore(t, writeGoldenTracker(t))
+	waitPhase2(t, store)
+	data, err := json.Marshal(store.snapshotEvent())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ev any
+	if err := json.Unmarshal(data, &ev); err != nil {
+		t.Fatal(err)
+	}
+	testutil.NewGoldenFile(t, goldenDir, "event-snapshot.json").AssertJSON(ev)
 }
 
 // newGatedStore is a store whose Phase 2 blocks until gate closes.

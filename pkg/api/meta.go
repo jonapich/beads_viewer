@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
@@ -30,10 +31,17 @@ func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	if v == nil {
 		return
 	}
-	writeView(w, r, v, func() any { return s.buildMeta(v) })
+	// The reload error is read once, so the ETag and the body agree. It is not
+	// part of the View, so it gets its own ETag variant (Seq changes per failure).
+	rs := s.cfg.Store.lastReloadError()
+	etag := v.ETag
+	if rs != nil {
+		etag = variantETag(etag, "e"+strconv.FormatUint(rs.Seq, 10))
+	}
+	writeViewTagged(w, r, etag, func() any { return s.buildMeta(v, rs) })
 }
 
-func (s *server) buildMeta(v *View) MetaResponse {
+func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 	snap := v.Snap
 	m := MetaResponse{
 		Version:             s.cfg.Version,
@@ -63,7 +71,14 @@ func (s *server) buildMeta(v *View) MetaResponse {
 			Blocked: snap.CountBlocked,
 			Closed:  snap.CountClosed,
 		},
-		Capabilities: MetaCaps{Writes: false},
+		Capabilities: MetaCaps{Writes: false, Events: s.cfg.Store.Watching()},
+		Generation:   v.Gen,
+		LoadedAt:     snap.CreatedAt,
+	}
+	if rs != nil {
+		at := rs.At
+		m.ReloadError = rs.Msg
+		m.ReloadErrorAt = &at
 	}
 	if len(snap.Issues) > 0 {
 		m.Source.Tracker = tracker.CapabilitiesOf(snap.Issues[0].Origin).Tracker

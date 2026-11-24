@@ -1,6 +1,7 @@
 {
   "authority_complete": true,
   "capabilities": {
+    "events": false,
     "writes": false
   },
   "counts": {
@@ -10,8 +11,10 @@
     "ready": 7
   },
   "data_hash": "0415b8c49b8875541576adcdbd0748d446501afe574fdda14b9705c0699a314a",
+  "generation": 1,
   "issue_count": 12,
   "load_warning_count": 0,
+  "loaded_at": "2026-03-10T12:00:00Z",
   "loaded_open_only": false,
   "phase2_ready": true,
   "phase2_skipped": false,

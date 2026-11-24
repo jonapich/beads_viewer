@@ -117,6 +117,11 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 			return fmt.Errorf("load %s: %w", opts.BeadsPath, err)
 		}
 		defer store.Close()
+		// Live updates are best effort, as in the TUI: without a watcher the
+		// GUI serves what it loaded and polls meta.
+		if err := store.StartWatching(); err != nil {
+			fmt.Fprintf(os.Stderr, "Live updates are off: %v\n", err)
+		}
 	}
 
 	// Loopback only, never 0.0.0.0. Port 0 lets the kernel pick a free port;
