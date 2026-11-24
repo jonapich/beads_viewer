@@ -204,7 +204,8 @@ Even read-only data is private. Writes run bd on the user's behalf.
 - Mutating methods additionally require an exact `Origin` match. This is
   defence in depth on top of SameSite.
 - Response headers come from preview: `nosniff`, COOP/CORP same-origin, plus a
-  strict CSP (`default-src 'self'`).
+  strict CSP (`default-src 'self'; frame-ancestors 'none'; base-uri 'none';
+  form-action 'self'`; amended by beads-c2o.23, it was `default-src 'self'`).
 - `--serve-dev` adds `http://localhost:5173` and `http://127.0.0.1:5173` to the
   allowed origins. Everything else stays the same.
 
@@ -246,7 +247,10 @@ npm --prefix beads_viewer/web run dev
 - Production: `make web` (`npm --prefix web run build`) → `web/dist/app`, then `go build`
   embeds it. Hashed assets are served with `Cache-Control: immutable`, and
   `index.html` with `no-store` (borrowed from preview's no-cache middleware).
-  Unknown non-`/api` paths fall back to `index.html` (SPA routing).
+  Unknown non-`/api` paths fall back to `index.html` (SPA routing), except a
+  missing file under `assets/`, which gets a JSON `404` in the error envelope so
+  a stale hashed-asset reference fails loudly instead of parsing HTML as JS
+  (amended by beads-c2o.23).
 - Node toolchain: pin the Node major in `web/.nvmrc` and `engines`. Use npm
   with a committed lockfile.
 

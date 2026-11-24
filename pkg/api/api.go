@@ -179,10 +179,14 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// contentSecurityPolicy is default-src 'self' plus the directives that do not
+// fall back to it: no framing, no <base> rewriting, same-origin form posts.
+const contentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+
 // setCommonHeaders sets the response headers every route shares. The guard has
 // already added nosniff and COOP/CORP.
 func setCommonHeaders(h http.Header) {
-	h.Set("Content-Security-Policy", "default-src 'self'")
+	h.Set("Content-Security-Policy", contentSecurityPolicy)
 	// The bootstrap token travels in a URL; never leak it through Referer.
 	h.Set("Referrer-Policy", "no-referrer")
 }

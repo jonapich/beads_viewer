@@ -24,7 +24,8 @@ const (
 
 // newStaticHandler serves the frontend tree with SPA routing: an existing file
 // is served as is, and any other path falls back to index.html so client-side
-// routes survive a reload. /api/* never reaches this handler.
+// routes survive a reload, except under assets/, where a missing file is a JSON
+// 404. /api/* never reaches this handler.
 func newStaticHandler(assets fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -44,6 +45,12 @@ func newStaticHandler(assets fs.FS) http.Handler {
 			name = indexName
 		}
 		if info, err := fs.Stat(assets, name); err != nil || info.IsDir() {
+			// A hashed bundle that no longer exists must fail loudly: index.html
+			// served for a script URL would be parsed as JS.
+			if strings.HasPrefix(name, hashedAssetPrefix) {
+				writeError(w, http.StatusNotFound, "not_found", "asset not found")
+				return
+			}
 			name = indexName // SPA fallback
 		}
 

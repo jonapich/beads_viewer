@@ -294,6 +294,21 @@ func TestSPAFallbackAndStaticCaching(t *testing.T) {
 		t.Fatalf("hashed asset Cache-Control = %q", got)
 	}
 
+	// A stale hashed-asset reference fails loudly instead of returning HTML.
+	for _, target := range []string{"/assets/app-gone.js", "/assets/nested/missing.css"} {
+		rec := do(h, "GET", target)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s: status %d, want 404", target, rec.Code)
+			continue
+		}
+		if e := decodeError(t, rec); e.Code != "not_found" {
+			t.Errorf("GET %s: code %q", target, e.Code)
+		}
+		if strings.Contains(rec.Body.String(), "spa index") {
+			t.Errorf("GET %s fell through to the SPA", target)
+		}
+	}
+
 	rec = do(h, "GET", "/favicon.svg")
 	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("plain asset: %d cache=%q", rec.Code, rec.Header().Get("Cache-Control"))
@@ -377,7 +392,7 @@ func TestSecurityHeaders(t *testing.T) {
 			"Cross-Origin-Resource-Policy": "same-origin",
 		}
 		if name != "forbidden" && name != "forbidden bad origin" {
-			want["Content-Security-Policy"] = "default-src 'self'"
+			want["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 		}
 		for k, v := range want {
 			if got := hdr.Get(k); got != v {
