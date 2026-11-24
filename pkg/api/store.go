@@ -156,6 +156,14 @@ func (s *Store) Watching() bool {
 	return s.watching.Load()
 }
 
+// WriteInFlight reports whether a tracker write holds the write semaphore, so
+// Close would block until it finishes. A snapshot: the answer can change at
+// once, and a write that is about to give up (the store is closing) can show
+// up as in flight for a moment. It is for status messages, never for decisions.
+func (s *Store) WriteInFlight() bool {
+	return len(s.writeSem) > 0
+}
+
 // Done is closed when the store is closed or its parent context ends.
 func (s *Store) Done() <-chan struct{} {
 	return s.ctx.Done()

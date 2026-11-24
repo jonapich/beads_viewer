@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 
 	flag "github.com/spf13/pflag"
@@ -41,6 +42,11 @@ type serveOptions struct {
 	// Open launches the browser; nil means export.OpenInBrowser, which honours
 	// BV_NO_BROWSER and BV_TEST_MODE.
 	Open func(url string) error
+	// ReleaseSignals is called once shutdown reaches the tracker, before
+	// waiting for a write in flight. runServe passes the signal context's stop,
+	// which restores the default Ctrl+C handling so a second Ctrl+C quits at
+	// once. Nil means nothing to release.
+	ReleaseSignals func()
 }
 
 // serveModifierRules ties the --serve-* modifiers to --serve.
@@ -85,7 +91,30 @@ func validateServeFlags(flags *flag.FlagSet) error {
 func runServe(opts serveOptions) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	opts.ReleaseSignals = stop
 	return serveGUI(ctx, opts)
+}
+
+// shutdownStore is the part of *api.Store that closeStore uses.
+type shutdownStore interface {
+	WriteInFlight() bool
+	Close()
+}
+
+// closeStore closes the store at shutdown. Close waits for a tracker write in
+// flight (writes are uncancellable: bd must not be cut off halfway through a
+// multi-step dispute), up to the 30 s write timeout. Say so instead of hanging
+// silently, and give the signal handling back first: with the notify context
+// still active a second Ctrl+C would be swallowed, and with it released the
+// default handler ends the process at once.
+func closeStore(store shutdownStore, out io.Writer, release func()) {
+	if store.WriteInFlight() {
+		fmt.Fprintln(out, "Waiting for a tracker write to finish... (press Ctrl+C again to quit now, which may leave the write incomplete)")
+	}
+	if release != nil {
+		release()
+	}
+	store.Close()
 }
 
 // serveGUI binds 127.0.0.1, prints the sign-in URL (it carries the per-run
@@ -106,6 +135,7 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 	// Load the tracker before binding, so a bad tracker fails fast and holds no
 	// port. ctx bounds the store's background analysis: Ctrl+C cancels it.
 	var store *api.Store
+	closeTracker := func() {}
 	if opts.BeadsPath != "" {
 		fmt.Fprintf(os.Stderr, "Loading %s...\n", opts.BeadsPath)
 		var err error
@@ -116,7 +146,8 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 		if err != nil {
 			return fmt.Errorf("load %s: %w", opts.BeadsPath, err)
 		}
-		defer store.Close()
+		closeTracker = sync.OnceFunc(func() { closeStore(store, out, opts.ReleaseSignals) })
+		defer closeTracker()
 		// Live updates are best effort, as in the TUI: without a watcher the
 		// GUI serves what it loaded and polls meta.
 		if err := store.StartWatching(); err != nil {
@@ -171,6 +202,9 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 	if err := api.Serve(ctx, ln, handler); err != nil {
 		return err
 	}
+	// Close the tracker before the final notice, so a wait for a write in
+	// flight is announced before "stopped" rather than after it.
+	closeTracker()
 	fmt.Fprintln(out, "bv serve stopped.")
 	return nil
 }
