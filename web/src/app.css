@@ -24,6 +24,28 @@
   --danger-subtle: #ffebe9;
   --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.12);
 
+  /* Issue detail palette (the approved mock): status pill, P1, issue type, comment kind. */
+  --status-open: #0b5cd5;
+  --status-progress: #9a6700;
+  --status-blocked: #cf222e;
+  --status-review: #8250df;
+  --status-closed: #57606a;
+  --status-deferred: #8a929c;
+  --status-pinned: #0a7b83;
+  --prio-1: #bc4c00;
+  --type-epic: #6b47d9;
+  --type-feature: #1a7f37;
+  --type-bug: #cf222e;
+  --type-task: #7d6b00;
+  --type-chore: #0a7b83;
+  --kind-user: #bf3989;
+  --kind-brief: #0b5cd5;
+  --kind-advice: #0a7b83;
+  --kind-coder: #57606a;
+  --kind-review: #9a6700;
+  --kind-verify: #1a7f37;
+  --kind-signoff: #8250df;
+
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
   --text-xs: 11px;
@@ -66,6 +88,27 @@
   --warning-subtle: #3a2a0c;
   --danger-subtle: #3b1219;
   --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.5);
+
+  --status-open: #4c8dff;
+  --status-progress: #d29922;
+  --status-blocked: #f85149;
+  --status-review: #a371f7;
+  --status-closed: #8b949e;
+  --status-deferred: #6b7480;
+  --status-pinned: #39c5cf;
+  --prio-1: #f0883e;
+  --type-epic: #bd93f9;
+  --type-feature: #3fb950;
+  --type-bug: #f85149;
+  --type-task: #e3d26f;
+  --type-chore: #39c5cf;
+  --kind-user: #db61a2;
+  --kind-brief: #4c8dff;
+  --kind-advice: #39c5cf;
+  --kind-coder: #8b949e;
+  --kind-review: #d29922;
+  --kind-verify: #3fb950;
+  --kind-signoff: #a371f7;
 }
 
 *,

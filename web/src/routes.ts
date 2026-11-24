@@ -1,4 +1,5 @@
 import type { RouteDef } from "./lib/router/router.svelte";
+import IssueDetail from "./views/IssueDetail.svelte";
 import Issues from "./views/Issues.svelte";
 import NotFound from "./views/NotFound.svelte";
 import Overview from "./views/Overview.svelte";
@@ -8,7 +9,7 @@ import Placeholder from "./views/Placeholder.svelte";
 export const routes: RouteDef[] = [
   { pattern: "/", title: "Overview", component: Overview },
   { pattern: "/issues", title: "Issues", component: Issues, fill: true },
-  { pattern: "/issues/:id", title: "Issue", component: Placeholder, props: { title: "Issue" } },
+  { pattern: "/issues/:id", title: "Issue", component: IssueDetail },
   { pattern: "/triage", title: "Triage", component: Placeholder, props: { title: "Triage" } },
   { pattern: "/insights", title: "Insights", component: Placeholder, props: { title: "Insights" } },
   { pattern: "*", title: "Not found", component: NotFound },
