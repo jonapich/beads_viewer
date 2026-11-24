@@ -718,6 +718,27 @@ func PrepareBeadsDirForReadContext(ctx context.Context, beadsDir string, refresh
 	return FindJSONLPath(beadsDir)
 }
 
+// IsBDExportPath reports whether sourcePath is the compatibility export
+// (.beads/issues.jsonl) of a bd workspace, the one file bv itself keeps current
+// with `bd export` because bd's own auto-export is off by default and throttled.
+func IsBDExportPath(sourcePath string) bool {
+	if sourcePath == "" || !strings.EqualFold(filepath.Base(sourcePath), "issues.jsonl") {
+		return false
+	}
+	return IsBDWorkspace(filepath.Dir(sourcePath))
+}
+
+// RefreshBDSourceExport re-exports the bd workspace behind sourcePath so a
+// reload that only reads the JSONL sees changes made through bd since the last
+// export, as a relaunch does. It does nothing (nil) when sourcePath is not a bd
+// compatibility export. A failed export leaves the previous file in place.
+func RefreshBDSourceExport(ctx context.Context, sourcePath string) error {
+	if !IsBDExportPath(sourcePath) {
+		return nil
+	}
+	return exportBDIssuesJSONLContext(ctx, filepath.Dir(sourcePath), sourcePath)
+}
+
 // exportBDIssuesJSONL runs `bd export -o <issuesPath>` to produce a fresh
 // JSONL compatibility file from the bd workspace's Dolt database. Failed,
 // interrupted, or invalid exports never replace the previous compatibility file.

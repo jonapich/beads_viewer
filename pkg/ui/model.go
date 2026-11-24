@@ -337,6 +337,68 @@ func (m *Model) sourceReloadCmd() tea.Cmd {
 	}
 }
 
+// refreshSourceExport re-exports a bd workspace before an explicit refresh
+// re-reads its issues.jsonl (a variable so tests can observe the call).
+var refreshSourceExport = loader.RefreshBDSourceExport
+
+// sourceExportDoneMsg reports that the export run before an explicit refresh
+// finished. worker is the background worker to force-refresh, or nil for the
+// file reload. err is a failed export: the reload still goes ahead with the
+// previous file, and the status bar says so.
+type sourceExportDoneMsg struct {
+	worker *BackgroundWorker
+	err    error
+}
+
+// exportBeforeReload runs `bd export` for the view's source off the UI
+// goroutine, then hands back to Update to reload (sourceExportDoneMsg). bd does
+// not keep issues.jsonl current on its own (auto-export is off by default and
+// throttled), so a reload that only re-reads the file would miss changes made
+// through bd outside bv until a relaunch exports. It reports false when the
+// source is not a bd compatibility export, so the caller reloads directly.
+func (m *Model) exportBeforeReload(worker *BackgroundWorker) (tea.Cmd, bool) {
+	path := m.beadsPath
+	if !loader.IsBDExportPath(path) {
+		return nil, false
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), brUpdateTimeout)
+		defer cancel()
+		return sourceExportDoneMsg{worker: worker, err: refreshSourceExport(ctx, path)}
+	}, true
+}
+
+// handleSourceExportDone records a failed export for the reload's status line,
+// then starts the reload on the update goroutine, so the warning is in place
+// before any snapshot can arrive.
+func (m *Model) handleSourceExportDone(msg sourceExportDoneMsg) (tea.Model, tea.Cmd) {
+	m.exportWarning = ""
+	if msg.err != nil {
+		reason, _, _ := strings.Cut(strings.TrimSpace(msg.err.Error()), "\n")
+		m.exportWarning = "bd export failed: " + truncateRunesHelper(reason, 120, "...")
+	}
+	if msg.worker == nil {
+		return m.Update(FileChangedMsg{})
+	}
+	if m.backgroundWorker == msg.worker && msg.worker.State() != WorkerStopped {
+		msg.worker.HandleRefreshRequest(RefreshRequestMsg{Force: true})
+	} else {
+		m.exportWarning = ""
+	}
+	return m, nil
+}
+
+// applyExportWarning shows, once, that the reload that just finished used the
+// last export because refreshing it failed.
+func (m *Model) applyExportWarning() {
+	if m.exportWarning == "" {
+		return
+	}
+	m.statusMsg = "Refreshed from the last export; " + m.exportWarning
+	m.statusIsError = true
+	m.exportWarning = ""
+}
+
 func (m *Model) startSourceReload() tea.Cmd {
 	if m == nil {
 		return nil
@@ -345,6 +407,9 @@ func (m *Model) startSourceReload() tea.Cmd {
 		return m.retryEditorExport()
 	}
 	if m.backgroundWorker != nil && m.backgroundWorker.State() != WorkerStopped {
+		if cmd, ok := m.exportBeforeReload(m.backgroundWorker); ok {
+			return cmd
+		}
 		m.backgroundWorker.HandleRefreshRequest(RefreshRequestMsg{Force: true})
 		return nil
 	}
@@ -356,6 +421,9 @@ func (m *Model) startSourceReload() tea.Cmd {
 	}
 	if m.beadsPath == "" && m.watcher == nil {
 		return nil
+	}
+	if cmd, ok := m.exportBeforeReload(nil); ok {
+		return cmd
 	}
 	return func() tea.Msg { return FileChangedMsg{} }
 }
@@ -1064,6 +1132,7 @@ type Model struct {
 	lastAppliedSnapshotVer uint64
 	workerSpinnerIdx       int // Spinner frame for background worker activity (bv-9nfy)
 	lastForceRefresh       time.Time
+	exportWarning          string // failed pre-refresh bd export, shown once by the reload that follows
 
 	// UI Components
 	list                   list.Model
@@ -3151,6 +3220,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingExportDraft = ""
 		return m, m.reloadAfterEdit()
 
+	case sourceExportDoneMsg:
+		return m.handleSourceExportDone(msg)
+
 	case backgroundWorkerMsg:
 		if msg.worker == nil || m.backgroundWorker != msg.worker {
 			if msg.worker != nil {
@@ -4342,6 +4414,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Reloaded %d issues", len(m.issues))
 		}
 		m.statusIsError = false
+		m.applyExportWarning()
 
 		// Wait for Phase 2 if not ready
 		if msg.Snapshot.Analysis != nil {
@@ -4368,6 +4441,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.snapshotInitPending = false
 		}
 		if msg.Err != nil {
+			m.exportWarning = ""
 			if msg.Recoverable {
 				m.statusMsg = fmt.Sprintf("Background reload error (will retry): %v", msg.Err)
 			} else {
@@ -4491,6 +4565,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			recordTiming("load_issues", loadDur)
 		}
 		if err != nil {
+			m.exportWarning = ""
 			m.statusMsg = fmt.Sprintf("Reload error: %v", err)
 			m.sourceStaleReason = m.statusMsg
 			m.statusIsError = true
@@ -4911,6 +4986,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.statusIsError = false
+		m.applyExportWarning()
 		// Invalidate label-derived caches
 		m.labelHealthCached = false
 		m.labelDrilldownCache = make(map[string][]model.Issue)
