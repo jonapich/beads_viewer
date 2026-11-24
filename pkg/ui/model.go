@@ -216,11 +216,19 @@ func (m *Model) preparePhase2Cmd() tea.Cmd {
 		if ctx.Err() != nil {
 			return nil
 		}
+		// An empty beadsPath means the TUI deliberately runs without feedback
+		// weights (--as-of, workspace sources; the robot rule). The project
+		// directory filled in below must not make the snapshot load
+		// <projectDir>/.beads/feedback.json behind that decision.
+		noFeedback := beadsPath == ""
 		if input == nil {
 			builder := NewSnapshotBuilder(issues, authority).
 				WithBeadsPath(beadsPath).
 				WithProjectDir(workDir).
 				WithAnalysis(stats)
+			if noFeedback {
+				builder.WithWeights(&weights)
+			}
 			builder.analyzer.RestoreScoring(scoring)
 			builder.analyzer.SetReadinessScope(authority, candidates)
 			input = builder.Build()
@@ -230,6 +238,9 @@ func (m *Model) preparePhase2Cmd() tea.Cmd {
 			}
 			if input.projectDir == "" && workDir != "" {
 				input.projectDir = workDir
+			}
+			if noFeedback {
+				input.explicitWeights = true
 			}
 		}
 		prepared := input.WithPhase2(stats, insights, issues, analyzer)
