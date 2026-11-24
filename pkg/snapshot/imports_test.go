@@ -19,6 +19,10 @@ func bannedImportPrefixes(module string) []string {
 		"github.com/charmbracelet/bubbletea",
 		"github.com/charmbracelet/bubbles",
 		"github.com/charmbracelet/lipgloss",
+		// v2 of the three publishes under charm.land.
+		"charm.land/bubbletea",
+		"charm.land/bubbles",
+		"charm.land/lipgloss",
 		module + "/pkg/ui",
 	}
 }
@@ -131,6 +135,11 @@ func TestFindBannedImportsDetectsTransitive(t *testing.T) {
 	write("pkg/c/c.go", "package c\n\nimport _ \""+module+"/pkg/ui\"\n")
 	if got := findBannedImports(t, root, module, filepath.Join(root, "pkg", "a")); len(got) != 1 || !strings.HasSuffix(got[0], "imports "+module+"/pkg/ui") {
 		t.Fatalf("pkg/ui violations: %q", got)
+	}
+
+	write("pkg/c/c.go", "package c\n\nimport _ \"charm.land/bubbletea/v2\"\n")
+	if got := findBannedImports(t, root, module, filepath.Join(root, "pkg", "a")); len(got) != 1 || !strings.HasSuffix(got[0], "pkg/c imports charm.land/bubbletea/v2") {
+		t.Fatalf("charm.land violations: %q", got)
 	}
 
 	write("pkg/c/c.go", "package c\n")
