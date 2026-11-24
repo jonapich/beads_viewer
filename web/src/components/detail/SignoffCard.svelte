@@ -13,15 +13,18 @@
     /** The sign-off data of a closed issue awaiting it. */
     signoff: SignoffItem;
     actions: IssueActions;
+    /** Any write on this issue is in flight; defaults to the quick actions' own state. */
+    busy?: boolean;
     /** The tracker (or this issue) takes no writes. */
     readOnly: boolean;
     /** Hands a started write to the page, which keeps focus and shows the "done" note once it landed. */
     onwrite: (write: Promise<boolean>, kind: "approved" | "disputed") => void;
   }
 
-  let { id, signoff: so, actions, readOnly, onwrite }: Props = $props();
+  let { id, signoff: so, actions, readOnly, busy: busyProp, onwrite }: Props = $props();
 
-  const busy = $derived(actions.isBusy(id));
+  // The page passes its combined busy state (a field edit in flight counts too).
+  const busy = $derived(busyProp ?? actions.isBusy(id));
   const hasParts = $derived(signoffHasParts(so));
   // The structured calls; older comments only have the flattened "key: value" lines.
   const callLines = $derived(so.calls.length === 0 ? (so.calls_made ?? []) : []);

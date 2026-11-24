@@ -19,7 +19,29 @@ export const MAX_TEXT = 10000;
 
 /** The text is over the server's byte cap. */
 export function tooLong(text: string): boolean {
-  return new TextEncoder().encode(text).length > MAX_TEXT;
+  return utf8Length(text) > MAX_TEXT;
+}
+
+/** UTF-8 bytes of a string: what the server's caps count. */
+export function utf8Length(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+/**
+ * Longest description PATCH /issues/{id} takes, in UTF-8 bytes of the normalised text
+ * (pkg/api/patch.go maxDescription): it travels to bd as one command-line argument.
+ */
+export const MAX_DESCRIPTION = 16000;
+
+/** Longest title, status, type or assignee PATCH takes, in UTF-8 bytes (pkg/api/patch.go maxLineField). */
+export const MAX_LINE_FIELD = 500;
+
+/**
+ * A description as the TUI's O editor and the server compare and send it: leading newlines and
+ * trailing spaces, tabs and newlines are dropped (pkg/api/patch.go normalizeDescription).
+ */
+export function normalizeDescription(text: string): string {
+  return text.replace(/^\n+/, "").replace(/[ \t\n\r]+$/, "");
 }
 
 /** What the quick actions may do for one row, given whether the tracker takes writes. */

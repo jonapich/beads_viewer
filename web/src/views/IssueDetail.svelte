@@ -13,10 +13,14 @@
   import Section from "../components/detail/Section.svelte";
   import SignoffCard from "../components/detail/SignoffCard.svelte";
   import RowActionsPopover from "../components/issues/RowActionsPopover.svelte";
-  import { postAnswer, postSignoff, putPriority, setCloseCandidate } from "../lib/api/client";
+  import DescriptionEditor from "../components/detail/DescriptionEditor.svelte";
+  import { refocus as refocusOn } from "../components/detail/focus";
+  import { patchIssue, postAnswer, postSignoff, putPriority, setCloseCandidate } from "../lib/api/client";
   import { IssueActions } from "../lib/issues/actions.svelte";
   import { actionTarget, designOpenByDefault, isReadOnly, noteHolds, readOnlyNotice, relationshipCount } from "../lib/issues/detail";
   import { DetailFeed } from "../lib/issues/detail-feed.svelte";
+  import type { IssueDetail as IssueDetailT } from "../lib/api/types";
+  import { IssueEdits } from "../lib/issues/edits.svelte";
   import { awaitsSignoff, canAnswer } from "../lib/issues/model";
   import { route } from "../lib/router/router.svelte";
   import { toasts } from "../lib/toasts.svelte";
@@ -48,10 +52,27 @@
     client: { postSignoff, postAnswer, putPriority, setCloseCandidate },
     toasts,
     writable: () => !readOnly,
-    refresh: () => feed.refresh(),
+    // After our own write lands, the open field editors move to the new updated_at (when their
+    // field did not change), so a priority click does not make a description Save conflict.
+    refresh: async () => {
+      const at = id;
+      await feed.refresh();
+      edits.rebaseOpen(at);
+    },
     sticky: () => {},
   });
-  const busy = $derived(actions.isBusy(id));
+  // The inline field editors (beads-c2o.14): title, status, assignee, type and description, one
+  // PATCH each. Writes on one issue run one at a time, so the quick actions and the editors
+  // share the busy state.
+  const edits = new IssueEdits({
+    client: { patchIssue },
+    toasts,
+    writable: () => !readOnly,
+    refresh: () => feed.refresh(),
+    current: (issue) => (feed.detail && feed.detail.id === issue ? feed.detail : null),
+    blocked: (issue) => actions.isBusy(issue),
+  });
+  const busy = $derived(actions.isBusy(id) || edits.isBusy(id));
 
   // The same gates as a list row, fed by the detail.
   const target = $derived(detail ? actionTarget(detail) : null);
@@ -78,6 +99,16 @@
     if (!document.activeElement || document.activeElement === document.body) {
       document.querySelector<HTMLElement>("h1.title")?.focus({ preventScroll: true });
     }
+  }
+
+  // The description editor replaces the rendered Markdown; its Edit button sits beside the section header.
+  const descEditing = $derived(!!detail && !readOnly && edits.session(detail.id, "description") !== undefined);
+  let descBtn = $state<HTMLButtonElement>();
+
+  function openDescription(d: IssueDetailT): void {
+    if (!edits.canEdit(d.id)) return;
+    setOpen("description", true);
+    edits.open(d.id, "description", d);
   }
 
   // The priority popover: one instance, opened from the header pill.
@@ -140,10 +171,10 @@
     <!-- DOM order: header, rail, sections. The rail is rendered once; CSS moves it beside the sections on wide screens. -->
     <div class="grid">
       <div class="head">
-        <DetailHeader {detail} {now} {busy} {readOnly} prioOpen={pop !== null} onpickpriority={togglePop} />
+        <DetailHeader {edits} {detail} {now} {busy} {readOnly} prioOpen={pop !== null} onpickpriority={togglePop} />
       </div>
       <div class="railcell">
-        <FieldRail {detail} {busy} {readOnly} oncandidate={(on) => void actions.setCloseCandidate(detail.id, on)} />
+        <FieldRail {edits} {detail} {busy} {readOnly} oncandidate={(on) => void actions.setCloseCandidate(detail.id, on)} />
       </div>
       <div class="main">
         {#if showSignoff && detail.signoff}
@@ -151,6 +182,7 @@
             id={detail.id}
             signoff={detail.signoff}
             {actions}
+            {busy}
             {readOnly}
             onwrite={(write, kind) => void written(detail.id, detail.updated_at, write, kind)}
           />
@@ -160,6 +192,7 @@
             issueTitle={detail.title}
             decision={detail.decision}
             {actions}
+            {busy}
             {readOnly}
             onwrite={(write, kind) => void written(detail.id, detail.updated_at, write, kind)}
           />
@@ -175,7 +208,24 @@
         {/if}
 
         <Section name="description" title="Description" bind:open={() => isOpen("description", true), (v) => setOpen("description", v)}>
-          {#if detail.description.trim()}<Markdown src={detail.description} />{:else}<p class="empty">No description.</p>{/if}
+          {#snippet actions()}
+            {#if !readOnly && !descEditing}
+              <button
+                type="button"
+                class="editbtn"
+                bind:this={descBtn}
+                aria-disabled={edits.canEdit(detail.id) ? undefined : "true"}
+                title={edits.canEdit(detail.id) ? "Edit description" : "Wait for the current save to finish"}
+                onclick={() => openDescription(detail)}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 13.5l.7-3L11 2.7a1.4 1.4 0 012 2L5.2 12.8z" /><path d="M9.8 3.9l2.3 2.3" /></svg>
+                Edit
+              </button>
+            {/if}
+          {/snippet}
+          {#if descEditing}
+            <DescriptionEditor {edits} {detail} {busy} onfinish={() => void refocusOn(() => descBtn)} />
+          {:else if detail.description.trim()}<Markdown src={detail.description} />{:else}<p class="empty">No description.</p>{/if}
         </Section>
 
         {#if detail.acceptance_criteria?.trim()}
@@ -296,6 +346,27 @@
       grid-row: 2;
       margin-top: var(--space-4);
     }
+  }
+  .editbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .editbtn:hover:not([aria-disabled="true"]) {
+    background: var(--bg-hover);
+    border-color: var(--border);
+  }
+  .editbtn[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
   .resolution {
     margin: 0;

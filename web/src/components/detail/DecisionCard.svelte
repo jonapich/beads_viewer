@@ -11,15 +11,18 @@
     issueTitle: string;
     decision: DecisionInfo;
     actions: IssueActions;
+    /** Any write on this issue is in flight; defaults to the quick actions' own state. */
+    busy?: boolean;
     /** The tracker (or this issue) takes no writes. */
     readOnly: boolean;
     /** Hands a started write to the page, which keeps focus and shows the "done" note once it landed. */
     onwrite: (write: Promise<boolean>, kind: "answered") => void;
   }
 
-  let { id, issueTitle, decision, actions, readOnly, onwrite }: Props = $props();
+  let { id, issueTitle, decision, actions, readOnly, busy: busyProp, onwrite }: Props = $props();
 
-  const busy = $derived(actions.isBusy(id));
+  // The page passes its combined busy state (a field edit in flight counts too).
+  const busy = $derived(busyProp ?? actions.isBusy(id));
 </script>
 
 <NeedsCard tone="accent" label="Decision" sub={decision.waiting_on ? `Waiting on: ${decision.waiting_on}` : undefined}>
