@@ -74,6 +74,7 @@ func runMetamorphicBV(t testing.TB, bv, dir string, args ...string) []byte {
 // --robot-triage, --robot-priority, --robot-plan, --robot-search, and --robot-diff
 // under --label, --repo, and --recipe scoping.
 func TestMetamorphicRobot_MR2_ScopeAndNonPromotion(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 
 	// Initialize one base git repository with a seed commit so --diff-since=HEAD
@@ -214,6 +215,7 @@ func TestMetamorphicRobot_MR2_ScopeAndNonPromotion(t *testing.T) {
 // across --robot-triage, --robot-plan, --save-baseline, and --check-drift --robot-drift
 // over randomized status distributions via rapid.Check.
 func TestMetamorphicRobot_MR4_StatusConservationAcrossTriagePlanBaselineDrift(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	baseDir := t.TempDir()
 	caseSeq := 0
@@ -379,6 +381,7 @@ func TestMetamorphicRobot_MR4_StatusConservationAcrossTriagePlanBaselineDrift(t 
 // and randomized nested subdirectories across --robot-triage, --robot-priority,
 // --robot-plan, --hooks-info, and --as-of HEAD --robot-triage via rapid.Check.
 func TestMetamorphicRobot_MR5_SubdirAndCleanHeadAsOfIsomorphism(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	baseDir := t.TempDir()
 	caseSeq := 0

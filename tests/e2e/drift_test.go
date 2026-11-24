@@ -12,6 +12,7 @@ import (
 )
 
 func TestEndToEndDriftWorkflow(t *testing.T) {
+	t.Parallel()
 	// 1. Build the binary
 	tempDir := t.TempDir()
 	binPath := filepath.Join(tempDir, exeName("bv"))
@@ -127,6 +128,7 @@ func TestEndToEndDriftWorkflow(t *testing.T) {
 }
 
 func TestDriftAlerts(t *testing.T) {
+	t.Parallel()
 	// 1. Build
 	tempDir := t.TempDir()
 	binPath := filepath.Join(tempDir, exeName("bv"))
@@ -222,6 +224,7 @@ func TestDriftAlerts(t *testing.T) {
 }
 
 func TestDriftConfigCustomization(t *testing.T) {
+	t.Parallel()
 	// 1. Build
 	tempDir := t.TempDir()
 	binPath := filepath.Join(tempDir, exeName("bv"))
@@ -355,6 +358,7 @@ actionable_decrease_warning_pct: 1000`
 	}
 }
 func TestDriftErrorHandling(t *testing.T) {
+	t.Parallel()
 	// 1. Build
 	tempDir := t.TempDir()
 	binPath := filepath.Join(tempDir, exeName("bv"))

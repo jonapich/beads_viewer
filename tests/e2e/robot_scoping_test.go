@@ -710,6 +710,7 @@ func scopeOf(t *testing.T, r scopedRun) (map[string]any, bool) {
 }
 
 func TestRobotScoping_EmptyLabel(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	repoDir := t.TempDir()
 	writeIssuesJSONL(t, repoDir, strings.Join([]string{
@@ -814,6 +815,7 @@ func TestRobotScoping_EmptyLabel(t *testing.T) {
 }
 
 func TestRobotScoping_DependencyAuthority(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	dir := t.TempDir()
 	writeIssuesJSONL(t, dir, strings.Join([]string{
@@ -911,6 +913,7 @@ func TestRobotScoping_DependencyAuthority(t *testing.T) {
 }
 
 func TestRobotScoping_TombstoneAuthorityAcrossSources(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	const selected = `{"id":"api-safe","title":"Tombstone releases work","status":"open","issue_type":"task","priority":2,"labels":["backend"],"dependencies":[{"depends_on_id":"web-gone","type":"blocks"}]}
 {"id":"api-unknown","title":"Missing dependency withholds work","status":"open","issue_type":"task","priority":0,"labels":["backend"],"dependencies":[{"depends_on_id":"web-absent","type":"blocks"}]}
@@ -1037,6 +1040,7 @@ func stripDownstreamUnblockFields(v any) any {
 }
 
 func TestRobotScoping_LabelRecipeRepoHonouredByEveryCommand(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	repoDir := t.TempDir()
 	// api-1 (backend, open, unblocked) blocks api-2 (backend, open, blocked by api-1);
@@ -1131,6 +1135,7 @@ func TestRobotScoping_LabelRecipeRepoHonouredByEveryCommand(t *testing.T) {
 var shaRE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 func TestRobotScoping_AsOfHonouredOrDeclaredUnsupported(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	repoDir := t.TempDir()
 	beadsDir := filepath.Join(repoDir, ".beads")

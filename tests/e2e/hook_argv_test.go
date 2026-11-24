@@ -181,8 +181,10 @@ func TestHookArgvExports(t *testing.T) {
 	}
 	for _, kind := range []string{"markdown", "pages"} {
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
 			for _, phase := range []string{"pre-export", "post-export"} {
 				t.Run("unapproved/"+phase, func(t *testing.T) {
+					t.Parallel()
 					dir := hookProject(t)
 					marker := filepath.Join(dir, "unapproved.json")
 					hook := argvProbeHook(program, marker)
@@ -206,6 +208,7 @@ func TestHookArgvExports(t *testing.T) {
 			}
 
 			t.Run("approved_literal_arguments_and_context", func(t *testing.T) {
+				t.Parallel()
 				dir := hookProject(t)
 				if err := os.WriteFile(filepath.Join(dir, "argv-glob-match"), []byte("bounded fixture\n"), 0o600); err != nil {
 					t.Fatal(err)
@@ -279,6 +282,7 @@ func TestHookArgvExports(t *testing.T) {
 
 			for _, change := range []string{"argument", "order", "program", "shell mode"} {
 				t.Run("changed_approval/"+change, func(t *testing.T) {
+					t.Parallel()
 					dir := hookProject(t)
 					marker := filepath.Join(dir, "changed.json")
 					hook := argvProbeHook(program, marker, "first", "second")
@@ -318,6 +322,7 @@ func TestHookArgvExports(t *testing.T) {
 				{"both forms", map[string]any{"argv": []string{program}, "command": "echo unexpected"}},
 			} {
 				t.Run("invalid_post_hook_blocks_entire_pipeline/"+invalid.name, func(t *testing.T) {
+					t.Parallel()
 					dir := hookProject(t)
 					marker := filepath.Join(dir, "earlier-pre-hook.json")
 					invalid.hook["on_error"] = "continue"
@@ -344,6 +349,7 @@ func TestHookArgvExports(t *testing.T) {
 					name = "invalid"
 				}
 				t.Run("no_hooks/"+name, func(t *testing.T) {
+					t.Parallel()
 					dir := hookProject(t)
 					marker := filepath.Join(dir, "disabled.json")
 					hook := argvProbeHook(program, marker)
@@ -379,6 +385,7 @@ func TestHookArgvExports(t *testing.T) {
 				{"ordinary-looking source requires grant", []string{"BV_HOOK_ARGV_VISIBLE"}, "", "", "ordinary-argv-value"},
 			} {
 				t.Run("credential_grants/"+grant.name, func(t *testing.T) {
+					t.Parallel()
 					dir := hookProject(t)
 					marker := filepath.Join(dir, "environment.json")
 					hook := argvProbeHook(program, marker, "${BV_HOOK_ARGV_TEST_SECRET}")
@@ -423,6 +430,7 @@ func TestHookArgvExports(t *testing.T) {
 			}
 
 			t.Run("no_implicit_shell_fallback", func(t *testing.T) {
+				t.Parallel()
 				dir := hookProject(t)
 				file := filepath.Join(dir, "not-a-native-executable")
 				contents := "printf unexpected > fallback-marker\n"

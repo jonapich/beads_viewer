@@ -4,17 +4,30 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// defaultRapidChecks is the number of rapid.Check cases the e2e package runs
+// unless BV_E2E_SLOW is set (rapid's own default is 100).
+const defaultRapidChecks = 10
+
+// e2eSlow reports whether the full, slow e2e set was requested with
+// BV_E2E_SLOW=1 (see AGENTS.md).
+func e2eSlow() bool {
+	v := os.Getenv("BV_E2E_SLOW")
+	return v != "" && v != "0"
+}
 
 var bvBinaryPath string
 var bvBinaryDir string
@@ -34,6 +47,16 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	}
+
+	// The metamorphic tests run rapid.Check, which defaults to 100 cases of ~10
+	// bv invocations each (minutes on Windows). Keep them as a smoke check by
+	// default; BV_E2E_SLOW=1 restores the full exploration. Flags are parsed in
+	// m.Run, so an explicit -rapid.checks still wins, and so does RAPID_CHECKS.
+	if !e2eSlow() && os.Getenv("RAPID_CHECKS") == "" {
+		if f := flag.Lookup("rapid.checks"); f != nil {
+			_ = f.Value.Set(strconv.Itoa(defaultRapidChecks))
+		}
 	}
 
 	// Prevent any test from accidentally opening a browser

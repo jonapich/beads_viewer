@@ -166,6 +166,7 @@ func TestRace_ConcurrentTriageRequests(t *testing.T) {
 
 // TestRace_DataConsistency verifies that concurrent reads return consistent data.
 func TestRace_DataConsistency(t *testing.T) {
+	t.Parallel()
 	const (
 		pinnedEpochSeconds  = "1234567890"
 		pinnedGeneratedAt   = "2009-02-13T23:31:30Z"

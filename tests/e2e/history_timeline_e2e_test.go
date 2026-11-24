@@ -67,6 +67,7 @@ func TestTimelineDataChronologicalOrder(t *testing.T) {
 
 // TestTimelineExportStructure verifies the history.json export has proper timeline structure
 func TestTimelineExportStructure(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssetsForTimeline(t, bv)
 
@@ -432,53 +433,10 @@ func TestTimelineStatsAccuracy(t *testing.T) {
 	}
 }
 
-// stageViewerAssetsForTimeline copies viewer assets to the binary directory
+// stageViewerAssetsForTimeline stages viewer assets next to the shared binary.
+// It shares stageViewerAssets' once-per-package copy so the timeline tests
+// cannot race the export tests on the same destination directory.
 func stageViewerAssetsForTimeline(t *testing.T, bvPath string) {
 	t.Helper()
-	root := findRepoRootForTimeline(t)
-	src := filepath.Join(root, "pkg", "export", "viewer_assets")
-	dst := filepath.Join(filepath.Dir(bvPath), "pkg", "export", "viewer_assets")
-
-	if err := copyDirRecursiveForTimeline(src, dst); err != nil {
-		t.Fatalf("stage viewer assets: %v", err)
-	}
-}
-
-func findRepoRootForTimeline(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not find repo root (go.mod) from %s", dir)
-		}
-		dir = parent
-	}
-}
-
-func copyDirRecursiveForTimeline(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, info.Mode())
-	})
+	stageViewerAssets(t, bvPath)
 }

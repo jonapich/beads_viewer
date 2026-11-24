@@ -252,6 +252,12 @@ type relevanceAggregate struct {
 // ranker. Other misses remain visible in the report without inventing a quality
 // threshold from this first baseline. No production tuning is done here.
 func TestRobotSearchJudgedRelevance(t *testing.T) {
+	// 600 CLI searches over corpora of up to 10,000 issues: ~90s alone and the
+	// longest pole of the e2e package, so it only runs in the full set.
+	if !e2eSlow() {
+		t.Skip("slow: set BV_E2E_SLOW=1 to run the judged-relevance evaluation (see AGENTS.md)")
+	}
+	t.Parallel()
 	fixture, fixtureHash := loadRelevanceFixture(t)
 	bv := buildBvBinary(t)
 	binary, err := os.ReadFile(bv)

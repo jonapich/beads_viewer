@@ -690,6 +690,8 @@ func TestCorrelationManyBeads(t *testing.T) {
 // contribute, the orphan scan must report its window, and explaining an
 // explicit-id commit must list the explicit_id signal. Runtime is bounded so
 // a regression that makes the multi-strategy walk slow shows up here.
+// It asserts a wall-clock budget, so it stays serial: under t.Parallel the
+// load from the other e2e tests pushed it past 15s.
 func TestCorrelationOnThisRepository_StrategyCounts(t *testing.T) {
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 )
 
 func TestGraphExport_RecipeScope(t *testing.T) {
+	t.Parallel()
 	dir := recipeProject(t)
 	// The resolved prerequisite sits outside both the sprint label and SP repo.
 	// The missing prerequisite must still block SP-3 after either filter.

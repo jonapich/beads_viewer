@@ -123,6 +123,7 @@ func TestEmitScript_WithRobotTriageAndContainerEpicFiltering(t *testing.T) {
 // task, future-deferred task), that --robot-include-inactive surfaces the
 // excluded non-claimable diagnostics.
 func TestEmitScript_FiveSurfaceReadinessEquivalence(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	env := t.TempDir()
 

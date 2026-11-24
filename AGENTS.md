@@ -15,6 +15,21 @@ go test ./...
 
 List the two `web/*.go` files explicitly: `gofmt` ignores the `go.mod` `ignore` directive, so pointing it at `web` would walk `web/node_modules`.
 
+### Test run time (`tests/e2e`)
+
+`tests/e2e` drives a once-built `bv` binary and is the slow package. On the Windows dev host the default run takes ~5 min (it took ~40 min while serial; each `--export-pages` run costs ~10s there because Defender scans the freshly written `vendor/mermaid.min.js`, so the export tests overlap that wait with `t.Parallel`). Use `-count=1` for a fresh gate run: without it `go test` spent another ~75s after the tests finished writing its result cache.
+
+```powershell
+go test -count=1 -timeout 30m ./tests/e2e/...                              # default, ~5 min
+$env:BV_E2E_SLOW = "1"; go test -count=1 -timeout 60m ./tests/e2e/...      # full set, ~8 min
+```
+
+- `BV_E2E_SLOW=1` (any value other than empty or `0`) adds what the default run skips or shortens: `TestRobotSearchJudgedRelevance` (600 searches over corpora of up to 10,000 issues, skipped by default) and the full 100 cases of each `rapid.Check` metamorphic test (10 by default, `defaultRapidChecks` in `tests/e2e/common_test.go`). An explicit `-rapid.checks=N` or `RAPID_CHECKS` wins over both. Run the full set before changing `--robot-search`, the robot scoping paths or export-pages.
+- Independent tests call `t.Parallel()`. Tests that use `t.Setenv` cannot (it panics), so they stay serial; pass the environment to the child through `cmd.Env` instead when a test needs to be parallel. Don't share a fixed directory between parallel tests.
+- Tests that assert a wall-clock budget (`TestCorrelationOnThisRepository_StrategyCounts`, `TestExportTopology_LargeScale`) stay serial: under the parallel load they exceed their budget.
+- Viewer assets are staged next to the shared binary once (`stageViewerAssets`, `sync.Once`), not per test.
+- A timeout around a `bv` export in a parallel test is a hang guard, not a performance assertion: keep it generous (the export tests share the host with ~20 others).
+
 ### GUI frontend (`web/`)
 
 Svelte + Vite + TypeScript SPA (ADR `docs/adr/0001-gui-architecture.md`), embedded into `bv` by `web/embed.go` and served by `bv serve`. Needs Node 24 (`web/.nvmrc`) and npm.

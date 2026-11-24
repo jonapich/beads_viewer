@@ -54,6 +54,7 @@ func commitSHAs(p feedbackHistoryPayload, bead string) []string {
 // and it is pinned to 1.0; explain still works on the rejected pair and says
 // why it is gone; the stats command counts both decisions.
 func TestCorrelationFeedback_ShapesHistoryAndExplain(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	repoDir := createCorrelationRepo(t)
 	const bead = "CORR-1"

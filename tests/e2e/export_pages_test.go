@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 )
 
 func TestExportPagesRecipeScope(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 	root := recipeProject(t)
@@ -71,6 +73,7 @@ func TestExportPagesRecipeScope(t *testing.T) {
 }
 
 func TestExportPagesConfinesWritesAndCleanup(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	repo, _ := createHistoryRepo(t)
 	const sentinel = "FAKE-PRIVATE-FILE-OUTSIDE-PAGES-EXPORT"
@@ -112,7 +115,9 @@ func TestExportPagesConfinesWritesAndCleanup(t *testing.T) {
 			if err != nil {
 				t.Skipf("filesystem link unavailable: %v", err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			// Hang guard only: an export takes ~11s on Windows with Defender and
+			// several times that while the other parallel e2e tests share the host.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, bv, "--export-pages", outputDir, "--pages-include-history", "--no-hooks")
 			cmd.Dir = repo
@@ -239,6 +244,7 @@ func TestExportPagesFullSourceReadiness(t *testing.T) {
 }
 
 func TestPartialWorkspaceExportArtifactsRetainAuthority(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 	root := writeWorkspaceFixture(t)
@@ -313,13 +319,27 @@ func TestPartialWorkspaceExportArtifactsRetainAuthority(t *testing.T) {
 
 func stageViewerAssets(t *testing.T, bvPath string) {
 	t.Helper()
-	root := findRepoRoot(t)
-	src := filepath.Join(root, "pkg", "export", "viewer_assets")
-	dst := filepath.Join(filepath.Dir(bvPath), "pkg", "export", "viewer_assets")
-
-	if err := copyDirRecursive(src, dst); err != nil {
-		t.Fatalf("stage viewer assets: %v", err)
+	// The shared bv binary has one fixed staging directory, so copy once per
+	// package run rather than once per test: ~100 export tests each re-copying
+	// 6 MB through Windows Defender was slow, and concurrent copies of the same
+	// files into the same directory would collide once those tests run in
+	// parallel.
+	viewerAssetsStage.once.Do(func() {
+		root := findRepoRoot(t)
+		src := filepath.Join(root, "pkg", "export", "viewer_assets")
+		dst := filepath.Join(filepath.Dir(bvPath), "pkg", "export", "viewer_assets")
+		viewerAssetsStage.err = copyDirRecursive(src, dst)
+	})
+	if viewerAssetsStage.err != nil {
+		t.Fatalf("stage viewer assets: %v", viewerAssetsStage.err)
 	}
+}
+
+// viewerAssetsStage records the one-time staging of viewer assets next to the
+// shared bv binary (see stageViewerAssets).
+var viewerAssetsStage struct {
+	once sync.Once
+	err  error
 }
 
 func findRepoRoot(t *testing.T) string {
@@ -397,6 +417,7 @@ func copyFile(src, dst string) error {
 
 // TestExportPages_HTMLStructure validates the HTML5 document structure
 func TestExportPages_HTMLStructure(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -478,6 +499,7 @@ func cspDirective(t *testing.T, html, name string) string {
 }
 
 func TestExportPages_IssueOverviewMetrics(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -563,6 +585,7 @@ func TestExportPages_IssueOverviewMetrics(t *testing.T) {
 
 // TestExportPages_CSSPresent validates CSS files are included
 func TestExportPages_CSSPresent(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -597,6 +620,7 @@ func TestExportPages_CSSPresent(t *testing.T) {
 
 // TestExportPages_JavaScriptFiles validates JS files are present
 func TestExportPages_JavaScriptFiles(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -643,6 +667,7 @@ func TestExportPages_JavaScriptFiles(t *testing.T) {
 
 // TestExportPages_SQLiteDatabase validates the SQLite export
 func TestExportPages_SQLiteDatabase(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -686,6 +711,7 @@ func TestExportPages_SQLiteDatabase(t *testing.T) {
 
 // TestExportPages_TriageJSON validates triage data export
 func TestExportPages_TriageJSON(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -726,6 +752,7 @@ func TestExportPages_TriageJSON(t *testing.T) {
 
 // TestExportPages_MetaJSON validates metadata export
 func TestExportPages_MetaJSON(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -771,6 +798,7 @@ func TestExportPages_MetaJSON(t *testing.T) {
 
 // TestExportPages_DependencyGraph validates graph data for issues with deps
 func TestExportPages_DependencyGraph(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -807,11 +835,13 @@ func TestExportPages_DependencyGraph(t *testing.T) {
 
 // TestExportPages_DataScale_10Issues tests with 10 issues
 func TestExportPages_DataScale_10Issues(t *testing.T) {
+	t.Parallel()
 	testExportPagesWithScale(t, 10)
 }
 
 // TestExportPages_DataScale_100Issues tests with 100 issues
 func TestExportPages_DataScale_100Issues(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping large scale test in short mode")
 	}
@@ -866,6 +896,7 @@ func testExportPagesWithScale(t *testing.T, issueCount int) {
 
 // TestExportPages_DarkModeSupport validates dark mode CSS classes
 func TestExportPages_DarkModeSupport(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -906,6 +937,7 @@ func TestExportPages_DarkModeSupport(t *testing.T) {
 
 // TestExportPages_NoXSSVulnerabilities checks for basic XSS protections
 func TestExportPages_NoXSSVulnerabilities(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -942,6 +974,7 @@ func TestExportPages_NoXSSVulnerabilities(t *testing.T) {
 
 // TestExportPages_ResponsiveLayout checks for responsive design markers
 func TestExportPages_ResponsiveLayout(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1058,6 +1091,7 @@ func itoa(i int) string {
 // TestExportPages_ExcludeClosed_SQLiteVerification verifies closed issues
 // are NOT in the SQLite database when --pages-include-closed=false.
 func TestExportPages_ExcludeClosed_SQLiteVerification(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1138,6 +1172,7 @@ func TestExportPages_ExcludeClosed_SQLiteVerification(t *testing.T) {
 // TestExportPages_ExcludeHistory verifies history.json is absent
 // when --pages-include-history=false.
 func TestExportPages_ExcludeHistory(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1171,6 +1206,7 @@ func TestExportPages_ExcludeHistory(t *testing.T) {
 }
 
 func TestExportPages_WithoutGitHistory(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 	repo := createSimpleRepo(t, 2)
@@ -1212,6 +1248,7 @@ func TestExportPages_WithoutGitHistory(t *testing.T) {
 
 // TestExportPages_BothExcluded verifies minimal export with both flags false.
 func TestExportPages_BothExcluded(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1245,6 +1282,7 @@ func TestExportPages_BothExcluded(t *testing.T) {
 
 // TestExportPages_FTS5Searchable verifies the FTS5 index is created and searchable.
 func TestExportPages_FTS5Searchable(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1293,6 +1331,7 @@ func TestExportPages_FTS5Searchable(t *testing.T) {
 
 // TestExportPages_EmptyProject verifies export handles empty project gracefully.
 func TestExportPages_EmptyProject(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1340,6 +1379,7 @@ func TestExportPages_EmptyProject(t *testing.T) {
 // TestExportPages_OnlyClosedIssues verifies export when all issues are closed
 // and --pages-include-closed=false results in empty export.
 func TestExportPages_OnlyClosedIssues(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1378,6 +1418,7 @@ func TestExportPages_OnlyClosedIssues(t *testing.T) {
 
 // TestExportPages_UnicodeContent verifies export handles Unicode correctly.
 func TestExportPages_UnicodeContent(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1542,6 +1583,7 @@ func openSQLiteDB(dbPath string) (*sql.DB, error) {
 
 // TestExportPages_DetailPaneMarkup verifies detail pane markup exists in index.html
 func TestExportPages_DetailPaneMarkup(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1584,6 +1626,7 @@ func TestExportPages_DetailPaneMarkup(t *testing.T) {
 
 // TestExportPages_GraphLayoutStructure verifies graph_layout.json has correct structure
 func TestExportPages_GraphLayoutStructure(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1670,6 +1713,7 @@ func TestExportPages_GraphLayoutStructure(t *testing.T) {
 
 // TestExportPages_GraphJSSelectNodeHandler verifies selectNode handler exists in graph.js
 func TestExportPages_GraphJSSelectNodeHandler(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1737,6 +1781,7 @@ func TestExportPages_GraphJSSelectNodeHandler(t *testing.T) {
 
 // TestExportPages_GraphLayoutNodesCovered verifies all nodes get positions
 func TestExportPages_GraphLayoutNodesCovered(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1789,6 +1834,7 @@ func TestExportPages_GraphLayoutNodesCovered(t *testing.T) {
 
 // TestExportPages_PrecomputedLayoutUsedByViewer verifies viewer.js loads precomputed layout
 func TestExportPages_PrecomputedLayoutUsedByViewer(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1830,6 +1876,7 @@ func TestExportPages_PrecomputedLayoutUsedByViewer(t *testing.T) {
 
 // TestExportPages_DetailPaneAllProperties verifies all detail pane property bindings exist
 func TestExportPages_DetailPaneAllProperties(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1884,6 +1931,7 @@ func TestExportPages_DetailPaneAllProperties(t *testing.T) {
 
 // TestExportPages_GraphLayoutCycleDetection verifies cycles are detected in graph_layout.json
 func TestExportPages_GraphLayoutCycleDetection(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -1981,6 +2029,7 @@ func TestExportPages_GraphLayoutCycleDetection(t *testing.T) {
 
 // TestExportPages_GraphLayoutLargeScale tests graph layout with 50 nodes
 func TestExportPages_GraphLayoutLargeScale(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping large scale test in short mode")
 	}
@@ -2089,6 +2138,7 @@ func TestExportPages_GraphLayoutLargeScale(t *testing.T) {
 
 // TestExportPages_DetailPaneIntegration verifies detail pane works with actual data
 func TestExportPages_DetailPaneIntegration(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -2175,6 +2225,7 @@ func TestExportPages_DetailPaneIntegration(t *testing.T) {
 
 // TestExportPages_GraphLayoutFetch verifies graph.js fetches layout correctly
 func TestExportPages_GraphLayoutFetch(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -2223,6 +2274,7 @@ func TestExportPages_GraphLayoutFetch(t *testing.T) {
 // silently skipping the build; with wasm-pack present the hook would build,
 // so the test skips rather than spend minutes compiling Rust.
 func TestExportPages_HybridWasmHookRunsInBuiltBinary(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("wasm-pack"); err == nil {
 		t.Skip("wasm-pack is installed; the hook would run a real build")
 	}
@@ -2262,6 +2314,7 @@ func TestExportPages_HybridWasmHookRunsInBuiltBinary(t *testing.T) {
 // needs a browser and is only measured when BV_HEADLESS_BROWSER names one;
 // without it the JSON says so instead of inventing a number.
 func TestExportPages_RecordsLoadSizes(t *testing.T) {
+	t.Parallel()
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)

@@ -18,6 +18,7 @@ import (
 
 // TestOffline_AllAssetsBundled verifies no external dependencies in HTML.
 func TestOffline_AllAssetsBundled(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -87,6 +88,7 @@ func TestOffline_AllAssetsBundled(t *testing.T) {
 
 // TestOffline_LocalScriptReferences verifies scripts are locally bundled.
 func TestOffline_LocalScriptReferences(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -141,6 +143,7 @@ func TestOffline_LocalScriptReferences(t *testing.T) {
 
 // TestOffline_LocalStyleReferences verifies stylesheets are locally bundled.
 func TestOffline_LocalStyleReferences(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -194,6 +197,7 @@ func TestOffline_LocalStyleReferences(t *testing.T) {
 
 // TestOffline_SearchIndexBundled verifies search index is present.
 func TestOffline_SearchIndexBundled(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -237,6 +241,7 @@ func TestOffline_SearchIndexBundled(t *testing.T) {
 
 // TestOffline_HashBasedRouting verifies single-page app structure.
 func TestOffline_HashBasedRouting(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -277,6 +282,7 @@ func TestOffline_HashBasedRouting(t *testing.T) {
 
 // TestOffline_GraphWASMBundled verifies graph WASM is present.
 func TestOffline_GraphWASMBundled(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -324,6 +330,7 @@ func TestOffline_GraphWASMBundled(t *testing.T) {
 
 // TestOffline_ServiceWorkerPresent verifies service worker for offline.
 func TestOffline_ServiceWorkerPresent(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -358,6 +365,7 @@ func TestOffline_ServiceWorkerPresent(t *testing.T) {
 
 // TestOffline_DataFilesBundled verifies data JSON files are present.
 func TestOffline_DataFilesBundled(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -399,6 +407,7 @@ func TestOffline_DataFilesBundled(t *testing.T) {
 
 // TestOffline_CompleteBundleChecklist verifies complete offline bundle.
 func TestOffline_CompleteBundleChecklist(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -456,6 +465,7 @@ func TestOffline_CompleteBundleChecklist(t *testing.T) {
 
 // TestOffline_NoFetchAPICalls verifies no runtime fetch to external servers.
 func TestOffline_NoFetchAPICalls(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -499,6 +509,7 @@ func TestOffline_NoFetchAPICalls(t *testing.T) {
 
 // TestOffline_CrossOriginIsolation verifies COI setup for SharedArrayBuffer.
 func TestOffline_CrossOriginIsolation(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -546,6 +557,7 @@ func TestOffline_CrossOriginIsolation(t *testing.T) {
 
 // TestOffline_BundleSizeReasonable verifies bundle isn't too large.
 func TestOffline_BundleSizeReasonable(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -602,6 +614,7 @@ func TestOffline_BundleSizeReasonable(t *testing.T) {
 
 // TestOffline_RelativePaths verifies all paths are relative.
 func TestOffline_RelativePaths(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 
@@ -645,6 +658,7 @@ func TestOffline_RelativePaths(t *testing.T) {
 
 // TestOffline_CSSMinified verifies CSS is reasonably sized.
 func TestOffline_CSSMinified(t *testing.T) {
+	t.Parallel()
 	bv := buildBvBinary(t)
 	stageViewerAssets(t, bv)
 

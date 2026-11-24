@@ -57,7 +57,9 @@ func hookProject(t *testing.T) string {
 // prompt fails the test instead of hanging an unattended export indefinitely.
 func runHookBV(t *testing.T, dir string, args ...string) (string, string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// The bound only has to catch a hang; exports run in parallel with the rest
+	// of the e2e package and are slow on Windows, so leave generous headroom.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, buildBvBinary(t), args...)
 	cmd.Dir = dir
@@ -190,6 +192,7 @@ hooks:
 }
 
 func TestHookTrustApprovedExportsRetainBothPhasesWithoutPersistingApproval(t *testing.T) {
+	t.Parallel()
 	stageViewerAssets(t, buildBvBinary(t))
 	for _, kind := range []string{"markdown", "json", "pages"} {
 		t.Run(kind, func(t *testing.T) {
@@ -344,6 +347,7 @@ func TestHookTrustCredentialGrantsAreSeparateFromYAML(t *testing.T) {
 }
 
 func TestHookTrustNoHooksShortCircuitsYAMLApprovalAndGrants(t *testing.T) {
+	t.Parallel()
 	stageViewerAssets(t, buildBvBinary(t))
 	for _, kind := range []string{"markdown", "json", "pages"} {
 		for _, tc := range []struct{ name, config string }{
