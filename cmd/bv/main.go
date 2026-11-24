@@ -909,6 +909,27 @@ func normalizeRobotCommandName(value string) string {
 	return "robot-" + value
 }
 
+// nonTUIModeFlags are the flags whose presence makes an invocation run without
+// the TUI. serveExclusiveFlags (serve.go) must name each of them that --serve
+// cannot be combined with; TestServeExclusiveFlagsCoverNonTUIModes enforces it.
+var nonTUIModeFlags = []string{
+	"version", "help", "check-update", "update", "update-dry-run", "rollback",
+	"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
+	"priority-brief", "agent-brief", "emit-script", "profile-startup", "diff-since",
+	"init-drift", "save-baseline", "baseline-info", "check-drift",
+	"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show",
+}
+
+// nonRobotPrimaryFlags are the primary (non-robot) commands hasNonRobotPrimaryArg
+// recognises. It is nonTUIModeFlags plus debug-render.
+var nonRobotPrimaryFlags = []string{
+	"version", "help", "check-update", "update", "update-dry-run", "rollback",
+	"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
+	"priority-brief", "agent-brief", "emit-script", "debug-render", "profile-startup",
+	"init-drift", "save-baseline", "baseline-info", "check-drift",
+	"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show",
+}
+
 var knownValueTakingCLIFlags = map[string]bool{
 	"cpu-profile":               true,
 	"db":                        true,
@@ -1102,12 +1123,7 @@ func hasNonRobotPrimaryArg(args []string) bool {
 		}
 		takesVal := flagTakesSeparateValue(name)
 		if isDoubleDash || len(name) > 1 {
-			switch name {
-			case "version", "help", "check-update", "update", "update-dry-run", "rollback",
-				"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
-				"priority-brief", "agent-brief", "emit-script", "debug-render", "profile-startup",
-				"init-drift", "save-baseline", "baseline-info", "check-drift",
-				"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show":
+			if slices.Contains(nonRobotPrimaryFlags, name) {
 				if !takesVal && hasEq && isNegatedBoolFlagValue(eqVal) {
 					continue
 				}
@@ -1987,13 +2003,7 @@ func main() {
 
 		isNonTUICLIInvocation := env.Robot.Bool() || hasPrimaryRobotArg(os.Args[1:])
 		if !isNonTUICLIInvocation {
-			for _, nonTUIFlag := range []string{
-				"version", "help", "check-update", "update", "update-dry-run", "rollback",
-				"pages", "export-pages", "preview-pages", "serve", "export", "export-md", "export-graph", "hooks-info",
-				"priority-brief", "agent-brief", "emit-script", "profile-startup", "diff-since",
-				"init-drift", "save-baseline", "baseline-info", "check-drift",
-				"feedback-accept", "feedback-ignore", "feedback-reset", "feedback-show",
-			} {
+			for _, nonTUIFlag := range nonTUIModeFlags {
 				if f := flag.CommandLine.Lookup(nonTUIFlag); f != nil && f.Changed {
 					isNonTUICLIInvocation = true
 					break
