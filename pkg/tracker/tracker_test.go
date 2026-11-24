@@ -898,7 +898,8 @@ func TestCapabilitiesOf(t *testing.T) {
 	}
 	ro := testOrigin(t, "br")
 	ro.ReadOnlyReason = "stale"
-	if got := CapabilitiesOf(ro); got.Writable || got.Signoff || got.Tracker != "br" || got.ReadOnlyReason != "source is read-only: stale" {
+	ro.SupportsClaim = true // the origin says claim works, but it is not writable
+	if got := CapabilitiesOf(ro); got.Writable || got.Signoff || got.Claim || got.Tracker != "br" || got.ReadOnlyReason != "source is read-only: stale" {
 		t.Fatalf("read-only: %+v", got)
 	}
 	if got := CapabilitiesOf(nil); got.Writable || got.Tracker != "" || got.ReadOnlyReason == "" {

@@ -31,7 +31,8 @@ func CapabilitiesOf(origin *model.IssueOrigin) Capabilities {
 		if origin.Tracker == "bd" || origin.Tracker == "br" {
 			caps.Tracker = origin.Tracker
 		}
-		caps.Claim = origin.SupportsClaim
+		// Claim is a write, so a read-only origin never offers it.
+		caps.Claim = caps.Writable && origin.SupportsClaim
 	}
 	return caps
 }
