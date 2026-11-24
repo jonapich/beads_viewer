@@ -1,0 +1,95 @@
+{
+  "summary": {
+    "highest_impact": "fx-a",
+    "impact_reason": "No downstream dependencies",
+    "unblocks_count": 0
+  },
+  "total_actionable": 7,
+  "total_blocked": 3,
+  "total_deferred_or_parked": 1,
+  "total_in_progress": 1,
+  "tracks": [
+    {
+      "items": [
+        {
+          "assignee": "ada",
+          "id": "fx-a",
+          "issue_type": "task",
+          "priority": 1,
+          "status": "in_progress",
+          "title": "Cart model",
+          "triage_score": 0.022182318241408164,
+          "unblocks_ids": []
+        },
+        {
+          "id": "fx-epic",
+          "issue_type": "epic",
+          "priority": 1,
+          "status": "open",
+          "title": "Checkout epic",
+          "triage_score": 0.18859708955952167,
+          "unblocks_ids": []
+        },
+        {
+          "id": "fx-x",
+          "issue_type": "task",
+          "priority": 1,
+          "status": "open",
+          "title": "Upgrade gateway SDK",
+          "triage_score": 0.2644995786456706,
+          "unblocks_ids": []
+        },
+        {
+          "id": "fx-epic2",
+          "issue_type": "epic",
+          "priority": 2,
+          "status": "open",
+          "title": "Platform epic",
+          "triage_score": 0.13145423241666454,
+          "unblocks_ids": []
+        },
+        {
+          "id": "fx-c",
+          "issue_type": "task",
+          "priority": 3,
+          "status": "open",
+          "title": "Receipt email",
+          "triage_score": 0.11121613717856929,
+          "unblocks_ids": []
+        }
+      ],
+      "reason": "Independent work stream",
+      "track_id": "track-A"
+    },
+    {
+      "items": [
+        {
+          "id": "fx-decide",
+          "issue_type": "task",
+          "priority": 2,
+          "status": "open",
+          "title": "Pick a payment provider",
+          "triage_score": 0.17156738226375934,
+          "unblocks_ids": []
+        }
+      ],
+      "reason": "Single actionable item",
+      "track_id": "track-B"
+    },
+    {
+      "items": [
+        {
+          "id": "fx-found",
+          "issue_type": "bug",
+          "priority": 2,
+          "status": "open",
+          "title": "Rounding bug found in cart",
+          "triage_score": 0.13145423241666454,
+          "unblocks_ids": []
+        }
+      ],
+      "reason": "Single actionable item",
+      "track_id": "track-C"
+    }
+  ]
+}

@@ -145,6 +145,8 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleTriage(w, r)
 	case "/api/v1/insights":
 		s.handleInsights(w, r)
+	case "/api/v1/plan":
+		s.handlePlan(w, r)
 	default:
 		if strings.HasPrefix(r.URL.Path, issuesPathPrefix) {
 			// /api/v1/issues/{id}/{action} is a write; everything else under

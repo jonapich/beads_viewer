@@ -47,6 +47,9 @@ type View struct {
 	listIdx  *listIndex
 	treeOnce sync.Once
 	tree     *ListTree
+	// The plan body depends only on the View; see plan.go.
+	planOnce sync.Once
+	planResp *PlanResponse
 }
 
 func newView(snap *snapshot.Snapshot, gen uint64, suffix string, phase2Ready bool, phase2Err string) *View {

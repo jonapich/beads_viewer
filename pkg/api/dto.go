@@ -439,6 +439,43 @@ type InsightsResponse struct {
 	// metric was skipped or timed out. Always an object; filled once
 	// phase2_ready.
 	Skipped map[string]string `json:"skipped"`
+
+	// Titles maps every id in articulation, orphans and cycles (after the cap) to
+	// its title; ids not in the snapshot are left out. Always an object.
+	Titles map[string]string `json:"titles"`
+}
+
+// PlanResponse is GET /api/v1/plan: the TUI's execution plan
+// (analysis.GetExecutionPlan). Structure only: served at phase 1, never 503.
+// total_in_progress overlaps total_actionable and total_blocked (an in-progress
+// issue is also counted in one of those), so the four totals do not add up.
+type PlanResponse struct {
+	Tracks                []PlanTrack          `json:"tracks"`
+	TotalActionable       int                  `json:"total_actionable"`
+	TotalBlocked          int                  `json:"total_blocked"`
+	TotalDeferredOrParked int                  `json:"total_deferred_or_parked"`
+	TotalInProgress       int                  `json:"total_in_progress"`
+	Summary               analysis.PlanSummary `json:"summary"`
+}
+
+// PlanTrack is one group of related actionable items, in the server's order.
+type PlanTrack struct {
+	TrackID string     `json:"track_id"`
+	Reason  string     `json:"reason"`
+	Items   []PlanItem `json:"items"`
+}
+
+// PlanItem is analysis.PlanItem plus the row's type, assignee and triage score.
+type PlanItem struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	IssueType   string   `json:"issue_type"`
+	Status      string   `json:"status"`
+	Priority    int      `json:"priority"`
+	Assignee    string   `json:"assignee,omitempty"`
+	UnblocksIDs []string `json:"unblocks_ids"`
+	// TriageScore is absent until triage is computed (large tier before phase 2).
+	TriageScore *float64 `json:"triage_score,omitempty"`
 }
 
 // SignoffRequest is the body of POST /api/v1/issues/{id}/signoff. Approve is

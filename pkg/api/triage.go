@@ -161,6 +161,18 @@ func buildInsights(v *View, limit int) InsightsResponse {
 		Cycles:         make([][]string, 0, len(cycles)),
 		CycleCount:     len(in.Cycles),
 		Skipped:        map[string]string{},
+		Titles:         map[string]string{},
+	}
+	addTitle := func(id string) {
+		if issue := snap.Issue(id); issue != nil {
+			resp.Titles[id] = issue.Title
+		}
+	}
+	for _, id := range resp.Articulation {
+		addTitle(id)
+	}
+	for _, id := range resp.Orphans {
+		addTitle(id)
 	}
 	// The stats are the live ones Phase 2 writes into, so their status is read
 	// only once the store has swapped Phase 2 in: reading it earlier would change
@@ -170,6 +182,9 @@ func buildInsights(v *View, limit int) InsightsResponse {
 	}
 	for _, c := range cycles {
 		resp.Cycles = append(resp.Cycles, append([]string{}, c...))
+		for _, id := range c {
+			addTitle(id)
+		}
 	}
 	return resp
 }

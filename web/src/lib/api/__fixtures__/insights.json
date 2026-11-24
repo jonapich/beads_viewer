@@ -93,5 +93,13 @@
     "keystones": "dependency graph contains a cycle; topological order unavailable",
     "slack": "dependency graph contains a cycle; topological order unavailable"
   },
-  "slack": []
+  "slack": [],
+  "titles": {
+    "fx-a": "Cart model",
+    "fx-b": "Payment form",
+    "fx-c": "Receipt email",
+    "fx-cy1": "Cycle one",
+    "fx-cy2": "Cycle two",
+    "fx-decide": "Pick a payment provider"
+  }
 }

@@ -606,6 +606,54 @@ export interface InsightsResponse {
    * velocity is in the triage response (project_health.velocity).
    */
   skipped: Record<string, string>;
+  /**
+   * Id -> title for every id in articulation, orphans and cycles (after the
+   * cap). Ids not in the snapshot are left out. Always an object.
+   */
+  titles: Record<string, string>;
+}
+
+/** The plan's headline: the actionable issue that unblocks the most. */
+export interface PlanSummary {
+  /** Issue id; set even when unblocks_count is 0 (then it is an arbitrary pick). */
+  highest_impact: string;
+  impact_reason: string;
+  unblocks_count: number;
+}
+
+/** One actionable issue in a plan track (pkg/api/dto.go PlanItem). */
+export interface PlanItem {
+  id: string;
+  title: string;
+  issue_type: string;
+  status: string;
+  priority: number;
+  assignee?: string;
+  /** Issues that become actionable when this one is done. */
+  unblocks_ids: string[];
+  /** Absent until triage exists (large tier before phase 2). */
+  triage_score?: number;
+}
+
+/** A group of related actionable items; tracks come in the server's order. */
+export interface PlanTrack {
+  track_id: string;
+  reason: string;
+  items: PlanItem[];
+}
+
+/**
+ * GET /api/v1/plan (pkg/api/dto.go PlanResponse): the TUI's execution plan.
+ * Served at phase 1 and never 503. total_in_progress overlaps total_actionable
+ * and total_blocked, so the four totals must not be added up.
+ */
+export interface PlanResponse {
+  tracks: PlanTrack[];
+  total_actionable: number;
+  total_blocked: number;
+  total_deferred_or_parked: number;
+  total_in_progress: number;
+  summary: PlanSummary;
 }
 
 /** Body of POST /api/v1/issues/{id}/signoff (pkg/api/dto.go SignoffRequest). */

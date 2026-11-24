@@ -9,6 +9,7 @@ import type {
   IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
+  PlanResponse,
   SearchResponse,
   SignoffResponse,
   SnapshotEvent,
@@ -30,6 +31,7 @@ import signoff from "./__fixtures__/signoff.json";
 import notFound from "./__fixtures__/error-not-found.json";
 import triage from "./__fixtures__/triage.json";
 import insights from "./__fixtures__/insights.json";
+import plan from "./__fixtures__/plan.json";
 import writeResult from "./__fixtures__/write-result.json";
 import writeResultDispute from "./__fixtures__/write-result-dispute.json";
 import writeResultWarning from "./__fixtures__/write-result-warning.json";
@@ -53,6 +55,7 @@ export const signoffFixture: SignoffResponse = signoff;
 export const notFoundFixture: ApiErrorBody = notFound;
 export const triageFixture: TriageResponse = triage;
 export const insightsFixture: InsightsResponse = insights;
+export const planFixture: PlanResponse = plan;
 export const writeResultFixture: WriteResponse = writeResult;
 export const writeResultDisputeFixture: WriteResponse = writeResultDispute;
 export const writeResultWarningFixture: WriteResponse = writeResultWarning;

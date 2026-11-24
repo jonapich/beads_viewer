@@ -8,6 +8,7 @@ import type {
   IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
+  PlanResponse,
   PriorityRequest,
   SearchResponse,
   SignoffRequest,
@@ -164,6 +165,13 @@ export const getTriage = (signal?: AbortSignal) => getJSON<TriageResponse>("/api
 /** Conditional GET of triage: null means the cached copy is current. */
 export const getTriageIfChanged = (etag: string | null, signal?: AbortSignal) =>
   getJSONIfChanged<TriageResponse>("/api/v1/triage", etag, { signal });
+
+/** The execution plan. Structure only: served at phase 1, never 503. */
+export const getPlan = (signal?: AbortSignal) => getJSON<PlanResponse>("/api/v1/plan", { signal });
+
+/** Conditional GET of the plan: null means the cached copy is current. */
+export const getPlanIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<PlanResponse>("/api/v1/plan", etag, { signal });
 
 /** Graph insights; each list holds at most `limit` entries (server default 25, max 500). */
 export const getInsights = (limit?: number, signal?: AbortSignal) =>
