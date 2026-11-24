@@ -2,7 +2,7 @@
 #
 # Build with SQLite FTS5 (full-text search) support enabled
 
-.PHONY: web build install clean test release-gate release-package release-verify release-audit
+.PHONY: web build install clean test
 
 .DEFAULT_GOAL := build
 
@@ -30,18 +30,3 @@ clean:
 
 test:
 	go test ./...
-
-# These targets let DSR dispatch the complete release workflow as a Make build.
-# The release gate owns toolchain settings; do not inherit the legacy FTS5 flag.
-release-gate: web
-	env -u CGO_CFLAGS bash scripts/release_gate.sh run
-
-release-package: web
-	env -u CGO_CFLAGS bash scripts/release_gate.sh package
-
-release-verify:
-	env -u CGO_CFLAGS bash scripts/release_gate.sh verify
-
-# Keep the audit tool outside the application's module requirements.
-release-audit:
-	env -u CGO_CFLAGS bash scripts/release_gate.sh audit

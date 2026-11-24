@@ -28,10 +28,6 @@ benchmarks/current.txt
 .bv/
 beads_report_beads_viewer_*.md
 
-# Nix build artifacts
-result
-result-*
-
 # Rust/WASM build artifacts
 bv-graph-wasm/target/
 bv-graph-wasm/pkg/
@@ -78,10 +74,7 @@ target-*/
 # br doctor per-run artifacts
 .doctor/
 
-# Release gate run logs (scripts/release_gate.sh)
-tests/artifacts/release_gate_*.log
-
-# Benchmark run outputs (scripts/benchmark.sh compare rewrites them on every gate run)
+# Benchmark run outputs (scripts/benchmark.sh compare rewrites them on each run)
 benchmarks/current.txt
 benchmarks/compare.txt
 benchmarks/reference.txt
