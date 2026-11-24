@@ -1,13 +1,14 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import type { DepRef, IssueRef, ListItem } from "../../lib/api/types";
+  import type { ListItem } from "../../lib/api/types";
   import { answerKey, noteKey, optionKey, type IssueActions } from "../../lib/issues/actions.svelte";
   import { awaitsSignoff, canAnswer, displayStatus } from "../../lib/issues/model";
-  import { callView, childProgress, refStatus, signoffLabel, signoffTone, topReasons, type PeekSection } from "../../lib/issues/peek";
+  import { callView, childProgress, signoffLabel, signoffTone, topReasons, type PeekSection } from "../../lib/issues/peek";
   import { PeekLoader } from "../../lib/issues/peek.svelte";
   import { percent, STATUS_NAME, triageText } from "../../lib/issues/present";
   import DecisionForm from "./DecisionForm.svelte";
   import PriorityPill from "./PriorityPill.svelte";
+  import RefRow from "./RefRow.svelte";
   import SignoffActions from "./SignoffActions.svelte";
   import StatusGlyph from "./StatusGlyph.svelte";
 
@@ -173,18 +174,6 @@
   });
 </script>
 
-{#snippet ref(r: IssueRef | DepRef, muted: boolean)}
-  {#if r.missing}
-    <span class="lnk gone"><span class="i">{r.id}</span><span class="t">not in the tracker</span></span>
-  {:else}
-    <button type="button" class="lnk" class:muted onclick={() => onopen(r.id)}>
-      <StatusGlyph status={refStatus(r.status)} />
-      <span class="i">{r.id}</span>
-      <span class="t">{r.title ?? ""}</span>
-    </button>
-  {/if}
-{/snippet}
-
 <aside class="drawer" aria-label="Issue details" bind:this={root}>
   <div class="dh">
     <div class="ttl">
@@ -312,20 +301,20 @@
       {#if detail.blocked_by.length > 0}
         <div class="sec">
           <h3>Blocked by</h3>
-          {#each detail.blocked_by as r (r.id)}{@render ref(r, !r.active)}{/each}
+          {#each detail.blocked_by as r (r.id)}<RefRow ref={r} muted={!r.active} {onopen} />{/each}
         </div>
       {/if}
       {#if detail.blocks.length > 0}
         <div class="sec">
           <h3>Blocks</h3>
-          {#each detail.blocks as r (r.id)}{@render ref(r, !r.active)}{/each}
+          {#each detail.blocks as r (r.id)}<RefRow ref={r} muted={!r.active} {onopen} />{/each}
         </div>
       {/if}
       {#if detail.children.length > 0}
         <div class="sec">
           <h3>Children <span class="faint">{progress.done}/{progress.total} closed</span></h3>
           <span class="prog" aria-hidden="true"><i class="pct-{percent(progress.done, progress.total)}"></i></span>
-          {#each detail.children as r (r.id)}{@render ref(r, r.status === "closed")}{/each}
+          {#each detail.children as r (r.id)}<RefRow ref={r} muted={r.status === "closed"} {onopen} />{/each}
         </div>
       {/if}
       {#if detail.triage}
@@ -482,8 +471,7 @@
   }
   /* The shared cells are laid out by order inside a list row; here they sit in a plain flex line. */
   .fields :global(.pp),
-  .fields :global(.sg),
-  .lnk :global(.sg) {
+  .fields :global(.sg) {
     order: 0;
   }
   .faint {
@@ -546,46 +534,6 @@
     margin: 0;
     font-size: var(--text-sm);
     font-weight: 600;
-  }
-  .lnk {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    text-align: left;
-    padding: 4px 6px;
-    margin: 0 -6px;
-    border: 0;
-    background: none;
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-    cursor: pointer;
-  }
-  .lnk:hover {
-    background: var(--bg-hover);
-  }
-  .lnk.muted {
-    color: var(--text-muted);
-  }
-  .lnk.gone {
-    cursor: default;
-    color: var(--text-faint);
-  }
-  .lnk.gone:hover {
-    background: none;
-  }
-  .lnk .t {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .lnk .i {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    flex: none;
   }
   .prog {
     display: block;

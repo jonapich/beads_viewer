@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
+  import Activity from "../components/detail/Activity.svelte";
   import DetailHeader from "../components/detail/DetailHeader.svelte";
   import DetailSkeleton from "../components/detail/DetailSkeleton.svelte";
   import FieldRail from "../components/detail/FieldRail.svelte";
+  import History from "../components/detail/History.svelte";
   import InlineText from "../components/detail/InlineText.svelte";
   import Markdown from "../components/detail/Markdown.svelte";
+  import Relationships from "../components/detail/Relationships.svelte";
   import Section from "../components/detail/Section.svelte";
-  import { designOpenByDefault, readOnlyNotice } from "../lib/issues/detail";
+  import { designOpenByDefault, readOnlyNotice, relationshipCount } from "../lib/issues/detail";
   import { DetailFeed } from "../lib/issues/detail-feed.svelte";
   import { route } from "../lib/router/router.svelte";
 
@@ -68,6 +71,10 @@
           </Section>
         {/if}
 
+        {#if relationshipCount(detail) > 0}
+          <Relationships {detail} bind:open={() => isOpen("relationships", true), (v) => setOpen("relationships", v)} />
+        {/if}
+
         {#if detail.design?.trim()}
           <Section
             name="design"
@@ -83,6 +90,12 @@
             <Markdown src={detail.notes} />
           </Section>
         {/if}
+
+        {#if detail.comments.length > 0}
+          <Activity {detail} {now} bind:open={() => isOpen("activity", true), (v) => setOpen("activity", v)} />
+        {/if}
+
+        <History {detail} {now} bind:open={() => isOpen("history", false), (v) => setOpen("history", v)} />
       </div>
     </div>
   {:else if feed.status === "missing"}

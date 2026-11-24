@@ -1,6 +1,6 @@
 // Pure rules of the full-page issue detail view (views/IssueDetail.svelte). Everything
 // the page decides from the API's IssueDetail lives here so it is unit-tested.
-import type { IssueDetail, Link, MetaResponse } from "../api/types";
+import type { BlockerCounts, IssueComment, IssueDetail, Link, MetaResponse, RelatedRef } from "../api/types";
 import { displayStatus, type DisplayStatus } from "./model";
 import { READ_ONLY_TITLE } from "./writes";
 
@@ -122,4 +122,132 @@ export function readOnlyNotice(
   if (detail?.read_only_reason) return detail.read_only_reason;
   if (meta && !meta.capabilities?.writes) return READ_ONLY_TITLE;
   return null;
+}
+
+/** Kinds of comment that start expanded; every other kind starts as a one-line summary. */
+const OPEN_KINDS: ReadonlySet<string> = new Set(["signoff", "user", "answer"]);
+
+/** Whether a comment starts expanded: a plain comment (no kind) always is. */
+export function defaultCommentOpen(kind: string | undefined): boolean {
+  return !kind || OPEN_KINDS.has(kind);
+}
+
+function firstSentence(s: string): string {
+  const i = s.indexOf(". ");
+  return i > 0 ? s.slice(0, i + 1) : s;
+}
+
+/** A string, or the first string of a list of them; "" for anything else. */
+function stringOf(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    const first = v.find((x): x is string => typeof x === "string");
+    return first ?? "";
+  }
+  return "";
+}
+
+/**
+ * The one line shown for a collapsed kinded comment. Not the API's `summary`: that starts
+ * with the kind, which the badge beside it already shows, and a sign-off's JSON comes out
+ * as "{calls_made, ...}". A JSON body gives what_changed, else summary, else disputed,
+ * else its first string value, cut at the first sentence; a text body gives its first
+ * non-blank line.
+ */
+export function commentSummary(c: Pick<IssueComment, "data" | "text">): string {
+  const j = c.data;
+  if (j) {
+    let s = stringOf(j["what_changed"]) || stringOf(j["summary"]) || stringOf(j["disputed"]);
+    if (!s) {
+      for (const v of Object.values(j)) {
+        if (typeof v === "string") {
+          s = v;
+          break;
+        }
+      }
+    }
+    return firstSentence(s.trim());
+  }
+  return (c.text ?? "").split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+}
+
+/** The kinds present in the comments with how many of each, in order of first appearance (the filter chips). */
+export function kindCounts(comments: ReadonlyArray<Pick<IssueComment, "kind">>): Array<{ kind: string; n: number }> {
+  const out: Array<{ kind: string; n: number }> = [];
+  for (const c of comments) {
+    if (!c.kind) continue;
+    const hit = out.find((k) => k.kind === c.kind);
+    if (hit) hit.n++;
+    else out.push({ kind: c.kind, n: 1 });
+  }
+  return out;
+}
+
+export type HistoryKind = "created" | "started" | "stage" | "signoff" | "closed";
+
+export interface HistoryEvent {
+  at: string;
+  label: string;
+  kind: HistoryKind;
+}
+
+/**
+ * The timeline, oldest first: created, started, every stage change (metadata
+ * stage_at.<stage>), the sign-off request (signoff_at; "waived" when metadata.signoff says
+ * so) and closed. Timestamps that do not parse are left out.
+ */
+export function historyEvents(d: Pick<IssueDetail, "created_at" | "started_at" | "closed_at" | "metadata">): HistoryEvent[] {
+  const ev: HistoryEvent[] = [{ at: d.created_at, label: "Created", kind: "created" }];
+  if (d.started_at) ev.push({ at: d.started_at, label: "Started", kind: "started" });
+  const meta = d.metadata ?? {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (k.startsWith("stage_at.") && typeof v === "string") ev.push({ at: v, label: `Stage → ${k.slice("stage_at.".length)}`, kind: "stage" });
+  }
+  const so = meta["signoff_at"];
+  if (typeof so === "string") ev.push({ at: so, label: `Sign-off ${meta["signoff"] === "waived" ? "waived" : "requested"}`, kind: "signoff" });
+  if (d.closed_at) ev.push({ at: d.closed_at, label: "Closed", kind: "closed" });
+  return ev.filter((e) => Number.isFinite(Date.parse(e.at))).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/** "calls_made" -> "Calls made". */
+export function humanKey(k: string): string {
+  const s = k.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** "owner/repo abc1234" -> the commit on GitHub; null for any other text. */
+export function commitHref(s: string): string | null {
+  const m = /^([\w.-]+\/[\w.-]+)\s+([0-9a-f]{7,40})$/.exec(s);
+  return m ? `https://github.com/${m[1]}/commit/${m[2]}` : null;
+}
+
+/** A JSON value that is not an object or array (null counts). */
+export function isScalar(v: unknown): boolean {
+  return v === null || typeof v !== "object";
+}
+
+/** "2 open · 1 resolved" for the Blocked by group; "" when there is nothing to count. */
+export function blockedByMeta(c: BlockerCounts): string {
+  return [c.active > 0 ? `${c.active} open` : "", c.resolved > 0 ? `${c.resolved} resolved` : ""].filter(Boolean).join(" · ");
+}
+
+/** The Blocks group's meta: how many dependents the issue still holds up; "" for none. */
+export function blocksMeta(activeDependents: number): string {
+  return activeDependents > 0 ? `${activeDependents} still blocked` : "";
+}
+
+/**
+ * The tag on a Related row. The row is the other issue: direction "out" means this issue
+ * declared the link, so for discovered-from the row is where this one was discovered from.
+ */
+export function relatedTag(r: Pick<RelatedRef, "type" | "direction">): string {
+  if (r.type === "discovered-from") return r.direction === "in" ? "discovered from this" : "discovered from";
+  return r.type.replace(/-/g, " ");
+}
+
+/** How many rows the Relationships section lists (parent, children, blockers, dependents, related). */
+export function relationshipCount(
+  d: Pick<IssueDetail, "parent" | "children" | "blocked_by" | "blocks" | "related">,
+): number {
+  return (d.parent ? 1 : 0) + d.children.length + d.blocked_by.length + d.blocks.length + d.related.length;
 }
