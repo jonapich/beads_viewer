@@ -252,7 +252,7 @@ func (e *SQLiteExporter) ExportBundle(bundle *Bundle) error {
 	}
 
 	// Chunk if needed
-	if err := e.chunkIfNeeded(bundle, dbPath); err != nil {
+	if err := e.chunkDatabase(bundle, dbPath, snapshot); err != nil {
 		return fmt.Errorf("chunk database: %w", err)
 	}
 
@@ -1072,34 +1072,61 @@ func (e *SQLiteExporter) writeRobotJSON(bundle *Bundle, path string, payload any
 	return writeJSON(bundle, path, fields)
 }
 
-// chunkIfNeeded splits the database into chunks if it exceeds the threshold.
+// chunkIfNeeded splits the database already published at dbPath into chunks if
+// it exceeds the threshold, and writes the chunk config. It reads the database
+// back from the bundle; ExportBundle uses chunkDatabase to avoid that.
 func (e *SQLiteExporter) chunkIfNeeded(bundle *Bundle, dbPath string) error {
-	info, err := bundle.root.Stat(dbPath)
-	if err != nil {
-		return err
+	return e.chunkDatabase(bundle, dbPath, nil)
+}
+
+// chunkDatabase is chunkIfNeeded with an optional snapshot: a reader holding
+// exactly the bytes that were published as dbPath (ExportBundle passes the
+// private temporary database it just copied from). When the bundle recorded
+// dbPath's digest and size as it wrote the file, those and the snapshot are used
+// and the freshly written file is never opened again. Each chunk is hashed from
+// the bytes as they are produced. On Windows, real-time antivirus blocks the
+// first open of a fresh file until it has scanned it, which stalls for seconds
+// on a database large enough to chunk (see beads-c2o.40). Without a recorded
+// digest (a database placed there by other code) the file is read back.
+func (e *SQLiteExporter) chunkDatabase(bundle *Bundle, dbPath string, snapshot io.ReadSeeker) error {
+	var (
+		size int64
+		sum  [sha256.Size]byte
+		src  io.ReadSeeker
+	)
+	if rec, ok := bundle.writtenInfo(dbPath); ok {
+		size, sum, src = rec.size, rec.sum, snapshot
+	} else {
+		info, err := bundle.root.Stat(dbPath)
+		if err != nil {
+			return err
+		}
+		size = info.Size()
+
+		// Always compute hash for cache invalidation (bv-pages-cache-fix)
+		// The hash is used by viewer.js OPFS caching to determine if cached data is stale.
+		// Without this, all deployments use the same "default" cache key and old data persists.
+		f, err := bundle.root.Open(dbPath)
+		if err != nil {
+			return fmt.Errorf("open database for hashing: %w", err)
+		}
+		defer f.Close()
+
+		hasher := sha256.New()
+		if _, err := io.Copy(hasher, f); err != nil {
+			return fmt.Errorf("hash database: %w", err)
+		}
+		copy(sum[:], hasher.Sum(nil))
+		src = f
 	}
 
 	// Write chunk config regardless of whether we chunk
 	config := ChunkConfig{
-		TotalSize: info.Size(),
+		TotalSize: size,
+		Hash:      hex.EncodeToString(sum[:]),
 	}
 
-	// Always compute hash for cache invalidation (bv-pages-cache-fix)
-	// The hash is used by viewer.js OPFS caching to determine if cached data is stale.
-	// Without this, all deployments use the same "default" cache key and old data persists.
-	f, err := bundle.root.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("open database for hashing: %w", err)
-	}
-	defer f.Close()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, f); err != nil {
-		return fmt.Errorf("hash database: %w", err)
-	}
-	config.Hash = hex.EncodeToString(hasher.Sum(nil))
-
-	if info.Size() < e.Config.ChunkThreshold {
+	if size < e.Config.ChunkThreshold {
 		config.Chunked = false
 		// A previous export of a larger DB may have left a chunks/ directory
 		// behind. The config we are about to write says chunked=false, but the
@@ -1113,29 +1140,44 @@ func (e *SQLiteExporter) chunkIfNeeded(bundle *Bundle, dbPath string) error {
 		return writeJSON(bundle, "beads.sqlite3.config.json", config)
 	}
 
+	if src == nil {
+		f, err := bundle.root.Open(dbPath)
+		if err != nil {
+			return fmt.Errorf("open database for chunking: %w", err)
+		}
+		defer f.Close()
+		src = f
+	}
 	// Reset file position for chunking
-	if _, err := f.Seek(0, 0); err != nil {
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seek database for chunking: %w", err)
 	}
 
-	// Chunk the database (file f is already open and seeked to start)
+	// Chunk the database (src is seeked to start)
 
 	chunksDir := "chunks"
 	if err := bundle.root.MkdirAll(chunksDir, 0755); err != nil {
 		return fmt.Errorf("create chunks dir: %w", err)
 	}
 
-	// Split into chunks
+	// Split into chunks, hashing each from the bytes being written
 	chunkNum := 0
 	buf := make([]byte, e.Config.ChunkSize)
+	var chunks []ChunkInfo
 
 	for {
-		n, err := f.Read(buf)
+		n, err := src.Read(buf)
 		if n > 0 {
-			chunkPath := filepath.Join(chunksDir, fmt.Sprintf("%05d.bin", chunkNum))
-			if err := bundle.WriteFile(chunkPath, buf[:n], 0644); err != nil {
+			name := fmt.Sprintf("%05d.bin", chunkNum)
+			if err := bundle.WriteFile(filepath.Join(chunksDir, name), buf[:n], 0644); err != nil {
 				return fmt.Errorf("write chunk %d: %w", chunkNum, err)
 			}
+			h := sha256.Sum256(buf[:n])
+			chunks = append(chunks, ChunkInfo{
+				Path: urlpath.Join("chunks", name),
+				Hash: hex.EncodeToString(h[:]),
+				Size: int64(n),
+			})
 			chunkNum++
 		}
 		if err == io.EOF {
@@ -1161,24 +1203,7 @@ func (e *SQLiteExporter) chunkIfNeeded(bundle *Bundle, dbPath string) error {
 	config.Chunked = true
 	config.ChunkCount = chunkNum
 	config.ChunkSize = e.Config.ChunkSize
-	config.Chunks = make([]ChunkInfo, 0, chunkNum)
-
-	// Re-read chunks to record paths and hashes
-	for i := 0; i < chunkNum; i++ {
-		name := fmt.Sprintf("%05d.bin", i)
-		diskPath := filepath.Join("chunks", name)
-		chunkURLPath := urlpath.Join("chunks", name)
-		data, err := bundle.root.ReadFile(diskPath)
-		if err != nil {
-			return fmt.Errorf("hash chunk %d: %w", i, err)
-		}
-		h := sha256.Sum256(data)
-		config.Chunks = append(config.Chunks, ChunkInfo{
-			Path: chunkURLPath,
-			Hash: hex.EncodeToString(h[:]),
-			Size: int64(len(data)),
-		})
-	}
+	config.Chunks = append(make([]ChunkInfo, 0, chunkNum), chunks...)
 
 	return writeJSON(bundle, "beads.sqlite3.config.json", config)
 }

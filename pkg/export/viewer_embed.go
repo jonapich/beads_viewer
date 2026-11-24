@@ -48,24 +48,48 @@ type Bundle struct {
 	// the digest is trusted: everything in the bundle is written through
 	// writeFile, and Remove forgets the entries it deletes.
 	writtenMu sync.Mutex
-	written   map[string][sha256.Size]byte
+	written   map[string]writtenFile
 }
 
-func (b *Bundle) recordWritten(name string, sum [sha256.Size]byte) {
+// writtenFile is what writeFile saw of a file's content as it wrote it.
+type writtenFile struct {
+	sum  [sha256.Size]byte
+	size int64
+}
+
+func (b *Bundle) recordWritten(name string, rec writtenFile) {
 	b.writtenMu.Lock()
 	defer b.writtenMu.Unlock()
 	if b.written == nil {
-		b.written = make(map[string][sha256.Size]byte)
+		b.written = make(map[string]writtenFile)
 	}
-	b.written[offlineKey(name)] = sum
+	b.written[offlineKey(name)] = rec
 }
 
 // writtenSum returns the digest recorded when the bundle wrote name.
 func (b *Bundle) writtenSum(name string) ([sha256.Size]byte, bool) {
+	rec, ok := b.writtenInfo(name)
+	return rec.sum, ok
+}
+
+// writtenInfo returns the digest and size recorded when the bundle wrote name.
+func (b *Bundle) writtenInfo(name string) (writtenFile, bool) {
 	b.writtenMu.Lock()
 	defer b.writtenMu.Unlock()
-	sum, ok := b.written[offlineKey(name)]
-	return sum, ok
+	rec, ok := b.written[offlineKey(name)]
+	return rec, ok
+}
+
+// countingWriter forwards to w and counts the bytes written.
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
 }
 
 // Remove deletes a file or empty directory relative to the bundle root and
@@ -180,7 +204,8 @@ func (b *Bundle) writeFile(name string, perm os.FileMode, write func(io.Writer) 
 	}
 	defer b.root.Remove(temporary)
 	digest := sha256.New()
-	if err := write(io.MultiWriter(file, digest)); err != nil {
+	counted := &countingWriter{w: io.MultiWriter(file, digest)}
+	if err := write(counted); err != nil {
 		file.Close()
 		return err
 	}
@@ -199,9 +224,9 @@ func (b *Bundle) writeFile(name string, perm os.FileMode, write func(io.Writer) 
 	if err := b.root.Rename(temporary, name); err != nil {
 		return fmt.Errorf("publish export file %s: %w", name, err)
 	}
-	var sum [sha256.Size]byte
-	copy(sum[:], digest.Sum(nil))
-	b.recordWritten(name, sum)
+	rec := writtenFile{size: counted.n}
+	copy(rec.sum[:], digest.Sum(nil))
+	b.recordWritten(name, rec)
 	return nil
 }
 
