@@ -222,6 +222,14 @@ func TestGoldenIssuesTreeAndSearch(t *testing.T) {
 	}
 	testutil.NewGoldenFile(t, goldenDir, "issues-tree.json").AssertJSON(issues)
 
+	// The flat view has no "tree": the TS type keeps it optional, and this
+	// fixture is what proves that.
+	flat, code := getGolden(t, store, "/api/v1/issues?view=flat")
+	if code != http.StatusOK {
+		t.Fatalf("issues flat: %d", code)
+	}
+	testutil.NewGoldenFile(t, goldenDir, "issues-flat.json").AssertJSON(flat)
+
 	hits, code := getGolden(t, store, "/api/v1/search?q=cart")
 	if code != http.StatusOK {
 		t.Fatalf("search: %d", code)

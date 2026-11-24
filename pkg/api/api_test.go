@@ -583,3 +583,35 @@ func TestServeReturnsListenerError(t *testing.T) {
 		t.Fatal("expected an error serving on a closed listener")
 	}
 }
+
+// TestReadEndpointsRejectWrites pins the 405 contract of every read endpoint:
+// a POST that passes the guard (session and own Origin) is rejected with the
+// method_not_allowed error and an Allow header, and never reaches the store.
+func TestReadEndpointsRejectWrites(t *testing.T) {
+	env := newWriteEnv(t, nil)
+	for _, tc := range []struct{ target, allow string }{
+		{"/api/v1/health", "GET, HEAD"},
+		{"/api/v1/meta", "GET, HEAD"},
+		{"/api/v1/events", "GET"},
+		{"/api/v1/issues", "GET, HEAD"},
+		{"/api/v1/search?q=a", "GET, HEAD"},
+		{"/api/v1/signoff", "GET, HEAD"},
+		{"/api/v1/triage", "GET, HEAD"},
+		{"/api/v1/insights", "GET, HEAD"},
+		{"/api/v1/issues/fx-a", "GET, HEAD"},
+	} {
+		t.Run(tc.target, func(t *testing.T) {
+			rec := do(env.h, http.MethodPost, tc.target, withSession(), withOrigin(localOrigin))
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("status = %d, want 405: %s", rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("Allow"); got != tc.allow {
+				t.Fatalf("Allow = %q, want %q", got, tc.allow)
+			}
+			if e := decodeError(t, rec); e.Code != "method_not_allowed" {
+				t.Fatalf("code = %q", e.Code)
+			}
+		})
+	}
+	expectNoCalls(t, env.fw)
+}

@@ -92,3 +92,4 @@ benchmarks/reference.txt
 # Ephemeral graph-export test snapshots and rapid property-test failure seeds
 *graph_export__as_of__*.html
 **/testdata/rapid/
+web/playwright-report/
