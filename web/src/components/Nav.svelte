@@ -5,6 +5,7 @@
     { href: "/", label: "Overview" },
     { href: "/issues", label: "Issues" },
     { href: "/triage", label: "Triage" },
+    { href: "/plan", label: "Plan" },
     { href: "/insights", label: "Insights" },
   ];
 
