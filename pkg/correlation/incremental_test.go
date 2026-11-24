@@ -612,6 +612,7 @@ func TestCalculateMergedStats_CycleTime(t *testing.T) {
 }
 
 func TestIncrementalCorrelator_MultiStrategyFeedbackAndDataHashParity(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	beadsDir := filepath.Join(repo, ".beads")
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
@@ -809,6 +810,7 @@ func TestIncrementalCorrelator_MultiStrategyFeedbackAndDataHashParity(t *testing
 }
 
 func TestIncrementalCorrelator_DeletedAndTombstonedTargetsAndConcurrentGenerateReport(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	beadsDir := filepath.Join(repo, ".beads")
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
@@ -1040,6 +1042,7 @@ func TestIncrementalCorrelator_DeletedAndTombstonedTargetsAndConcurrentGenerateR
 }
 
 func TestIncrementalCorrelator_ReportOnlyFallbackPrunesDeletedAndRefreshesWiderSlice(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	beadsDir := filepath.Join(repo, ".beads")
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {

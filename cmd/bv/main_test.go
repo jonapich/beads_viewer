@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -343,21 +342,39 @@ func TestHistoryExportUsesRecordedLifecycle(t *testing.T) {
 	t.Run("retained_window", func(t *testing.T) {
 		// Push creation outside the real 500-source-commit window. The target
 		// is open at its boundary but closed now; current status is no baseline.
+		// The 501 commits go in through one `git fast-import` (two git runs per
+		// commit made this subtest take over a minute on Windows); the commits
+		// are the same ones add + commit would record on top of main.
+		var stream bytes.Buffer
+		var record string
 		for i := 0; i <= 500; i++ {
 			status := "open"
 			if i == 500 {
 				status = "closed"
 			}
-			data := fmt.Sprintf("{\"id\":\"bv-a\",\"title\":\"Target %d\",\"status\":%q}\n{\"id\":\"bv-z\",\"title\":\"Closed %d\",\"status\":\"closed\"}\n", i, status, i)
+			record = fmt.Sprintf("{\"id\":\"bv-a\",\"title\":\"Target %d\",\"status\":%q}\n{\"id\":\"bv-z\",\"title\":\"Closed %d\",\"status\":\"closed\"}\n", i, status, i)
 			if i >= 499 {
-				data += "{\"id\":\"bv-new\",\"title\":\"Created inside window\",\"status\":\"open\"}\n"
+				record += "{\"id\":\"bv-new\",\"title\":\"Created inside window\",\"status\":\"open\"}\n"
 			}
-			if err := os.WriteFile(".beads/issues.jsonl", []byte(data), 0o644); err != nil {
-				t.Fatal(err)
+			message := fmt.Sprintf("retained record %d", i)
+			fmt.Fprintf(&stream, "commit refs/heads/main\ncommitter Fixture <fixture@example.invalid> %d +0000\ndata %d\n%s\n", start.Unix(), len(message), message)
+			if i == 0 {
+				stream.WriteString("from refs/heads/main^0\n")
 			}
-			git(i, "add", ".beads/issues.jsonl")
-			git(i, "commit", "-m", fmt.Sprintf("retained record %d", i))
+			fmt.Fprintf(&stream, "M 100644 inline .beads/issues.jsonl\ndata %d\n%s\n", len(record), record)
 		}
+		importCmd := exec.Command("git", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "fast-import", "--quiet")
+		importCmd.Dir = repo
+		importCmd.Stdin = &stream
+		if out, err := importCmd.CombinedOutput(); err != nil {
+			t.Fatalf("git fast-import: %v\n%s", err, out)
+		}
+		// fast-import moves the branch only: bring the index to the new HEAD and
+		// leave the last record on disk, as add + commit would.
+		if err := os.WriteFile(".beads/issues.jsonl", []byte(record), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		git(500, "reset", "-q")
 		history, err := generateHistoryForExport([]model.Issue{
 			{ID: "bv-a", Status: model.StatusClosed}, {ID: "bv-z", Status: model.StatusClosed},
 			{ID: "bv-new", Status: model.StatusOpen}, {ID: "bv-unknown", Status: model.StatusOpen},
@@ -413,6 +430,7 @@ func TestFilterByRepo_CaseInsensitiveAndFlexibleSeparators(t *testing.T) {
 }
 
 func TestRobotFlagsOutputJSON(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	beads := `{"id":"A","title":"Root","status":"open","priority":1,"issue_type":"task"}
 {"id":"B","title":"Blocked","status":"blocked","priority":2,"issue_type":"task","dependencies":[{"depends_on_id":"A","type":"blocks"}]}`
@@ -427,12 +445,7 @@ func TestRobotFlagsOutputJSON(t *testing.T) {
 		t.Fatalf("write beads dir: %v", err)
 	}
 
-	// Build a temporary bv binary using the repo module
-	bin := filepath.Join(tmpDir, exeName("bv"))
-	build := exec.Command("go", "build", "-C", repoRoot(t), "-o", bin, "./cmd/bv")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("failed to build bv: %v\n%s", err, out)
-	}
+	bin := buildTestBinary(t)
 
 	run := func(args ...string) []byte {
 		t.Helper()
@@ -1013,6 +1026,7 @@ func TestAgentIntentValueCommandMissingTargetFailsBeforeTUI(t *testing.T) {
 }
 
 func TestAgentIntentAliasesEmitJSON(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	beads := `{"id":"A","title":"Root","status":"open","priority":1,"issue_type":"task","labels":["backend"]}
 {"id":"B","title":"Blocked","status":"blocked","priority":2,"issue_type":"task","dependencies":[{"depends_on_id":"A","type":"blocks"}]}`
@@ -3591,6 +3605,7 @@ func TestRobotDriftRevivesIssueLevelAlertsAndTriageMaxResults(t *testing.T) {
 }
 
 func TestBeadHistoryAndCorrelationActionEnvelopes(t *testing.T) {
+	t.Parallel()
 	exe := buildTestBinary(t)
 	repo := t.TempDir()
 	gitRun := func(args ...string) string {
@@ -3660,6 +3675,7 @@ func TestBeadHistoryAndCorrelationActionEnvelopes(t *testing.T) {
 }
 
 func TestSubdirectoryProjectContextParity(t *testing.T) {
+	t.Parallel()
 	exe := buildTestBinary(t)
 	repo := t.TempDir()
 	nestedDir := filepath.Join(repo, "cmd", "subpkg")
@@ -3811,6 +3827,9 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.RemoveAll(tmp)
+	if testBinaryDir != "" {
+		os.RemoveAll(testBinaryDir)
+	}
 	os.Exit(code)
 }
 
@@ -3989,6 +4008,7 @@ func TestExportMdHonorsExplicitExportFormatAndPriorityBriefMaxResults(t *testing
 }
 
 func TestRobotAlertsSourceInconsistencyAndScopedLabelReadiness(t *testing.T) {
+	t.Parallel()
 	exe := buildTestBinary(t)
 
 	// 1. Live SQLite vs JSONL source_inconsistency in --robot-alerts and --check-drift --robot-drift
@@ -4227,6 +4247,7 @@ func TestRobotAlertsSourceInconsistencyAndScopedLabelReadiness(t *testing.T) {
 }
 
 func TestWave10Round2RecipeScopingAndWorkspaceCommitCorrelation(t *testing.T) {
+	t.Parallel()
 	exe := buildTestBinary(t)
 
 	// 1. Standalone --recipe actionable scopes out closed issues from source_inconsistency,
@@ -4491,15 +4512,8 @@ func TestWave10Round2RecipeScopingAndWorkspaceCommitCorrelation(t *testing.T) {
 }
 
 func TestWave10Round3WorkspaceRecipeDepsMaxItemsAndSideBranchCommit(t *testing.T) {
-	exe := filepath.Join(t.TempDir(), "bv-wave10-r3")
-	if runtime.GOOS == "windows" {
-		exe += ".exe"
-	}
-	buildCmd := exec.Command("go", "build", "-o", exe, ".")
-	buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOTOOLCHAIN=local")
-	if out, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build failed: %v\n%s", err, string(out))
-	}
+	t.Parallel()
+	exe := buildTestBinary(t)
 
 	// 1. R3-A1: Workspace missing-issue dependency qualification (alpha-SEC-READY blocked only by closed alpha-CLOSED-1)
 	wsRoot := t.TempDir()
@@ -4733,6 +4747,7 @@ func TestWave10Round3WorkspaceRecipeDepsMaxItemsAndSideBranchCommit(t *testing.T
 }
 
 func TestWave12RobotContractsAndScoping(t *testing.T) {
+	t.Parallel()
 	// 1. Schema completeness checks (pure unit, instant)
 	schemas := generateRobotSchemas()
 	envProps, _ := schemas.Envelope["properties"].(map[string]any)
@@ -5105,6 +5120,7 @@ func TestWave12RobotContractsAndScoping(t *testing.T) {
 }
 
 func TestWave13Round1AuditRemediations_CLI(t *testing.T) {
+	t.Parallel()
 	// 1. [D-3] CLI normalization edge cases: separate-token value flags whose values match
 	// primary non-robot names, negated bool flags, and single-dash -robot-plan / -check-update.
 	for _, tc := range []struct {

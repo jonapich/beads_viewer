@@ -609,6 +609,7 @@ func TestAhoCorasickScale10kDictionary(t *testing.T) {
 }
 
 func TestFindCommitsForBead_Base36AndDotHierarchy(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.email", "dev@example.com")

@@ -538,6 +538,7 @@ func rootCorrelationRepo(t *testing.T, beadID, message string) (repo, jsonl, sha
 }
 
 func TestCorrelator_CreatingCommitExplicitNumericID(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		message string
@@ -659,6 +660,7 @@ func reportFor(t *testing.T, repo, jsonl string) *HistoryReport {
 // primary, and its combined confidence sits between the strongest single
 // score and 1.0.
 func TestCorrelator_MergeTwoStrategiesOneCommit(t *testing.T) {
+	t.Parallel()
 	repo, jsonl, shas := multiStrategyRepo(t)
 	report := reportFor(t, repo, jsonl)
 	history := report.Histories["bv-1"]
@@ -710,6 +712,7 @@ func TestCorrelator_MergeTwoStrategiesOneCommit(t *testing.T) {
 // produce byte-identical JSON once the wall-clock fields (generated_at and
 // per-strategy durations) are blanked.
 func TestCorrelator_ReportIsDeterministic(t *testing.T) {
+	t.Parallel()
 	repo, jsonl, _ := multiStrategyRepo(t)
 	normalize := func(r *HistoryReport) []byte {
 		t.Helper()
@@ -768,6 +771,7 @@ func TestCorrelator_CancelledContextReturnsFast(t *testing.T) {
 }
 
 func TestCorrelator_CreatedDirectlyInProgressAndClosedMilestonesAndTemporalMixedCommit(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	beadsDir := filepath.Join(repo, ".beads")
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
@@ -1271,6 +1275,7 @@ func TestFindGitRoot_ValidateRepositoryWithBeadsDir_AndMonorepoCorrelator(t *tes
 }
 
 func TestCorrelator_CustomNonDotBeadsDirExcludesTrackerFilesAndPromotesBD(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	runGit(t, repo, "init")
 

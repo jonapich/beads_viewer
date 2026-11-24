@@ -91,6 +91,7 @@ func TestRobotNextClaimablePickSkipsDeferredTopPick(t *testing.T) {
 // must not be handed out by --robot-next, must not appear in --robot-triage
 // top picks or the --robot-plan, and must drop out of `--recipe actionable`.
 func TestRobotCommandsHonourDeferUntilEndToEnd(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	beadsDir := filepath.Join(dir, ".beads")
 	if err := os.MkdirAll(beadsDir, 0o755); err != nil {

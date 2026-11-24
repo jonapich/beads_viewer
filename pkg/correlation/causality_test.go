@@ -86,6 +86,7 @@ func TestCausalityHistoricalIntervals(t *testing.T) {
 		{"same timestamp genuine zero", []causalGitStep{step(0, a("open", "")+b("open")), step(2, a("blocked", dep)+b("open")), step(2, a("open", dep)+b("closed")), step(10, a("closed", dep)+b("closed"))}, "closed", 0, 0, 0, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			repo, path, start := causalGitRepository(t, tc.steps)
 			opts := CorrelatorOptions{Limit: tc.limit, CausalityBeadID: "A"}
 			report, err := NewCorrelator(repo, path).GenerateReport([]BeadInfo{{ID: "A", Title: "A", Status: tc.status}}, opts)
@@ -159,6 +160,7 @@ func TestCausalityHistoricalIntervals(t *testing.T) {
 }
 
 func TestCausalityIncrementalCacheAdvancePreservesEvidence(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"revision", "causal", "ordinary"} {
 		t.Run(kind, func(t *testing.T) {
 			repo, path, start := causalGitRepository(t, []causalGitStep{{0, 0, causalRecord("A", "open", "")}, {2, 2, causalRecord("A", "blocked", "")}})
@@ -214,6 +216,7 @@ func TestCausalityIncrementalCacheAdvancePreservesEvidence(t *testing.T) {
 }
 
 func TestCausalityRevisionAnchorClocks(t *testing.T) {
+	t.Parallel()
 	for _, anchor := range []causalGitStep{{3, 3, ""}, {1, 3, ""}, {3, 1, ""}} {
 		t.Run(fmt.Sprintf("author%d_committer%d", anchor.authorHour, anchor.commitHour), func(t *testing.T) {
 			open := causalRecord("A", "open", "")
@@ -411,6 +414,7 @@ func TestCausalityExtractorAndCacheEvidence(t *testing.T) {
 }
 
 func TestCausalityDoesNotAttributeUnrelatedDependencyChanges(t *testing.T) {
+	t.Parallel()
 	dep := `[{"depends_on_id":"B","type":"blocks"}]`
 	repo, path, start := causalGitRepository(t, []causalGitStep{
 		{0, 0, causalRecord("A", "open", dep) + causalRecord("B", "closed", "")},
@@ -444,6 +448,7 @@ func TestCausalityDoesNotAttributeUnrelatedDependencyChanges(t *testing.T) {
 // This fixture exercises the real Git extractor and public report producer.
 // Its expected waiting interval is specified independently of the implementation.
 func TestCausalityRecordedBlockingFromGit(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	git := func(date time.Time, args ...string) string {
 		t.Helper()

@@ -450,6 +450,7 @@ func TestCommitBeadResult_EmptyRelatedBeads(t *testing.T) {
 }
 
 func TestReverseLookup_WithSubtreeScopeIgnoresTrackerPathsOnCodeCommitsAndNormalizesPaths(t *testing.T) {
+	t.Parallel()
 	mono := t.TempDir()
 	runGit(t, mono, "init")
 	runGit(t, mono, "config", "user.email", "test@example.com")
@@ -552,6 +553,7 @@ func TestReverseLookup_WithSubtreeScopeIgnoresTrackerPathsOnCodeCommitsAndNormal
 }
 
 func TestReverseLookup_LookupByCommitMergeAndBeadsOnly(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	revParse := func() string {
 		t.Helper()
@@ -678,6 +680,7 @@ func TestReverseLookup_LookupByCommitMergeAndBeadsOnly(t *testing.T) {
 }
 
 func TestWave10Round3GitRefValidationIncrementalTargetCommitAndZeroScoreOrphan(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
 

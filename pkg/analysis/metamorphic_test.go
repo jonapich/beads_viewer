@@ -937,13 +937,20 @@ func checkMR4StatusPartitionConservation(rt *rapid.T, mutantDeferredInBlocked bo
 	}
 
 	// Mirror cmd/bv --save-baseline and --check-drift readiness partition counts.
-	bl := baseline.New(baseline.GraphStats{
-		NodeCount:       p.Total,
-		OpenCount:       p.NotClosed,
-		ClosedCount:     p.Closed,
-		BlockedCount:    p.Blocked,
-		ActionableCount: p.Actionable,
-	}, baseline.TopMetrics{}, stats.Cycles(), "mr4-commit")
+	// Only bl.Stats is read, so build the struct directly: baseline.New also runs
+	// three git subprocesses for commit metadata nothing here looks at, which
+	// made up all of this property's time (every rapid case and mutant shrink).
+	bl := &baseline.Baseline{
+		Version: baseline.CurrentVersion,
+		Stats: baseline.GraphStats{
+			NodeCount:       p.Total,
+			OpenCount:       p.NotClosed,
+			ClosedCount:     p.Closed,
+			BlockedCount:    p.Blocked,
+			ActionableCount: p.Actionable,
+		},
+		Cycles: stats.Cycles(),
+	}
 
 	nonActionable := p.Blocked + p.DeferredOrParked
 	if triage.QuickRef.ReadinessBlockedCount != p.Blocked ||
@@ -998,7 +1005,8 @@ func checkMR5SubdirResolutionEquivalence(rt *rapid.T, baseDir string, mutantReso
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		rt.Fatalf("mkdir .bv: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(hooksDir, "hooks.yaml"), []byte("hooks:\n  pre-export:\n    - command: echo ok\n"), 0o600); err != nil {
+	const hooksYAML = "hooks:\n  pre-export:\n    - command: echo ok\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "hooks.yaml"), []byte(hooksYAML), 0o600); err != nil {
 		rt.Fatalf("write hooks.yaml: %v", err)
 	}
 
@@ -1015,15 +1023,44 @@ func checkMR5SubdirResolutionEquivalence(rt *rapid.T, baseDir string, mutantReso
 		rt.Fatalf("write issues.jsonl: %v", err)
 	}
 
-	for _, args := range [][]string{
+	// Seed the repository. The property runs this for every rapid case and each
+	// git run costs ~100ms on Windows, so it uses two runs (init, then one
+	// fast-import that records the commit) instead of five (init, two config,
+	// add, commit). The checks below read HEAD's objects, never the index.
+	//
+	// The mutant check keeps the five-run seeding: rapid's shrinker only
+	// accepts a replay that fails at the same place as the original failure,
+	// and replaying a run id with unchanged content makes "git commit" fail
+	// ("nothing to commit"), which ends its shrinking within seconds. With the
+	// fast path every replay is a valid failure and the shrinker spends its whole
+	// 30s budget instead (beads-c2o.41).
+	seedSteps := [][]string{
 		{"init", "-q"},
 		{"config", "user.email", "mr5@example.com"},
 		{"config", "user.name", "MR5"},
 		{"add", "-A"},
 		{"commit", "-q", "-m", "seed mr5"},
-	} {
+	}
+	var seedStdin map[int]string
+	if !mutantResolveFromCWD {
+		var seed strings.Builder
+		seed.WriteString("commit refs/heads/main\ncommitter MR5 <mr5@example.com> 1767225600 +0000\ndata 8\nseed mr5\n")
+		fmt.Fprintf(&seed, "M 100644 inline .beads/issues.jsonl\ndata %d\n%s\n", sb.Len(), sb.String())
+		fmt.Fprintf(&seed, "M 100644 inline .bv/hooks.yaml\ndata %d\n%s\n", len(hooksYAML), hooksYAML)
+		seedSteps = [][]string{
+			{"init", "-q", "-b", "main"},
+			// --force: rapid replays a run id while shrinking, so the repository
+			// may already hold a commit from an earlier draw; HEAD must be this one.
+			{"fast-import", "--quiet", "--force"},
+		}
+		seedStdin = map[int]string{1: seed.String()}
+	}
+	for i, args := range seedSteps {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = rootDir
+		if stdin, ok := seedStdin[i]; ok {
+			cmd.Stdin = strings.NewReader(stdin)
+		}
 		if out, err := cmd.CombinedOutput(); err != nil {
 			rt.Fatalf("git %v failed: %v\n%s", args, err, out)
 		}
@@ -1035,22 +1072,24 @@ func checkMR5SubdirResolutionEquivalence(rt *rapid.T, baseDir string, mutantReso
 		LiveHash    string
 		HeadHash    string
 	}
-	observeFromDir := func(cwd string) subdirObservation {
+	// observeFromDir runs on its own goroutine (see below), so it reports a
+	// failure as an error instead of calling rt.Fatalf.
+	observeFromDir := func(cwd string) (subdirObservation, error) {
 		projectDir := cwd
 		if !mutantResolveFromCWD {
 			resolvedRoot, _, err := loader.ResolveProjectRoot(cwd)
 			if err != nil {
-				rt.Fatalf("ResolveProjectRoot(%s): %v", cwd, err)
+				return subdirObservation{}, fmt.Errorf("ResolveProjectRoot(%s): %w", cwd, err)
 			}
 			projectDir = resolvedRoot
 		}
 		hl := hooks.NewLoader(hooks.WithProjectDir(projectDir))
 		if err := hl.Load(); err != nil {
-			rt.Fatalf("hooks.Load(%s): %v", projectDir, err)
+			return subdirObservation{}, fmt.Errorf("hooks.Load(%s): %w", projectDir, err)
 		}
 		insp, err := hl.Inspect()
 		if err != nil {
-			rt.Fatalf("hooks.Inspect(%s): %v", projectDir, err)
+			return subdirObservation{}, fmt.Errorf("hooks.Inspect(%s): %w", projectDir, err)
 		}
 		liveIssues, err := loader.LoadIssues(projectDir)
 		var liveHash string
@@ -1067,11 +1106,26 @@ func checkMR5SubdirResolutionEquivalence(rt *rapid.T, baseDir string, mutantReso
 			HookCount:   len(insp.Hooks.PreExport),
 			LiveHash:    liveHash,
 			HeadHash:    headHash,
-		}
+		}, nil
 	}
 
-	obsRoot := observeFromDir(rootDir)
-	obsSub := observeFromDir(subDir)
+	// Each observation is a handful of git subprocesses, so observe the two
+	// directories at once; they only read the repository.
+	var obsSub subdirObservation
+	var errSub error
+	observed := make(chan struct{})
+	go func() {
+		defer close(observed)
+		obsSub, errSub = observeFromDir(subDir)
+	}()
+	obsRoot, errRoot := observeFromDir(rootDir)
+	<-observed
+	if errRoot != nil {
+		rt.Fatalf("%v", errRoot)
+	}
+	if errSub != nil {
+		rt.Fatalf("%v", errSub)
+	}
 	if obsRoot != obsSub || obsRoot.LiveHash == "" || obsRoot.LiveHash != obsRoot.HeadHash || obsRoot.HookCount != 1 {
 		failMetamorphic(rt, "MR-5", issues, nil,
 			"Subdirectory ProjectContext, hooks inspection, live LoadIssues & GitLoader.LoadAt(HEAD) must equal repo root",

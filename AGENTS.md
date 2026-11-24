@@ -30,6 +30,14 @@ $env:BV_E2E_SLOW = "1"; go test -count=1 -timeout 60m ./tests/e2e/...      # ful
 - Viewer assets are staged next to the shared binary once (`stageViewerAssets`, `sync.Once`), not per test.
 - A timeout around a `bv` export in a parallel test is a hang guard, not a performance assertion: keep it generous (the export tests share the host with ~20 others).
 
+### Test run time (`cmd/bv`, `pkg/analysis`, `pkg/correlation`)
+
+These three were the slowest packages after `tests/e2e` (beads-c2o.41). The causes to avoid when adding tests there:
+
+- `cmd/bv` tests that run the binary call `buildTestBinary(t)`, which builds it once per run and shares it. Never `go build` inside a test (each build is several seconds).
+- Fixture git repos cost ~100ms per `git` run on Windows. Build long histories with one `git fast-import` (see `TestHistoryExportUsesRecordedLifecycle`) instead of an `add` + `commit` per commit, and don't call `baseline.New` (three git runs) where only the stats are read.
+- Independent tests and subtests that use no `t.Setenv`/`t.Chdir` call `t.Parallel()`.
+
 ### GUI frontend (`web/`)
 
 Svelte + Vite + TypeScript SPA (ADR `docs/adr/0001-gui-architecture.md`), embedded into `bv` by `web/embed.go` and served by `bv serve`. Needs Node 24 (`web/.nvmrc`) and npm.

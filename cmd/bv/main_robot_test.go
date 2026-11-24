@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,17 +140,41 @@ func exeName(name string) string {
 	return name
 }
 
-// buildTestBinary builds the current module's bv binary for testing.
+// The bv binary is built once per test run: every test that drives it shares
+// one executable instead of paying a full `go build` each (about 30 of them).
+// Tests only execute the binary; none may modify or delete it.
+var (
+	testBinaryOnce sync.Once
+	testBinaryDir  string
+	testBinaryPath string
+	testBinaryErr  error
+)
+
+// buildTestBinary returns the current module's bv binary for testing, built
+// on first use and shared by every test in the package.
 func buildTestBinary(t *testing.T) string {
 	t.Helper()
-	exe := filepath.Join(t.TempDir(), exeName("bv-testbin"))
-	cmd := exec.Command("go", "build", "-o", exe, ".")
-	cmd.Dir = "." // build current package
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build bv: %v, out=%s", err, string(out))
+	testBinaryOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "bv-cmd-test-bin-")
+		if err != nil {
+			testBinaryErr = fmt.Errorf("create binary dir: %w", err)
+			return
+		}
+		testBinaryDir = dir
+		exe := filepath.Join(dir, exeName("bv-testbin"))
+		cmd := exec.Command("go", "build", "-o", exe, ".")
+		cmd.Dir = "." // build current package
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			testBinaryErr = fmt.Errorf("build bv: %v, out=%s", err, string(out))
+			return
+		}
+		testBinaryPath = exe
+	})
+	if testBinaryErr != nil {
+		t.Fatal(testBinaryErr)
 	}
-	return exe
+	return testBinaryPath
 }
 
 func TestRobotNextFailClosedWhenNoClaimableItem(t *testing.T) {
