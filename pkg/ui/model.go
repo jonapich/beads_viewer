@@ -2861,6 +2861,12 @@ func (m *Model) rebuildInsightsPanel() {
 			scopedSet[scoped[i].ID] = true
 		}
 		scopedAnalyzer = analysis.NewAnalyzer(scoped)
+		// Inherit the TUI analyzer's scoring (weights decided once at load) so the
+		// repo-scoped triage ranks by the same rules as the unscoped one.
+		// RestoreScoring also sets now, so SetNow must come after it.
+		if m.analyzer != nil {
+			scopedAnalyzer.RestoreScoring(m.analyzer.CaptureScoring())
+		}
 		scopedAnalyzer.SetNow(m.analysisReferenceTime())
 		candidates := scopedSet
 		if m.candidateIDs != nil {
