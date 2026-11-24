@@ -1,7 +1,8 @@
 import { ApiError, getIssuesIfChanged, getMetaIfChanged } from "../api/client";
 import type { IssuesResponse, MetaResponse } from "../api/types";
+import { live, onLive } from "../live.svelte";
 
-/** How often /meta is polled while Phase 2 is still computing, and how long a "not ready" answer waits. */
+/** How often /meta is polled while the live stream is not up (or Phase 2 is computing without one), and how long a "not ready" answer waits. */
 export const POLL_MS = 2000;
 
 interface Cached<T> {
@@ -31,8 +32,11 @@ function toApiError(err: unknown): ApiError {
 /**
  * Loads the issue list (view=tree) and /meta for one mounted Issues view.
  * Data is replaced immutably and held raw: never a deep proxy over 20k items.
- * The server does not reload its data until the SSE bead (beads-c2o.6), so
- * there is no revalidation on focus; only Phase 2 is polled for.
+ * While the live stream is up (lib/live.svelte.ts) every event, including the
+ * Phase 2 swap, triggers one conditional refetch of both and nothing is polled.
+ * While it is connecting or down, /meta is polled every POLL_MS: its ETag
+ * changes with every generation and Phase 2 swap, which then refetches the list.
+ * With no stream started ("off") only Phase 2 is polled for.
  */
 export class IssuesFeed {
   data = $state.raw<IssuesResponse | null>(issuesCache?.data ?? null);
@@ -56,6 +60,8 @@ export class IssuesFeed {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let running = false;
     let issuesStale = false;
+    /** An event arrived during a tick: run one more full refetch when it ends. */
+    let again = false;
 
     /** Resolves true when the call should be retried shortly. */
     const failed = (err: unknown, which: "issues" | "meta"): boolean => {
@@ -114,10 +120,29 @@ export class IssuesFeed {
         // Any new meta (Phase 2 landing changes its ETag, not data_hash) can change scores.
         if (!withIssues && m.changed) retry = (await fetchIssues()) || retry;
         if (ac.signal.aborted) return;
-        if (retry || this.phase2Pending) timer = setTimeout(() => void tick(false), POLL_MS);
+        const poll =
+          live.status === "connecting" ||
+          live.status === "down" ||
+          (live.status === "off" && this.phase2Pending);
+        if (retry || poll) timer = setTimeout(() => void tick(false), POLL_MS);
       } finally {
         running = false;
+        if (again && !ac.signal.aborted) {
+          again = false;
+          void tick(true);
+        }
       }
+    };
+
+    /** A live signal or status change: refetch now, never dropped while a tick runs. */
+    const kick = (): void => {
+      if (ac.signal.aborted) return;
+      if (running) {
+        again = true;
+        return;
+      }
+      clearTimeout(timer);
+      void tick(true);
     };
 
     this.reload = () => {
@@ -128,8 +153,10 @@ export class IssuesFeed {
       void tick(true);
     };
 
+    const offLive = onLive(kick);
     void tick(true);
     return () => {
+      offLive();
       ac.abort();
       clearTimeout(timer);
     };

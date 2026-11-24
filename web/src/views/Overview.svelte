@@ -1,5 +1,13 @@
 <script lang="ts">
+  import { live, type LiveStatus } from "../lib/live.svelte";
   import { session } from "../lib/session.svelte";
+
+  const liveLabel: Record<LiveStatus, string> = {
+    live: "live",
+    connecting: "reconnecting",
+    down: "polling",
+    off: "off",
+  };
 
   const origin = location.origin;
 </script>
@@ -15,6 +23,8 @@
     <dd>{session.health?.version || "dev"}</dd>
     <dt>Origin</dt>
     <dd><code>{origin}</code></dd>
+    <dt>Live updates</dt>
+    <dd>{liveLabel[live.status]}</dd>
   </dl>
 </section>
 

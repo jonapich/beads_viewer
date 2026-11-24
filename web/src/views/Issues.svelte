@@ -12,6 +12,7 @@
   import VirtualList from "../components/VirtualList.svelte";
   import { isDefaultFilters, passesFilters } from "../lib/issues/filter";
   import { IssuesFeed } from "../lib/issues/feed.svelte";
+  import { reloadNotice } from "../lib/issues/reload-notice";
   import { IssueListState } from "../lib/issues/list-state.svelte";
   import { buildIndex } from "../lib/issues/model";
   import { loadPrefs, prefsKey, savePrefs, serializePrefs, type Prefs } from "../lib/issues/persist";
@@ -180,6 +181,7 @@
     return summarize([...matches].flatMap((id) => index.byId.get(id) ?? []));
   });
 
+  const staleNotice = $derived(reloadNotice(feed.meta));
   const ready = $derived(list.hydrated && index !== null);
   const showError = $derived(feed.error !== null && !(feed.data && feed.meta));
   const emptyKind = $derived(
@@ -280,6 +282,9 @@
 <section class="issues" aria-label="Issues">
   <h1 class="sr">Issues</h1>
   <div class="pane">
+    {#if staleNotice}
+      <p class="stale" role="status">{staleNotice}</p>
+    {/if}
     {#if showError && feed.error}
       <div class="state" role="alert">
         <h3>Can't load issues</h3>
@@ -461,6 +466,17 @@
     border: 1px solid var(--warning);
     border-radius: var(--radius-md);
     background: var(--warning-subtle);
+    color: var(--warning);
+    font-size: var(--text-sm);
+  }
+  /* A failed reload: the list keeps showing the last good load. */
+  .stale {
+    flex: none;
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    background: var(--bg-raised);
     color: var(--warning);
     font-size: var(--text-sm);
   }

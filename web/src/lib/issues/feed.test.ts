@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IssuesResponse, MetaResponse } from "../api/types";
+import { asEventSource, FakeEventSource } from "../fake-event-source";
+import { startLive } from "../live.svelte";
 import { session } from "../session.svelte";
 import { IssuesFeed, POLL_MS, resetIssuesFeedCache } from "./feed.svelte";
 import { mkItem, mkResponse } from "./test-helpers";
@@ -39,6 +41,7 @@ const metaPath = "/api/v1/meta";
 
 beforeEach(() => {
   vi.useFakeTimers();
+  FakeEventSource.reset();
   resetIssuesFeedCache();
   session.status = "unknown";
   queues = {};
@@ -201,6 +204,118 @@ describe("IssuesFeed", () => {
     const before = sent.length;
     stop();
     await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    expect(sent.length).toBe(before);
+  });
+});
+
+describe("IssuesFeed live updates", () => {
+  const stopAll: Array<() => void> = [];
+  afterEach(() => {
+    while (stopAll.length) stopAll.pop()?.();
+  });
+
+  const run = async (): Promise<IssuesFeed> => {
+    reply(issuesPath, () => json(issues(true, "a"), { headers: { ETag: '"i1"' } }));
+    reply(metaPath, () => json(meta(true), { headers: { ETag: '"m1"' } }));
+    const feed = new IssuesFeed();
+    stopAll.push(feed.start());
+    await vi.advanceTimersByTimeAsync(0);
+    return feed;
+  };
+  const goLive = async () => {
+    stopAll.push(startLive({ EventSource: asEventSource }));
+    FakeEventSource.last.open();
+    await vi.advanceTimersByTimeAsync(0);
+  };
+
+  it("refetches once per snapshot event and does not poll while live", async () => {
+    // Phase 2 is still pending in meta, which would poll without a stream.
+    reply(issuesPath, () => json(issues(false, "a"), { headers: { ETag: '"i1"' } }));
+    reply(metaPath, () => json(meta(false), { headers: { ETag: '"m1"' } }));
+    const feed = new IssuesFeed();
+    stopAll.push(feed.start());
+    await goLive();
+    expect(feed.phase2Pending).toBe(true);
+    const issues0 = count(issuesPath);
+    const meta0 = count(metaPath);
+
+    await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    expect(count(issuesPath)).toBe(issues0);
+    expect(count(metaPath)).toBe(meta0);
+
+    reply(issuesPath, () => json(issues(true, "a", "b"), { headers: { ETag: '"i2"' } }));
+    reply(metaPath, () => json(meta(true), { headers: { ETag: '"m2"' } }));
+    FakeEventSource.last.send("snapshot", { generation: 1, hash: "h", phase: "phase2" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(issuesPath)).toBe(issues0 + 1);
+    expect(count(metaPath)).toBe(meta0 + 1);
+    expect(feed.data?.items).toHaveLength(2);
+    expect(feed.phase2Pending).toBe(false);
+    expect(sent.filter((s) => s.path === issuesPath).at(-1)?.inm).toBe('"i1"');
+
+    await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    expect(count(issuesPath)).toBe(issues0 + 1);
+  });
+
+  it("runs one more tick when an event arrives during a tick", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    fetchMock.mockImplementation(async (path: string, init: RequestInit) => {
+      sent.push({ path, inm: (init.headers as Record<string, string>)["If-None-Match"] });
+      if (path === issuesPath && count(issuesPath) === 1) await gate; // the first list request hangs
+      return path === metaPath ? json(meta(true), { headers: { ETag: '"m1"' } }) : json(issues(true, "a"), { headers: { ETag: '"i1"' } });
+    });
+    const feed = new IssuesFeed();
+    stopAll.push(feed.start());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(issuesPath)).toBe(1);
+
+    // status change to live and two events, all during the first tick
+    stopAll.push(startLive({ EventSource: asEventSource }));
+    FakeEventSource.last.open();
+    FakeEventSource.last.send("snapshot", { generation: 2, hash: "h", phase: "phase1" });
+    FakeEventSource.last.send("snapshot", { generation: 3, hash: "h", phase: "phase1" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(issuesPath)).toBe(1); // nothing runs concurrently
+
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(issuesPath)).toBe(2); // exactly one catch-up tick, not dropped, not tripled
+    expect(count(metaPath)).toBe(2);
+    expect(feed.data?.items).toHaveLength(1);
+  });
+
+  it("polls while the stream is connecting or down, and stops once it is live again", async () => {
+    reply("/api/v1/health", () => json({ status: "ok", version: "v" }));
+    const feed = await run();
+    stopAll.push(startLive({ EventSource: asEventSource }));
+    await vi.advanceTimersByTimeAsync(0); // connecting: polls
+    const m1 = count(metaPath);
+    await vi.advanceTimersByTimeAsync(POLL_MS * 2);
+    expect(count(metaPath)).toBeGreaterThanOrEqual(m1 + 2);
+
+    FakeEventSource.last.open(); // live: no polling
+    await vi.advanceTimersByTimeAsync(0);
+    const m2 = count(metaPath);
+    await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    expect(count(metaPath)).toBe(m2);
+
+    FakeEventSource.last.fail(true); // down: polling resumes
+    await vi.advanceTimersByTimeAsync(POLL_MS * 2);
+    expect(count(metaPath)).toBeGreaterThanOrEqual(m2 + 3);
+    expect(feed.error).toBeNull();
+  });
+
+  it("stops listening to the stream on cleanup", async () => {
+    reply(issuesPath, () => json(issues(true, "a")));
+    reply(metaPath, () => json(meta(true)));
+    const feed = new IssuesFeed();
+    const stopFeed = feed.start();
+    await goLive();
+    stopFeed();
+    const before = sent.length;
+    FakeEventSource.last.send("snapshot", { generation: 2, hash: "h", phase: "phase1" });
+    await vi.advanceTimersByTimeAsync(POLL_MS * 2);
     expect(sent.length).toBe(before);
   });
 });
