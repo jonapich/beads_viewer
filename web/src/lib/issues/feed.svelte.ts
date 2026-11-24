@@ -126,6 +126,9 @@ export class IssuesFeed {
     const tick = async (withIssues: boolean): Promise<void> => {
       const mine = ++started;
       running = true;
+      // A catch-up tick (an event arrived during the last one) can start while that tick's retry
+      // timer is still armed: cancel it, or its poll chain would run beside this one.
+      clearTimeout(timer);
       timer = undefined;
       try {
         const [issuesRetry, m] = await Promise.all([
