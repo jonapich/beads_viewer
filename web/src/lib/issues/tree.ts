@@ -48,6 +48,28 @@ export interface SubtreeInfo {
 
 export const DEFAULT_MAX_ROWS = 50000;
 
+/** The edge kinds from the root down to a row, as a linked list shared by all rows below it. */
+interface EdgePath {
+  kind: EdgeKind;
+  up: EdgePath | null;
+}
+
+/**
+ * A row's `edges` array, built on first read. Copying the whole path into every
+ * row is O(depth) each, O(depth^2) for a deep chain (hundreds of millions of
+ * entries at 20k deep); the list view only reads the rows it renders.
+ */
+function lazyEdges(path: EdgePath | null, depth: number): () => EdgeKind[] {
+  let built: EdgeKind[] | undefined;
+  return () => {
+    if (!built) {
+      built = new Array<EdgeKind>(depth);
+      for (let n = path, i = depth - 1; n; n = n.up, i--) built[i] = n.kind;
+    }
+    return built;
+  };
+}
+
 /** children[id] without the prototype chain (an id such as "constructor" is not a node). */
 function kidsOf(children: Record<string, TreeEdge[]>, id: string): readonly TreeEdge[] {
   return Object.hasOwn(children, id) ? (children[id] ?? []) : [];
@@ -104,27 +126,55 @@ export function subtreeInfo(
     }
   }
 
+  // The DFS runs on an explicit stack: a chain thousands deep must not overflow
+  // the JS call stack. A frame is one node being counted.
+  interface Frame {
+    id: string;
+    /** The item of the edge that led here: its own flags feed the parent's attention. */
+    via: ListItem | null;
+    edges: readonly TreeEdge[];
+    next: number;
+    seen: Set<string>;
+    descCount: number;
+    attention: Attention | null;
+  }
   const memo = new Map<string, SubtreeInfo>();
   const active = new Set<string>();
+  const open = (id: string, via: ListItem | null): Frame => {
+    active.add(id);
+    return { id, via, edges: kidsOf(children, id), next: 0, seen: new Set(), descCount: 0, attention: null };
+  };
   const visit = (id: string): SubtreeInfo => {
     const done = memo.get(id);
     if (done) return done;
-    active.add(id);
-    let descCount = 0;
-    let attention: Attention | null = null;
-    const seen = new Set<string>();
-    for (const e of kidsOf(children, id)) {
-      const kid = byId.get(e.id);
-      if (!kid || seen.has(e.id) || active.has(e.id) || !has.has(e.id)) continue;
-      seen.add(e.id);
-      const sub = visit(e.id);
-      descCount += 1 + sub.descCount;
-      attention = worse(attention, worse(sub.attention, ownAttention(kid)));
+    const stack: Frame[] = [open(id, null)];
+    while (stack.length > 0) {
+      const f = stack[stack.length - 1] as Frame;
+      if (f.next < f.edges.length) {
+        const e = f.edges[f.next++] as TreeEdge;
+        const kid = byId.get(e.id);
+        if (!kid || f.seen.has(e.id) || active.has(e.id) || !has.has(e.id)) continue;
+        f.seen.add(e.id);
+        const sub = memo.get(e.id);
+        if (sub) {
+          f.descCount += 1 + sub.descCount;
+          f.attention = worse(f.attention, worse(sub.attention, ownAttention(kid)));
+        } else {
+          stack.push(open(e.id, kid));
+        }
+        continue;
+      }
+      active.delete(f.id);
+      memo.set(f.id, { hasMatch: has.has(f.id), descCount: f.descCount, attention: f.attention });
+      stack.pop();
+      const parent = stack[stack.length - 1];
+      if (parent && f.via) {
+        const sub = memo.get(f.id) as SubtreeInfo;
+        parent.descCount += 1 + sub.descCount;
+        parent.attention = worse(parent.attention, worse(sub.attention, ownAttention(f.via)));
+      }
     }
-    active.delete(id);
-    const info: SubtreeInfo = { hasMatch: has.has(id), descCount, attention };
-    memo.set(id, info);
-    return info;
+    return memo.get(id) as SubtreeInfo;
   };
   return visit;
 }
@@ -212,20 +262,36 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
     return true;
   };
 
-  const walk = (id: string, depth: number, edges: EdgeKind[], key: string, viaId: string | null): void => {
-    if (truncated || !a.byId.has(id)) return;
+  // The walk runs on an explicit stack: a chain thousands deep must not overflow
+  // the JS call stack. A frame is an expanded row whose kids are still being visited.
+  interface Frame {
+    id: string;
+    depth: number;
+    path: EdgePath | null;
+    key: string;
+    kids: OrderedEdge[];
+    next: number;
+  }
+  const stack: Frame[] = [];
+
+  /** Emits the row for `id` and returns its frame when its kids are to be walked. */
+  const enter = (id: string, depth: number, path: EdgePath | null, key: string, viaId: string | null): Frame | null => {
+    if (truncated || !a.byId.has(id)) return null;
     const inf = info(id);
-    if (!inf.hasMatch) return;
+    if (!inf.hasMatch) return null;
     onPath.add(id);
     const kids = order.kids(id).filter((k) => onPath.has(k.id) || info(k.id).hasMatch);
     const hasKids = kids.length > 0;
     const expanded = hasKids && a.isExpanded(id);
+    const edges = lazyEdges(path, depth);
     const shown = push({
       kind: "issue",
       key,
       id,
       depth,
-      edges,
+      get edges() {
+        return edges();
+      },
       viaId,
       hasKids,
       expanded,
@@ -233,23 +299,41 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
       descCount: inf.descCount,
       attention: inf.attention,
     });
-    if (shown && expanded) {
-      for (const k of kids) {
-        const kEdges = [...edges, k.kind];
-        const kKey = `${key}>${k.id}`;
-        if (onPath.has(k.id)) {
-          if (!push({ kind: "cycle", key: `${kKey}#cycle`, id: k.id, depth: depth + 1, edges: kEdges })) break;
-        } else {
-          walk(k.id, depth + 1, kEdges, kKey, id);
-        }
-        if (truncated) break;
-      }
-    }
+    if (shown && expanded) return { id, depth, path, key, kids, next: 0 };
     onPath.delete(id);
+    return null;
   };
 
   for (const id of order.roots()) {
-    walk(id, 0, [], id, null);
+    const first = enter(id, 0, null, id, null);
+    if (first) stack.push(first);
+    while (stack.length > 0) {
+      const f = stack[stack.length - 1] as Frame;
+      // Once truncated, the remaining frames only unwind (clearing onPath).
+      if (truncated || f.next >= f.kids.length) {
+        onPath.delete(f.id);
+        stack.pop();
+        continue;
+      }
+      const k = f.kids[f.next++] as OrderedEdge;
+      const kPath: EdgePath = { kind: k.kind, up: f.path };
+      const kKey = `${f.key}>${k.id}`;
+      if (onPath.has(k.id)) {
+        const edges = lazyEdges(kPath, f.depth + 1);
+        push({
+          kind: "cycle",
+          key: `${kKey}#cycle`,
+          id: k.id,
+          depth: f.depth + 1,
+          get edges() {
+            return edges();
+          },
+        });
+      } else {
+        const child = enter(k.id, f.depth + 1, kPath, kKey, f.id);
+        if (child) stack.push(child);
+      }
+    }
     if (truncated) break;
   }
   return { rows, truncated };
@@ -276,17 +360,36 @@ export function findPath(order: TreeOrder, info: (id: string) => SubtreeInfo, ta
   const onPath = new Set<string>();
   const dead = new Set<string>();
   const path: string[] = [];
-  const dfs = (id: string): boolean => {
-    if (id === target) return true;
-    if (dead.has(id) || onPath.has(id)) return false;
+  // Iterative (explicit stack) so a very deep chain cannot overflow the call stack.
+  interface Frame {
+    id: string;
+    kids: OrderedEdge[];
+    next: number;
+  }
+  const open = (id: string): Frame => {
     onPath.add(id);
     path.push(id);
-    for (const k of order.kids(id)) {
-      if (!onPath.has(k.id) && info(k.id).hasMatch && dfs(k.id)) return true;
+    return { id, kids: order.kids(id), next: 0 };
+  };
+  const dfs = (start: string): boolean => {
+    if (start === target) return true;
+    if (dead.has(start) || onPath.has(start)) return false;
+    const stack: Frame[] = [open(start)];
+    while (stack.length > 0) {
+      const f = stack[stack.length - 1] as Frame;
+      if (f.next >= f.kids.length) {
+        onPath.delete(f.id);
+        path.pop();
+        dead.add(f.id);
+        stack.pop();
+        continue;
+      }
+      const k = f.kids[f.next++] as OrderedEdge;
+      if (onPath.has(k.id) || !info(k.id).hasMatch) continue;
+      if (k.id === target) return true;
+      if (dead.has(k.id)) continue;
+      stack.push(open(k.id));
     }
-    onPath.delete(id);
-    path.pop();
-    dead.add(id);
     return false;
   };
   for (const r of order.roots()) {

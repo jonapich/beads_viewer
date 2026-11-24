@@ -244,6 +244,79 @@ describe("limits and caching", () => {
   });
 });
 
+describe("deep chains", () => {
+  // Far past what a recursive walk survives (the JS stack gives out in the low
+  // thousands of frames).
+  const N = 20000;
+  const ids = Array.from({ length: N }, (_, i) => `n${i}`);
+  const chain = (kind: "child" | "block") => {
+    const children: Record<string, Array<[string, "child" | "block"]>> = {};
+    for (let i = 0; i < N - 1; i++) children[ids[i] as string] = [[ids[i + 1] as string, kind]];
+    return mkResponse(
+      ids.map((id) => mkItem(id)),
+      ["n0"],
+      children,
+    );
+  };
+
+  for (const kind of ["child", "block"] as const) {
+    it(`walks a ${N}-deep ${kind} chain quickly`, () => {
+      const ix = buildIndex(chain(kind));
+      const t0 = performance.now();
+      const { rows, truncated } = run(ix);
+      const ms = performance.now() - t0;
+      expect(truncated).toBe(false);
+      expect(rows).toHaveLength(N);
+      expect(rows.map((r) => r.id)).toEqual(ids);
+      const last = rows[N - 1] as Extract<TreeRow, { kind: "issue" }>;
+      expect(last).toMatchObject({ depth: N - 1, hasKids: false, descCount: 0 });
+      expect(last.edges).toHaveLength(N - 1);
+      expect(last.edges[0]).toBe(kind);
+      expect(last.viaId).toBe(`n${N - 2}`);
+      expect(rows[0]).toMatchObject({ depth: 0, descCount: N - 1 });
+      expect(ms).toBeLessThan(1000);
+    });
+
+    it(`counts descendants and attention along a ${N}-deep ${kind} chain`, () => {
+      const resp = chain(kind);
+      const items = resp.items.map((i) => (i.id === `n${N - 1}` ? { ...i, blocked: true, ready: false } : i));
+      const ix = buildIndex({ ...resp, items });
+      const t0 = performance.now();
+      const matches = new Set(ix.items.map((i) => i.id));
+      const info = subtreeInfo(ix.tree.children, ix.byId, matches);
+      expect(info("n0")).toEqual({ hasMatch: true, descCount: N - 1, attention: "danger" });
+      expect(info(`n${N - 1}`)).toEqual({ hasMatch: true, descCount: 0, attention: null });
+      expect(performance.now() - t0).toBeLessThan(1000);
+    });
+
+    it(`finds the path to the end of a ${N}-deep ${kind} chain`, () => {
+      const ix = buildIndex(chain(kind));
+      const matches = new Set(ix.items.map((i) => i.id));
+      const order = makeTreeOrder(ix.tree, ix.byId, compare);
+      const info = subtreeInfo(ix.tree.children, ix.byId, matches);
+      const t0 = performance.now();
+      expect(findPath(order, info, `n${N - 1}`)).toEqual(ids.slice(0, N - 1));
+      expect(performance.now() - t0).toBeLessThan(1000);
+    });
+  }
+
+  it("still ends a deep chain that loops back on itself with a cycle row", () => {
+    const resp = chain("block");
+    const tree = resp.tree as NonNullable<typeof resp.tree>;
+    tree.children[`n${N - 1}`] = [{ id: "n0", kind: "block" }];
+    const { rows, truncated } = run(buildIndex(resp));
+    expect(truncated).toBe(false);
+    expect(rows).toHaveLength(N + 1);
+    expect(rows[N]).toMatchObject({ kind: "cycle", id: "n0", depth: N });
+  });
+
+  it("truncates a deep chain at maxRows", () => {
+    const { rows, truncated } = run(buildIndex(chain("child")), { maxRows: 5000 });
+    expect(truncated).toBe(true);
+    expect(rows).toHaveLength(5000);
+  });
+});
+
 describe("findPath", () => {
   const setup = (resp: IssuesResponse, filters = defaultFilters()) => {
     const ix = buildIndex(resp);
