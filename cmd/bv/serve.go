@@ -101,19 +101,26 @@ type shutdownStore interface {
 	Close()
 }
 
-// closeStore closes the store at shutdown. Close waits for a tracker write in
-// flight (writes are uncancellable: bd must not be cut off halfway through a
-// multi-step dispute), up to the 30 s write timeout. Say so instead of hanging
-// silently, and give the signal handling back first: with the notify context
-// still active a second Ctrl+C would be swallowed, and with it released the
-// default handler ends the process at once.
-func closeStore(store shutdownStore, out io.Writer, release func()) {
+// announceShutdown is the first half of closing the store: say that a tracker
+// write in flight is being waited for (instead of hanging silently), then give
+// the signal handling back. With the notify context still active a second
+// Ctrl+C would be swallowed; released, the default handler ends the process at
+// once. serveGUI runs it the moment the first Ctrl+C cancels its context, not
+// after the HTTP server has drained.
+func announceShutdown(store shutdownStore, out io.Writer, release func()) {
 	if store.WriteInFlight() {
 		fmt.Fprintln(out, "Waiting for a tracker write to finish... (press Ctrl+C again to quit now, which may leave the write incomplete)")
 	}
 	if release != nil {
 		release()
 	}
+}
+
+// closeStore closes the store at shutdown. Close waits for a tracker write in
+// flight (writes are uncancellable: bd must not be cut off halfway through a
+// multi-step dispute), up to the 30 s write timeout, after announceShutdown.
+func closeStore(store shutdownStore, out io.Writer, release func()) {
+	announceShutdown(store, out, release)
 	store.Close()
 }
 
@@ -146,7 +153,24 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 		if err != nil {
 			return fmt.Errorf("load %s: %w", opts.BeadsPath, err)
 		}
-		closeTracker = sync.OnceFunc(func() { closeStore(store, out, opts.ReleaseSignals) })
+		// The announcement and the signal release run once, as soon as ctx is
+		// cancelled: api.Serve drains for up to its shutdown timeout after that,
+		// and a second Ctrl+C in that window must not be swallowed. closeTracker
+		// reaches them too (once) for the paths where ctx is never cancelled.
+		announce := sync.OnceFunc(func() { announceShutdown(store, out, opts.ReleaseSignals) })
+		serveEnded := make(chan struct{})
+		defer close(serveEnded)
+		go func() {
+			select {
+			case <-ctx.Done():
+				announce()
+			case <-serveEnded:
+			}
+		}()
+		closeTracker = sync.OnceFunc(func() {
+			announce()
+			store.Close()
+		})
 		defer closeTracker()
 		// Live updates are best effort, as in the TUI: without a watcher the
 		// GUI serves what it loaded and polls meta.
