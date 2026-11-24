@@ -46,6 +46,11 @@ const (
 	trackerExportOutputLimit = 16 << 10
 	trackerWaitDelay         = time.Second
 	bdExportTimeout          = 30 * time.Second
+	// trackerProbeTimeout only guards against a hung tracker. The help probe
+	// ends when the process exits; a short deadline would turn a slow process
+	// start (a cold executable scanned by antivirus, a loaded host) into a
+	// permanently read-only tracker.
+	trackerProbeTimeout = 30 * time.Second
 )
 
 // trackerCommandOutput retains a bounded prefix while continuing to drain the
@@ -110,7 +115,7 @@ func installedTrackerCapabilities(tracker string) trackerCapabilities {
 	if cached, ok := trackerCapabilityCache.Load(key); ok {
 		return cached.(trackerCapabilities)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), trackerProbeTimeout)
 	defer cancel()
 	help, _, err := runTrackerCommand(ctx, exec.CommandContext(ctx, executable, "update", "--help"), trackerHelpOutputLimit)
 	caps := trackerCapabilities{Executable: executable}
@@ -135,7 +140,11 @@ func installedTrackerCapabilities(tracker string) trackerCapabilities {
 		}
 		caps.Claim = has("--claim")
 	}
-	trackerCapabilityCache.Store(key, caps)
+	// A deadline expiry says nothing about the executable, so the next call
+	// probes again instead of caching the failure for this binary.
+	if ctx.Err() == nil {
+		trackerCapabilityCache.Store(key, caps)
+	}
 	return caps
 }
 

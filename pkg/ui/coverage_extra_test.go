@@ -569,7 +569,9 @@ func TestEditorRevalidatesMetadataButKeepsCapturedExecutable(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// A hang guard only: the save spawns the copied test binary three times
+			// (show, update, sync), each slow on a loaded Windows host.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			result := runIssueUpdateCmd(ctx, cancel, &editorSession{issue: issue, sourcePath: path}, map[string]string{"title": "Changed"}, "draft.md")().(brUpdateResultMsg)
 			if changedMetadata {
 				if result.err == nil || len(readEditorTrackerCalls(t, capture)) != 0 {
