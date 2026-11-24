@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "read_only",
+    "message": "source has no verified live tracker; historical and imported views are read-only"
+  }
+}

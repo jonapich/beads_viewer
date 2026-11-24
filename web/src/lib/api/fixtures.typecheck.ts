@@ -12,6 +12,7 @@ import type {
   SignoffResponse,
   SnapshotEvent,
   TriageResponse,
+  WriteResponse,
 } from "./types";
 import health from "./__fixtures__/health.json";
 import unauthorized from "./__fixtures__/error-unauthorized.json";
@@ -27,6 +28,10 @@ import signoff from "./__fixtures__/signoff.json";
 import notFound from "./__fixtures__/error-not-found.json";
 import triage from "./__fixtures__/triage.json";
 import insights from "./__fixtures__/insights.json";
+import writeResult from "./__fixtures__/write-result.json";
+import writeResultDispute from "./__fixtures__/write-result-dispute.json";
+import readOnly from "./__fixtures__/error-read-only.json";
+import conflict from "./__fixtures__/error-conflict.json";
 
 export const healthFixture: HealthResponse = health;
 export const unauthorizedFixture: ApiErrorBody = unauthorized;
@@ -42,3 +47,7 @@ export const signoffFixture: SignoffResponse = signoff;
 export const notFoundFixture: ApiErrorBody = notFound;
 export const triageFixture: TriageResponse = triage;
 export const insightsFixture: InsightsResponse = insights;
+export const writeResultFixture: WriteResponse = writeResult;
+export const writeResultDisputeFixture: WriteResponse = writeResultDispute;
+export const readOnlyFixture: ApiErrorBody = readOnly;
+export const conflictFixture: ApiErrorBody = conflict;

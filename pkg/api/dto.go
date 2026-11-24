@@ -86,7 +86,10 @@ type MetaCounts struct {
 
 // MetaCaps tells the client what the server can do.
 type MetaCaps struct {
-	// Writes is false until the write endpoints land (beads-c2o.19).
+	// Writes is true when the write endpoints (POST/PUT/DELETE under
+	// /api/v1/issues/{id}/) can reach the tracker: the first issue's origin is a
+	// complete, writable tracker route. IssueDetail.read_only_reason says why one
+	// issue is not.
 	Writes bool `json:"writes"`
 	// Events is true while the server watches the tracker and serves
 	// GET /api/v1/events.
@@ -436,4 +439,46 @@ type InsightsResponse struct {
 	// metric was skipped or timed out. Always an object; filled once
 	// phase2_ready.
 	Skipped map[string]string `json:"skipped"`
+}
+
+// SignoffRequest is the body of POST /api/v1/issues/{id}/signoff. Approve is
+// required. A dispute needs a Note (what is wrong or missing); an approval takes
+// none.
+type SignoffRequest struct {
+	Approve *bool  `json:"approve"`
+	Note    string `json:"note,omitempty"`
+}
+
+// AnswerRequest is the body of POST /api/v1/issues/{id}/answer: the option key
+// picked (a, b, ...), free text, or both; at least one. The server composes the
+// comment the same way the TUI does (agentdesk.DecisionComment) and removes the
+// needs-decision / needs-design label.
+type AnswerRequest struct {
+	Option string `json:"option,omitempty"`
+	Text   string `json:"text,omitempty"`
+}
+
+// PriorityRequest is the body of PUT /api/v1/issues/{id}/priority: 0 (P0) to 4
+// (P4), required.
+type PriorityRequest struct {
+	Priority *int `json:"priority"`
+}
+
+// WriteResponse is the 200 body of every write: PUT/DELETE
+// /api/v1/issues/{id}/labels/close-candidate as well, and a no-op (the issue
+// already is as asked) too. The data is already reloaded when it is sent, so the
+// next GET is fresh; there is no issue DTO because the list carries derived
+// state a client cannot patch in place.
+type WriteResponse struct {
+	ID string `json:"id"`
+	// Generation is the store generation after the reload.
+	Generation uint64 `json:"generation"`
+	// DataHash is the data hash after the reload (as in MetaResponse).
+	DataHash string `json:"data_hash"`
+	// CreatedID is the follow-up bead a dispute filed.
+	CreatedID string `json:"created_id,omitempty"`
+	// Warning is set when the write succeeded but refreshing the export or
+	// reloading failed: the list may lag until the next change. It is never an
+	// error status, because the client would retry a write that took effect.
+	Warning string `json:"warning,omitempty"`
 }

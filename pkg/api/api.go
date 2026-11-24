@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/internal/localhttp"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 )
 
 // Vite's dev server origins, allowed alongside the server's own origin when
@@ -56,6 +57,14 @@ type Config struct {
 	// heartbeat is the events stream's keep-alive interval; 0 means 25 s. Tests
 	// shorten it.
 	heartbeat time.Duration
+
+	// newWriter builds the tracker client one write goes through; nil means
+	// tracker.New. Tests swap in a stub. An error means the issue cannot be
+	// written to (403 read_only).
+	newWriter func(issue model.Issue, sourcePath string) (issueWriter, error)
+
+	// writeTimeout bounds one tracker write; 0 means defaultWriteTimeout.
+	writeTimeout time.Duration
 }
 
 // NewHandler returns the complete `bv serve` handler: guard, headers, /auth,
@@ -138,6 +147,12 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleInsights(w, r)
 	default:
 		if strings.HasPrefix(r.URL.Path, issuesPathPrefix) {
+			// /api/v1/issues/{id}/{action} is a write; everything else under
+			// issues/ (the detail, and unknown shapes, which 404 there) is the detail.
+			if id, sub, ok := splitIssuePath(r); ok && isWriteSub(sub) {
+				s.handleIssueWrite(w, r, id, sub)
+				return
+			}
 			s.handleIssueDetail(w, r)
 			return
 		}

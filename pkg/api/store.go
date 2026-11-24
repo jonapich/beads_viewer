@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -91,6 +92,10 @@ type Store struct {
 	load     loadFunc     // snapshot.Load
 	complete completeFunc // (*snapshot.Snapshot).CompletePhase2
 
+	// writeSem is a one-slot semaphore that serialises tracker writes (see
+	// lockWrite). Lock order is writeSem, then reloadMu, never the reverse.
+	writeSem chan struct{}
+
 	// reloadMu serialises Reload and publish and guards gen, errSeq and
 	// stopPhase2.
 	reloadMu   sync.Mutex
@@ -121,7 +126,8 @@ func newStore(ctx context.Context, path string, opts snapshot.LoadOptions, load 
 		ctx = context.Background()
 	}
 	sctx, cancel := context.WithCancel(ctx)
-	s := &Store{ctx: sctx, cancel: cancel, path: path, opts: opts, load: load, complete: complete}
+	s := &Store{ctx: sctx, cancel: cancel, path: path, opts: opts, load: load, complete: complete,
+		writeSem: make(chan struct{}, 1)}
 	s.hub.init()
 
 	snap, lctx, lcancel, err := s.loadSnapshot()
@@ -167,6 +173,12 @@ func (s *Store) Close() {
 		w.Stop()
 	}
 	s.wg.Wait()
+	// Barrier: wait for a write in flight (lockWrite). Its reload sees the
+	// cancelled context and publishes nothing; a writer that acquires the
+	// semaphore later sees the closed store and gives up. Taken and released
+	// before reloadMu, never nested with it.
+	s.writeSem <- struct{}{}
+	<-s.writeSem
 	// Barrier: a Reload that takes reloadMu after this sees the cancelled
 	// context and returns; one that holds it now finishes its p2wg.Add first.
 	// Either way no p2wg.Add can race the Wait below.
@@ -234,26 +246,34 @@ func (s *Store) phase2(ctx context.Context, v *View) {
 // current view and records the error (see lastReloadError); a load whose data is
 // the same as the current view's publishes nothing.
 func (s *Store) Reload() {
+	_, _ = s.reload()
+}
+
+// reload is Reload with a result: the View current once it is done, which is
+// the newly published one, the one already current (the data did not change, or
+// the store is closed), or the last good one with the load error. It is never
+// nil on a Store from NewStore.
+func (s *Store) reload() (*View, error) {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()
 	if s.ctx.Err() != nil {
-		return
+		return s.Current(), nil
 	}
 
 	snap, lctx, lcancel, err := s.loadSnapshot()
 	if err != nil {
 		if s.ctx.Err() != nil {
-			return // shutting down; the failure is the cancellation
+			return s.Current(), nil // shutting down; the failure is the cancellation
 		}
 		s.errSeq++
 		s.reloadErr.Store(&reloadStatus{Msg: err.Error(), At: time.Now(), Seq: s.errSeq})
 		s.notify()
-		return
+		return s.Current(), err
 	}
 
 	if s.ctx.Err() != nil {
 		lcancel() // closed while loading: publish nothing
-		return
+		return s.Current(), nil
 	}
 
 	cur := s.Current()
@@ -266,13 +286,47 @@ func (s *Store) Reload() {
 		if s.reloadErr.Swap(nil) != nil {
 			s.notify()
 		}
-		return
+		return s.Current(), nil
 	}
 
 	s.gen++
 	s.publish(newView(snap, s.gen, etagPhase1, false, ""), lctx, lcancel)
 	s.reloadErr.Store(nil)
 	s.notify()
+	return s.Current(), nil
+}
+
+// errStoreClosed is what lockWrite reports once the store is closed.
+var errStoreClosed = errors.New("api: store is closed")
+
+// lockWrite takes the write semaphore, so one tracker write runs at a time. It
+// gives up when ctx ends (the client left the queue) or the store closes
+// (errStoreClosed). The caller must call unlock exactly once. A semaphore rather
+// than a sync.Mutex so that a queued request whose client is gone stops waiting.
+func (s *Store) lockWrite(ctx context.Context) (unlock func(), err error) {
+	select {
+	case s.writeSem <- struct{}{}:
+	case <-ctx.Done():
+		// At shutdown the request context and the store end together; report the
+		// store, not a client that left.
+		if s.ctx.Err() != nil {
+			return nil, errStoreClosed
+		}
+		return nil, ctx.Err()
+	case <-s.ctx.Done():
+		return nil, errStoreClosed
+	}
+	// Both channels can be ready at once and select picks at random, so decide
+	// again now that the slot is held.
+	if s.ctx.Err() != nil {
+		<-s.writeSem
+		return nil, errStoreClosed
+	}
+	if err := ctx.Err(); err != nil {
+		<-s.writeSem
+		return nil, err
+	}
+	return func() { <-s.writeSem }, nil
 }
 
 // notify wakes every events subscriber. The payload is read at send time.

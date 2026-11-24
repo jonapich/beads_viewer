@@ -71,7 +71,7 @@ func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 			Blocked: snap.CountBlocked,
 			Closed:  snap.CountClosed,
 		},
-		Capabilities: MetaCaps{Writes: false, Events: s.cfg.Store.Watching()},
+		Capabilities: MetaCaps{Writes: writable(snap), Events: s.cfg.Store.Watching()},
 		Generation:   v.Gen,
 		LoadedAt:     snap.CreatedAt,
 	}
@@ -84,6 +84,14 @@ func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 		m.Source.Tracker = tracker.CapabilitiesOf(snap.Issues[0].Origin).Tracker
 	}
 	return m
+}
+
+// writable reports whether the served tracker accepts writes: the first issue's
+// origin carries a complete tracker route. bv serve rejects --workspace and
+// --repo, so there is one tracker and the first issue stands for it. An empty
+// tracker has nothing to write to.
+func writable(snap *snapshot.Snapshot) bool {
+	return len(snap.Issues) > 0 && tracker.CapabilitiesOf(snap.Issues[0].Origin).Writable
 }
 
 // sourceKind classifies a tracker path the way snapshot.Load does.

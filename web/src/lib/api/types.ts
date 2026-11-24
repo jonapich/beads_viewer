@@ -37,7 +37,7 @@ export interface MetaCounts {
 
 /** What the server can do (pkg/api/dto.go MetaCaps). */
 export interface MetaCaps {
-  /** False until the write endpoints land (beads-c2o.19). */
+  /** True when the write endpoints can reach the tracker (the first issue's origin is a complete route). */
   writes: boolean;
   /** True while the server watches the tracker and serves GET /api/v1/events. */
   events: boolean;
@@ -606,4 +606,43 @@ export interface InsightsResponse {
    * velocity is in the triage response (project_health.velocity).
    */
   skipped: Record<string, string>;
+}
+
+/** Body of POST /api/v1/issues/{id}/signoff (pkg/api/dto.go SignoffRequest). */
+export interface SignoffRequest {
+  /** Required. */
+  approve: boolean;
+  /** Required for a dispute (what is wrong or missing); not allowed on an approve. At most 10000 bytes. */
+  note?: string;
+}
+
+/** Body of POST /api/v1/issues/{id}/answer (pkg/api/dto.go AnswerRequest). At least one of the two. */
+export interface AnswerRequest {
+  /** The key of one of the decision's options (a, b, ...). */
+  option?: string;
+  /** Free text, at most 10000 bytes; sent with an option it is appended to it. */
+  text?: string;
+}
+
+/** Body of PUT /api/v1/issues/{id}/priority (pkg/api/dto.go PriorityRequest). */
+export interface PriorityRequest {
+  /** 0 (P0) to 4 (P4). */
+  priority: number;
+}
+
+/**
+ * 200 body of every write: the five quick actions, a no-op included
+ * (pkg/api/dto.go WriteResponse). The data is already reloaded when it arrives,
+ * so refetch what you show; there is no issue DTO.
+ */
+export interface WriteResponse {
+  id: string;
+  /** Store generation after the reload (meta.generation). */
+  generation: number;
+  /** Data hash after the reload (meta.data_hash). */
+  data_hash: string;
+  /** The follow-up bead a dispute filed. */
+  created_id?: string;
+  /** The write took effect, but refreshing the export or the reload failed: the list may lag. */
+  warning?: string;
 }
