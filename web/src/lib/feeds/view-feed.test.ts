@@ -249,6 +249,35 @@ describe("Resource and ViewFeed", () => {
     expect(count(triagePath)).toBe(2); // one catch-up tick, not dropped, not tripled
   });
 
+  it("a catch-up tick cancels the armed retry timer, so only one poll chain runs", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    fetchMock.mockImplementation(async (path: string, init: RequestInit) => {
+      sent.push({ path, inm: (init.headers as Record<string, string>)["If-None-Match"] });
+      if (path === triagePath && count(triagePath) === 1) await gate; // the first triage request is held
+      return path === metaPath ? json(meta(true)) : pending(); // and every answer is "still computing": a retry is due
+    });
+    mount([new Resource<TriageResponse>(triagePath, getTriageIfChanged)]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(triagePath)).toBe(1);
+
+    // A live event lands during the held tick (live is up, so only the retry would poll).
+    stopAll.push(startLive({ EventSource: asEventSource }));
+    FakeEventSource.last.open();
+    FakeEventSource.last.send("snapshot", { generation: 2, hash: "h", phase: "phase1" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(triagePath)).toBe(1);
+
+    release(); // tick 1 ends with a retry armed, then the catch-up tick runs at once
+    await vi.advanceTimersByTimeAsync(0);
+    expect(count(triagePath)).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(POLL_MS); // one chain: one more request, not two
+    expect(count(triagePath)).toBe(3);
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(count(triagePath)).toBe(4);
+  });
+
   it("paints the next mount from the cache and revalidates with the ETag", async () => {
     reply(triagePath, () => json(triage(3), { headers: { ETag: '"t1"' } }));
     reply(metaPath, () => json(meta(true), { headers: { ETag: '"m1"' } }));

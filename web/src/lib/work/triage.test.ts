@@ -77,7 +77,8 @@ describe("triageView: data", () => {
       provisional: false,
       phase2Error: "",
       recomputing: false,
-      recomputingTitle: "",
+      stale: false,
+      staleTitle: "",
       allBlocked: false,
     });
   });
@@ -89,11 +90,13 @@ describe("triageView: data", () => {
     expect(v).toMatchObject({ provisional: false, phase2Error: "context deadline exceeded", state: "data" });
   });
   it("pending with data is recomputing", () => {
-    expect(triageView(res(fixture, { pending: true }))).toMatchObject({ state: "data", recomputing: true, recomputingTitle: "" });
+    expect(triageView(res(fixture, { pending: true }))).toMatchObject({ state: "data", recomputing: true, stale: false });
   });
-  it("an error with data is recomputing, the title says why", () => {
+  it("an error with data is stale, not recomputing, and the title says why", () => {
     const v = triageView(res(fixture, { error: apiError(500, "analysis_failed", "boom") }));
-    expect(v).toMatchObject({ state: "data", recomputing: true, recomputingTitle: "boom" });
+    expect(v).toMatchObject({ state: "data", recomputing: false, stale: true, staleTitle: "boom" });
+    // offline reads the same as in Plan and Insights
+    expect(triageView(res(fixture, { error: apiError(0, "network", "bv serve is not reachable") }))).toMatchObject({ recomputing: false, stale: true });
   });
   it("no recommendations is empty: no issues at all", () => {
     const v = triageView(res(mk({ issue_count: 0, recommendations: [], quick_ref: { ...fixture.quick_ref, top_picks: [] } })));

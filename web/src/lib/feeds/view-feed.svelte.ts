@@ -176,6 +176,9 @@ export class ViewFeed {
     const tick = async (): Promise<void> => {
       const mine = ++started;
       running = true;
+      // A catch-up tick (a signal arrived during the last one) can start while that tick's retry
+      // timer is still armed: cancel it, or its poll chain would run beside this one.
+      clearTimeout(timer);
       timer = undefined;
       try {
         const retries = await Promise.all([fetchMeta(), ...this.#resources.map((r) => r.load(ac.signal))]);

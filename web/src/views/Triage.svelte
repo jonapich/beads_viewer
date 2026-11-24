@@ -66,6 +66,11 @@
     return m;
   });
 
+  // The drawer refetches when the snapshot changes (/meta always answers and its ETag moves with every
+  // view), not only when this view's data does: after a write on a large tracker /triage answers 503
+  // until phase 2 is done, and its data object stays the same.
+  const reloadKey = $derived([feed.meta, triage.data] as const);
+
   let rail = $state<HTMLElement>();
   const openPeek = (id: string): void => host.open(id);
   const prio = (id: string, el: HTMLElement): void => host.togglePop(id, el, "row");
@@ -93,7 +98,10 @@
             <span title="Graph analysis (phase 2) has not finished">provisional · computing graph metrics… <span class="spin" aria-hidden="true"></span></span>
           {/if}
           {#if view.recomputing}
-            <span class="chip" title={view.recomputingTitle || "Recomputing after a change"}><span class="spin" aria-hidden="true"></span>Recomputing…</span>
+            <span class="chip" title="Recomputing after a change"><span class="spin" aria-hidden="true"></span>Recomputing…</span>
+          {/if}
+          {#if view.stale}
+            <span class="chip" title={view.staleTitle}>Showing the last loaded triage</span>
           {/if}
         {/if}
       </div>
@@ -160,9 +168,9 @@
             </div>
             <div class="list" role="list" aria-label="Recommendations">
               {#if view.state === "loading"}
-                <SkeletonRows n={8} label="Loading recommendations…" />
+                <div role="listitem"><SkeletonRows n={8} label="Loading recommendations…" /></div>
               {:else if recs.length === 0}
-                <div class="empty compact"><p>No recommendations match this filter.</p></div>
+                <div class="empty compact" role="listitem"><p>No recommendations match this filter.</p></div>
               {:else}
                 {#each recs as r (r.rec.id)}
                   <RecRow
@@ -204,7 +212,7 @@
       {/if}
     {/if}
   </div>
-  <WorkPeek {host} writes={feed.writes} {now} reloadKey={triage.data} />
+  <WorkPeek {host} writes={feed.writes} {now} {reloadKey} />
 </section>
 
 <style>

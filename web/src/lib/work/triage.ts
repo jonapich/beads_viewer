@@ -23,10 +23,12 @@ export interface TriageView {
   provisional: boolean;
   /** Phase 2 failed; the phase 1 result is on show. */
   phase2Error: string;
-  /** A refetch is pending or failed while the old copy stays on show. */
+  /** The server answered 503 analysis_pending while the old copy stays on show. */
   recomputing: boolean;
-  /** The recomputing chip's tooltip: the failure, if that is why. */
-  recomputingTitle: string;
+  /** The last refetch failed (offline, 500), so what is on show may be out of date. */
+  stale: boolean;
+  /** The stale chip's tooltip: the failure. */
+  staleTitle: string;
   /** Recommendations exist but none is claimable, so "Start here" has nothing to show. */
   allBlocked: boolean;
 }
@@ -39,7 +41,8 @@ const NONE: TriageView = {
   provisional: false,
   phase2Error: "",
   recomputing: false,
-  recomputingTitle: "",
+  stale: false,
+  staleTitle: "",
   allBlocked: false,
 };
 
@@ -59,8 +62,9 @@ export function triageView(res: ResourceState<TriageResponse>): TriageView {
     noIssues: t.issue_count === 0,
     provisional: !t.phase2_ready && phase2Error === "",
     phase2Error,
-    recomputing: res.pending || res.error !== null,
-    recomputingTitle: res.error?.message ?? "",
+    recomputing: res.pending,
+    stale: res.error !== null,
+    staleTitle: res.error?.message ?? "",
     // Top picks are gated on claimable.
     allBlocked: t.quick_ref.top_picks.length === 0 && recs > 0,
   };

@@ -25,7 +25,7 @@
   const blockedBy = $derived(rec.blocked_by ?? []);
 </script>
 
-<div class="item">
+<div class="item" role="listitem">
   <WorkRow
     id={rec.id}
     title={rec.title}

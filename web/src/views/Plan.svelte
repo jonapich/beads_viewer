@@ -40,6 +40,10 @@
   const folds = $derived(p ? foldSingles(p.tracks) : { shown: [], folded: [] });
   let foldOpen = $state(false);
 
+  // The drawer refetches when the snapshot changes (/meta moves with every view), not only when this
+  // view's data does. Same shape in Triage, Plan and Insights.
+  const reloadKey = $derived([feed.meta, plan.data] as const);
+
   const openPeek = (id: string): void => host.open(id);
 </script>
 
@@ -105,7 +109,7 @@
       {/if}
     {/if}
   </div>
-  <WorkPeek {host} writes={feed.writes} {now} reloadKey={plan.data} />
+  <WorkPeek {host} writes={feed.writes} {now} {reloadKey} />
 </section>
 
 <style>

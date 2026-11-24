@@ -47,7 +47,7 @@
     {#if it.id === startId}<Tag tone="start">Start here</Tag>{/if}
     {#if it.unblocks_ids.length > 0}<Tag tone="unb" title="Unblocks {it.unblocks_ids.join(', ')}">→{it.unblocks_ids.length}</Tag>{/if}
   {/snippet}
-  <div class="item">
+  <div class="item" role="listitem">
     <WorkRow
       id={it.id}
       title={it.title}
