@@ -5,6 +5,7 @@ import type {
   HealthResponse,
   InsightsResponse,
   IssueDetail,
+  IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
   PriorityRequest,
@@ -180,7 +181,7 @@ export const getInsightsIfChanged = (limit: number | undefined, etag: string | n
  * header the server checks on every non-GET; the session cookie goes along. Errors
  * reject with ApiError carrying the server's {error:{code,message}}.
  */
-export async function sendJSON<T>(method: "POST" | "PUT" | "DELETE", path: ApiPath, body?: unknown): Promise<T> {
+export async function sendJSON<T>(method: "POST" | "PUT" | "PATCH" | "DELETE", path: ApiPath, body?: unknown): Promise<T> {
   const res = await request(
     method,
     path,
@@ -202,6 +203,14 @@ export const postAnswer = (id: string, req: AnswerRequest) =>
 /** Sets the priority, 0 (P0) to 4 (P4). */
 export const putPriority = (id: string, priority: number) =>
   sendJSON<WriteResponse>("PUT", issueActionPath(id, "priority"), { priority } satisfies PriorityRequest);
+
+/**
+ * Edits title, status, priority, assignee, type and description in one request
+ * (the TUI's O editor). Rejects with ApiError 409 "conflict" when base_updated_at
+ * no longer matches the issue; the data is then already reloaded, so refetch it.
+ */
+export const patchIssue = (id: string, req: IssuePatchRequest) =>
+  sendJSON<WriteResponse>("PATCH", `/api/v1/issues/${encodeURIComponent(id)}`, req);
 
 /** Marks (PUT) or unmarks (DELETE) an issue as a close candidate. */
 export const setCloseCandidate = (id: string, on: boolean) =>

@@ -6,6 +6,7 @@ import type {
   HealthResponse,
   IssueDetail,
   InsightsResponse,
+  IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
   SearchResponse,
@@ -30,8 +31,11 @@ import triage from "./__fixtures__/triage.json";
 import insights from "./__fixtures__/insights.json";
 import writeResult from "./__fixtures__/write-result.json";
 import writeResultDispute from "./__fixtures__/write-result-dispute.json";
+import writeResultWarning from "./__fixtures__/write-result-warning.json";
+import issuePatchRequest from "./__fixtures__/issue-patch-request.json";
 import readOnly from "./__fixtures__/error-read-only.json";
 import conflict from "./__fixtures__/error-conflict.json";
+import staleBase from "./__fixtures__/error-stale-base.json";
 
 export const healthFixture: HealthResponse = health;
 export const unauthorizedFixture: ApiErrorBody = unauthorized;
@@ -49,5 +53,8 @@ export const triageFixture: TriageResponse = triage;
 export const insightsFixture: InsightsResponse = insights;
 export const writeResultFixture: WriteResponse = writeResult;
 export const writeResultDisputeFixture: WriteResponse = writeResultDispute;
+export const writeResultWarningFixture: WriteResponse = writeResultWarning;
+export const issuePatchRequestFixture: IssuePatchRequest = issuePatchRequest;
 export const readOnlyFixture: ApiErrorBody = readOnly;
 export const conflictFixture: ApiErrorBody = conflict;
+export const staleBaseFixture: ApiErrorBody = staleBase;

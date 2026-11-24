@@ -1,0 +1,9 @@
+{
+  "assignee": "ada",
+  "base_updated_at": "2026-03-02T10:00:00Z",
+  "description": "Two lines.\n\nSecond paragraph.",
+  "priority": 1,
+  "status": "in_progress",
+  "title": "Receipt e-mail",
+  "type": "bug"
+}

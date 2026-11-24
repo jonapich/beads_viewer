@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "conflict",
+    "message": "fx-c changed since you opened it; reload and try again"
+  }
+}

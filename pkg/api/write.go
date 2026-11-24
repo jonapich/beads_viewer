@@ -59,6 +59,10 @@ type issueWriter interface {
 	AnswerQuestion(ctx context.Context, text, removeLabel string) (tracker.Result, error)
 	SetPriority(ctx context.Context, p int) (tracker.Result, error)
 	SetLabel(ctx context.Context, label string, on bool) (tracker.Result, error)
+	// Update is the PATCH field editor (beads-c2o.14): it re-reads the issue
+	// through the tracker and returns tracker.ErrConflict when it changed.
+	Update(ctx context.Context, diff tracker.FieldDiff) (tracker.Result, error)
+	RefreshExport(ctx context.Context) error
 }
 
 // writerFor builds the writer for issue. A failure is always the OriginError, so
@@ -146,35 +150,11 @@ func (s *server) handleIssueWrite(w http.ResponseWriter, r *http.Request, id, su
 		return
 	}
 
-	unlock, err := store.lockWrite(r.Context())
-	if err != nil {
-		// Always answer: when the client really left nobody reads this, but at
-		// shutdown the request context and the store end together and the
-		// connection is still open, where an empty 200 would report a write that
-		// never ran as saved.
-		if errors.Is(err, errStoreClosed) {
-			writeError(w, http.StatusServiceUnavailable, "shutting_down", "bv serve is shutting down")
-		} else {
-			writeError(w, http.StatusServiceUnavailable, "cancelled", "the write was cancelled before it ran; nothing was changed")
-		}
+	v, issue, wr, unlock, ok := s.lockIssue(w, r, store, id)
+	if !ok {
 		return
 	}
 	defer unlock()
-
-	v := store.Current()
-	issue := v.Snap.Issue(id)
-	if issue == nil {
-		writeError(w, http.StatusNotFound, "not_found", "no such issue")
-		return
-	}
-
-	// Writability first: a read-only tracker answers 403 whatever the request
-	// would otherwise do (a stale 409, or a no-op 200).
-	wr, err := s.writerFor(*issue, store.path)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "read_only", err.Error())
-		return
-	}
 
 	var removeLabel string
 	switch sub {
@@ -224,6 +204,7 @@ func (s *server) handleIssueWrite(w http.ResponseWriter, r *http.Request, id, su
 	defer cancel()
 
 	var res tracker.Result
+	var err error
 	switch sub {
 	case subSignoff:
 		res, err = wr.Signoff(wctx, req.approve, req.note)
@@ -239,6 +220,45 @@ func (s *server) handleIssueWrite(w http.ResponseWriter, r *http.Request, id, su
 		return
 	}
 	s.respondWrite(w, id, nil, res, store)
+}
+
+// lockIssue is the start every issue write shares: take the write semaphore,
+// look the issue up (so a queued write sees the previous write's result), and
+// check the tracker accepts writes (403 before any 409 or no-op). On ok the
+// caller owns unlock and must call it; otherwise the error response is already
+// written.
+func (s *server) lockIssue(w http.ResponseWriter, r *http.Request, store *Store, id string) (v *View, issue *model.Issue, wr issueWriter, unlock func(), ok bool) {
+	unlock, err := store.lockWrite(r.Context())
+	if err != nil {
+		// Always answer: when the client really left nobody reads this, but at
+		// shutdown the request context and the store end together and the
+		// connection is still open, where an empty 200 would report a write that
+		// never ran as saved.
+		if errors.Is(err, errStoreClosed) {
+			writeError(w, http.StatusServiceUnavailable, "shutting_down", "bv serve is shutting down")
+		} else {
+			writeError(w, http.StatusServiceUnavailable, "cancelled", "the write was cancelled before it ran; nothing was changed")
+		}
+		return nil, nil, nil, nil, false
+	}
+
+	v = store.Current()
+	issue = v.Snap.Issue(id)
+	if issue == nil {
+		unlock()
+		writeError(w, http.StatusNotFound, "not_found", "no such issue")
+		return nil, nil, nil, nil, false
+	}
+
+	// Writability first: a read-only tracker answers 403 whatever the request
+	// would otherwise do (a stale 409, or a no-op 200).
+	wr, err = s.writerFor(*issue, store.path)
+	if err != nil {
+		unlock()
+		writeError(w, http.StatusForbidden, "read_only", err.Error())
+		return nil, nil, nil, nil, false
+	}
+	return v, issue, wr, unlock, true
 }
 
 // respondWrite sends the 200 WriteResponse. cur is the view to report as is (a

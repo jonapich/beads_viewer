@@ -153,6 +153,13 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 				s.handleIssueWrite(w, r, id, sub)
 				return
 			}
+			// PATCH /api/v1/issues/{id} is the field editor (beads-c2o.14).
+			if r.Method == http.MethodPatch {
+				if id, ok := issueIDFromPath(r); ok {
+					s.handleIssuePatch(w, r, id)
+					return
+				}
+			}
 			s.handleIssueDetail(w, r)
 			return
 		}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged, getInsights, getInsightsIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, getTriage, getTriageIfChanged, postAnswer, postSignoff, putPriority, search, sendJSON, setCloseCandidate } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getInsights, getInsightsIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, getTriage, getTriageIfChanged, patchIssue, postAnswer, postSignoff, putPriority, search, sendJSON, setCloseCandidate } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -207,6 +207,17 @@ describe("api client writes", () => {
     expect(path).toBe("/api/v1/issues/x-1/priority");
     expect(init.method).toBe("PUT");
     expect(init.body).toBe('{"priority":0}');
+  });
+
+  it("patchIssue PATCHes the escaped id, keeping an empty assignee and the verbatim base", async () => {
+    fetchMock.mockResolvedValue(json(ok));
+    const base = "2026-03-02T10:00:00.123456789Z";
+    await expect(patchIssue("a b/c", { assignee: "", base_updated_at: base })).resolves.toEqual(ok);
+    const [path, init] = sent();
+    expect(path).toBe("/api/v1/issues/a%20b%2Fc");
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe(`{"assignee":"","base_updated_at":"${base}"}`);
+    expect(header(init, "Content-Type")).toBe("application/json");
   });
 
   it("setCloseCandidate is PUT to mark and DELETE to unmark, with no body", async () => {

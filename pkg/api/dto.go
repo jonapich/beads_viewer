@@ -464,6 +464,21 @@ type PriorityRequest struct {
 	Priority *int `json:"priority"`
 }
 
+// IssuePatchRequest is the body of PATCH /api/v1/issues/{id}: the fields of the
+// TUI's O editor; an absent (or null) field stays as it is. Assignee "" clears
+// the assignee. BaseUpdatedAt is the issue's updated_at as the client last read
+// it, echoed verbatim (RFC 3339, nanoseconds included), and is required: a
+// mismatch is a 409. The response is a WriteResponse.
+type IssuePatchRequest struct {
+	Title         *string `json:"title,omitempty"`
+	Status        *string `json:"status,omitempty"`
+	Priority      *int    `json:"priority,omitempty"`
+	Assignee      *string `json:"assignee,omitempty"`
+	Type          *string `json:"type,omitempty"`
+	Description   *string `json:"description,omitempty"`
+	BaseUpdatedAt string  `json:"base_updated_at"`
+}
+
 // WriteResponse is the 200 body of every write: PUT/DELETE
 // /api/v1/issues/{id}/labels/close-candidate as well, and a no-op (the issue
 // already is as asked) too. The data is already reloaded when it is sent, so the

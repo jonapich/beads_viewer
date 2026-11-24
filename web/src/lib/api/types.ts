@@ -631,6 +631,35 @@ export interface PriorityRequest {
 }
 
 /**
+ * Body of PATCH /api/v1/issues/{id} (pkg/api/dto.go IssuePatchRequest): the
+ * fields of the TUI's O editor. An absent field stays as it is; at least one is
+ * required. The response is a WriteResponse.
+ */
+export interface IssuePatchRequest {
+  /** Trimmed server-side; not blank, one line, at most 500 bytes (as are status, type and assignee). */
+  title?: string;
+  /** Free text the tracker validates (a bd status such as "open" or "in_progress"); not blank, one line. */
+  status?: string;
+  /** 0 (P0) to 4 (P4). */
+  priority?: number;
+  /** One line; "" clears the assignee. */
+  assignee?: string;
+  /** Free text the tracker validates (a bd type such as "bug" or "task"); not blank, one line. */
+  type?: string;
+  /**
+   * Leading newlines and trailing whitespace are dropped server-side, as in the
+   * O editor. At most 16000 bytes after that normalising.
+   */
+  description?: string;
+  /**
+   * Required: the issue's updated_at as the client last read it, echoed
+   * verbatim (RFC 3339 with nanoseconds; never round-trip it through a JS Date,
+   * which truncates to milliseconds). A mismatch is a 409 "conflict".
+   */
+  base_updated_at: string;
+}
+
+/**
  * 200 body of every write: the five quick actions, a no-op included
  * (pkg/api/dto.go WriteResponse). The data is already reloaded when it arrives,
  * so refetch what you show; there is no issue DTO.
