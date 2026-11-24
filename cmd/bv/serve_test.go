@@ -391,7 +391,7 @@ func TestServeSubcommandBinary(t *testing.T) {
 		close(lines)
 	}()
 	var signIn string
-	deadline := time.After(20 * time.Second)
+	deadline := time.After(subprocessHangGuard)
 	for signIn == "" {
 		select {
 		case line, ok := <-lines:

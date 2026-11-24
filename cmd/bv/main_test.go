@@ -30,10 +30,16 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+// subprocessHangGuard bounds one bv subprocess run by a test helper. It is a
+// hang guard, not a performance assertion: a run takes seconds alone but can
+// take far longer while the host is loaded (other test packages, builds), so
+// keep it generous.
+const subprocessHangGuard = 2 * time.Minute
+
 func runCommandWithTimeout(t *testing.T, dir, exe string, args ...string) (string, string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), subprocessHangGuard)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, exe, args...)
@@ -55,7 +61,7 @@ func runCommandWithTimeout(t *testing.T, dir, exe string, args ...string) (strin
 func runCommandWithEnv(t *testing.T, dir string, extraEnv []string, exe string, args ...string) (string, string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), subprocessHangGuard)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, exe, args...)
