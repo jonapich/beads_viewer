@@ -935,6 +935,14 @@ func (e *SQLiteExporter) writeRobotOutputs(bundle *Bundle, dataDir string) error
 			triageOut.RecommendationsByTrack = grouped.RecommendationsByTrack
 			triageOut.RecommendationsByLabel = grouped.RecommendationsByLabel
 		}
+		if _, reproducible := sourceDateEpochTime(); reproducible {
+			// The per-metric durations and the compute time are wall-clock
+			// measurements of this run. Under SOURCE_DATE_EPOCH the export must
+			// be byte-identical across runs, and triage.json feeds the offline
+			// manifest hash.
+			triageOut.Status = triageOut.Status.WithoutTimings()
+			triageOut.Meta.ComputeTimeMs = 0
+		}
 		if e.envelopeClaimsUnproven(&triageOut) {
 			suppressExportGroupedClaims(&triageOut)
 		}

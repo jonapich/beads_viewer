@@ -152,6 +152,20 @@ func (s statusEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
+// WithoutTimings returns a copy of the status with every metric's wall-clock
+// duration cleared, so it serializes without the "ms" fields. Reproducible
+// exports use it: the durations differ on every run (and are quantized by the
+// platform clock, so they flip between absent and present on identical input).
+func (s MetricStatus) WithoutTimings() MetricStatus {
+	for _, entry := range []*statusEntry{
+		&s.PageRank, &s.Betweenness, &s.Eigenvector, &s.HITS, &s.Critical,
+		&s.Cycles, &s.KCore, &s.Articulation, &s.Slack,
+	} {
+		entry.Elapsed = 0
+	}
+	return s
+}
+
 // IsPhase2Ready returns true if Phase 2 metrics have been computed.
 func (s *GraphStats) IsPhase2Ready() bool {
 	s.mu.RLock()

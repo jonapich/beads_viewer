@@ -1632,3 +1632,43 @@ func TestSQLiteExport_TriageZeroActionableNoLeakAndProvisionalScrub(t *testing.T
 		}
 	})
 }
+
+// The per-metric durations in triage.json's status are wall-clock measurements
+// that vary between runs (beads-c2o.54). Under SOURCE_DATE_EPOCH they must not
+// reach the export, or two exports of the same input differ and so does the
+// offline manifest hash.
+func TestSQLiteExport_TriageStatusTimingsOmittedUnderSourceDateEpoch(t *testing.T) {
+	export := func(elapsed time.Duration) []byte {
+		triage := &analysis.TriageResult{}
+		triage.Status.Betweenness.State = "computed"
+		triage.Status.Betweenness.Elapsed = elapsed
+		triage.Status.Cycles.State = "computed"
+		triage.Status.Cycles.Elapsed = elapsed / 2
+		triage.Meta.ComputeTimeMs = int64(elapsed / time.Millisecond)
+		exp := NewSQLiteExporter([]*model.Issue{makeTestIssue("tm-1", "Timing", model.StatusOpen, 1, model.TypeTask)}, nil, nil, triage)
+		dir := t.TempDir()
+		if err := exp.Export(dir); err != nil {
+			t.Fatalf("Export: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "data", "triage.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+
+	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
+	a, b := export(1_500_000), export(7_250_000)
+	if !bytes.Equal(a, b) {
+		t.Fatalf("triage.json differs between exports under SOURCE_DATE_EPOCH:\n%s\nvs\n%s", a, b)
+	}
+	if bytes.Contains(a, []byte(`"ms"`)) || !bytes.Contains(a, []byte(`"compute_time_ms": 0`)) {
+		t.Fatalf("triage.json carries wall-clock timings under SOURCE_DATE_EPOCH:\n%s", a)
+	}
+
+	// Without a fixed epoch the timings are still reported.
+	t.Setenv("SOURCE_DATE_EPOCH", "")
+	if got := export(1_500_000); !bytes.Contains(got, []byte(`"ms": 1.5`)) || !bytes.Contains(got, []byte(`"compute_time_ms": 1`)) {
+		t.Fatalf("expected triage.json to report the metric timing without SOURCE_DATE_EPOCH:\n%s", got)
+	}
+}
