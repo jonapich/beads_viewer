@@ -86,7 +86,8 @@ async function request(method: string, path: ApiPath, opts: RequestOptions = {})
   }
   // The server answered, so it is reachable even though the call failed.
   session.status = "ok";
-  throw new ApiError(res.status, e?.code ?? `http_${res.status}`, e?.message ?? res.statusText);
+  // No envelope: the status text, which is empty over HTTP/2, so never a blank message.
+  throw new ApiError(res.status, e?.code ?? `http_${res.status}`, e?.message ?? (res.statusText || `Request failed (HTTP ${res.status})`));
 }
 
 async function parseJSON<T>(res: Response): Promise<T> {

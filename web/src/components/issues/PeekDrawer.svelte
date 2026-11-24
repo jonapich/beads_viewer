@@ -6,6 +6,7 @@
   import { callView, childProgress, signoffLabel, signoffTone, topReasons, type PeekSection } from "../../lib/issues/peek";
   import { PeekLoader } from "../../lib/issues/peek.svelte";
   import { percent, STATUS_NAME, triageText } from "../../lib/issues/present";
+  import { refocusForm } from "../detail/focus";
   import DecisionForm from "./DecisionForm.svelte";
   import PriorityPill from "./PriorityPill.svelte";
   import RefRow from "./RefRow.svelte";
@@ -80,13 +81,16 @@
   /**
    * A write that succeeds can remove the control that had focus (the dispute form, the answer
    * form): focus would fall to <body>. Park it on the drawer heading, so a keyboard user stays
-   * in the drawer.
+   * in the drawer. One that fails leaves the form, but the button that was pressed was disabled
+   * while the write ran, so focus fell too: put it back in that section's form.
    */
-  async function keepFocus(write: Promise<boolean>): Promise<void> {
-    if (!(await write)) return;
+  async function keepFocus(write: Promise<boolean>, sec: PeekSection): Promise<void> {
+    const ok = await write;
     await tick();
     // Only when it really fell: if the user moved focus elsewhere meanwhile, leave it.
-    if (!document.activeElement || document.activeElement === document.body) heading?.focus({ preventScroll: true });
+    if (document.activeElement && document.activeElement !== document.body) return;
+    if (ok) heading?.focus({ preventScroll: true });
+    else refocusForm(root?.querySelector(`[data-sec="${sec}"]`));
   }
 
   async function close(): Promise<void> {
@@ -233,11 +237,11 @@
             disabled={readOnly}
             open={actions.disputeOpen === id}
             note={actions.getDraft(noteKey(id))}
-            onapprove={() => void keepFocus(actions.approve(id))}
+            onapprove={() => void keepFocus(actions.approve(id), "signoff")}
             onopen={() => actions.openDispute(id)}
             oncancel={() => actions.closeDispute()}
             onnote={(v) => actions.setDraft(noteKey(id), v)}
-            ondispute={(note) => void keepFocus(actions.dispute(id, note))}
+            ondispute={(note) => void keepFocus(actions.dispute(id, note), "signoff")}
           />
         {/if}
         {#if detail?.signoff}
@@ -289,7 +293,7 @@
             text={actions.getDraft(answerKey(id))}
             onoption={(k) => actions.setDraft(optionKey(id), k)}
             ontext={(v) => actions.setDraft(answerKey(id), v)}
-            onanswer={(a) => void keepFocus(actions.answer(id, a))}
+            onanswer={(a) => void keepFocus(actions.answer(id, a), "answer")}
           />
         {:else if loader.status === "loading"}
           <p class="faint">Loading…</p>

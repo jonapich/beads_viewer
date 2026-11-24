@@ -14,7 +14,7 @@
   import SignoffCard from "../components/detail/SignoffCard.svelte";
   import RowActionsPopover from "../components/issues/RowActionsPopover.svelte";
   import DescriptionEditor from "../components/detail/DescriptionEditor.svelte";
-  import { refocus as refocusOn } from "../components/detail/focus";
+  import { refocus as refocusOn, refocusForm } from "../components/detail/focus";
   import { patchIssue, postAnswer, postSignoff, putPriority, setCloseCandidate } from "../lib/api/client";
   import { IssueActions } from "../lib/issues/actions.svelte";
   import { actionTarget, designOpenByDefault, isReadOnly, noteHolds, readOnlyNotice, relationshipCount } from "../lib/issues/detail";
@@ -89,15 +89,18 @@
   const showDecision = $derived(!!target && !stale && canAnswer(target) && !!detail?.decision);
 
   /**
-   * A card write finished: note it, and when the control that had focus went away with the card
-   * (the dispute form, the answer form) park focus on the title, so a keyboard user stays on the page.
+   * A card write finished. On success, note it, and when the control that had focus went away with
+   * the card (the dispute form, the answer form) park focus on the title, so a keyboard user stays
+   * on the page. On failure the card stays, but the button that was pressed was disabled while the
+   * write ran, so focus is on the page: put it back in the card's form.
    */
   async function written(issue: string, startedAt: string, write: Promise<boolean>, kind: Done): Promise<void> {
-    if (!(await write)) return;
-    resolved[issue] = { kind, at: startedAt };
+    const ok = await write;
+    if (ok) resolved[issue] = { kind, at: startedAt };
     await tick();
     if (!document.activeElement || document.activeElement === document.body) {
-      document.querySelector<HTMLElement>("h1.title")?.focus({ preventScroll: true });
+      if (ok) document.querySelector<HTMLElement>("h1.title")?.focus({ preventScroll: true });
+      else refocusForm(document.querySelector("[data-needs]"));
     }
   }
 
@@ -199,7 +202,6 @@
         {:else if done}
           <ResolvedNote kind={done.kind} followUp={actions.followUps[detail.id]} />
         {/if}
-
 
         {#if detail.status === "closed" && detail.close_reason}
           <Section name="resolution" title="Resolution" bind:open={() => isOpen("resolution", true), (v) => setOpen("resolution", v)}>

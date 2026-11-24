@@ -8,16 +8,20 @@
     save?: boolean;
     /** Another write on this issue is in flight: Cancel waits too. */
     busy?: boolean;
+    /** Why Save is held off for a reason the user can't see in the form (the post-warning lock); shown under the buttons. */
+    reason?: string;
     oncancel: () => void;
   }
 
-  let { saving, disabled = false, save = true, busy = false, oncancel }: Props = $props();
+  let { saving, disabled = false, save = true, busy = false, reason = "", oncancel }: Props = $props();
+
+  const uid = $props.id();
 </script>
 
 <div class="btnrow">
   {#if save}
     <!-- aria-disabled, not disabled, so the button a keyboard user pressed keeps its focus while saving. -->
-    <button type="submit" class="btn sm primary" aria-disabled={disabled || saving ? "true" : undefined} aria-busy={saving ? "true" : undefined} onclick={(e) => {
+    <button type="submit" class="btn sm primary" aria-disabled={disabled || saving ? "true" : undefined} aria-busy={saving ? "true" : undefined} aria-describedby={reason ? `${uid}-why` : undefined} onclick={(e) => {
       if (disabled || saving) e.preventDefault();
     }}>
       {#if saving}<span class="spin" aria-hidden="true"></span>Saving…{:else}Save{/if}
@@ -25,6 +29,7 @@
   {/if}
   <button type="button" class="btn sm ghost" disabled={saving || busy} onclick={oncancel}>Cancel</button>
 </div>
+{#if reason}<p class="why" id="{uid}-why">{reason}</p>{/if}
 
 <style>
   .btnrow {
@@ -32,6 +37,11 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 8px;
+  }
+  .why {
+    margin: 4px 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
   }
   .btn {
     display: inline-flex;

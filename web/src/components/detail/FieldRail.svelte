@@ -58,6 +58,12 @@
     void refocus(() => assigneeBtn);
   }
 
+  /** Dismiss on the error panel removes the button that had focus: back to the input. */
+  function dismissAssigneeError(): void {
+    edits.dismissError(detail.id, "assignee");
+    void refocus(() => assigneeInput);
+  }
+
   /** The type is a draft like any other: choosing a value in the select writes nothing, Save does. */
   async function commitType(mode: Mode = "save"): Promise<void> {
     if (mode === "save" && !edits.canSave(detail.id, "type")) return;
@@ -68,6 +74,11 @@
   function cancelType(): void {
     edits.cancel(detail.id, "type");
     void refocus(() => typeBtn);
+  }
+
+  function dismissTypeError(): void {
+    edits.dismissError(detail.id, "type");
+    void refocus(() => typeSelect);
   }
 
   const labels = $derived(detail.labels.filter((l) => l !== CLOSE_CANDIDATE));
@@ -103,6 +114,8 @@
           autocomplete="off"
           value={assigneeEdit.draft}
           readonly={busy}
+          aria-invalid={assigneeProblem ? "true" : undefined}
+          aria-describedby={assigneeProblem ? `assignee-hint-${detail.id}` : undefined}
           aria-busy={assigneeSaving ? "true" : undefined}
           bind:this={assigneeInput}
           use:autofocus
@@ -114,15 +127,17 @@
             }
           }}
         />
-        <EditButtons saving={assigneeSaving} disabled={!edits.canSave(detail.id, "assignee")} {busy} oncancel={cancelAssignee} />
-        {#if assigneeProblem}<p class="hint">{assigneeProblem}</p>{/if}
+        <EditButtons saving={assigneeSaving} disabled={!edits.canSave(detail.id, "assignee")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelAssignee} />
+        {#if assigneeProblem}<p class="hint" id="assignee-hint-{detail.id}">{assigneeProblem}</p>{/if}
         {#if assigneeError}
           <EditError
             error={assigneeError}
+            field="assignee"
             draft={assigneeEdit.draft}
             {busy}
+            reason={edits.lockNotice(detail.id)}
             onretry={() => void commitAssignee(assigneeError.kind === "conflict" ? "mine" : "retry")}
-            ondismiss={() => (assigneeError.kind === "conflict" ? cancelAssignee() : edits.dismissError(detail.id, "assignee"))}
+            ondismiss={() => (assigneeError.kind === "conflict" ? cancelAssignee() : dismissAssigneeError())}
           />
         {/if}
       </form>
@@ -174,14 +189,16 @@
         >
           {#each withCurrent(EDIT_TYPES, detail.issue_type) as t (t)}<option value={t}>{t}</option>{/each}
         </select>
-        <EditButtons saving={typeSaving} disabled={!edits.canSave(detail.id, "type")} {busy} oncancel={cancelType} />
+        <EditButtons saving={typeSaving} disabled={!edits.canSave(detail.id, "type")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelType} />
         {#if typeError}
           <EditError
             error={typeError}
+            field="type"
             draft={typeEdit.draft}
             {busy}
+            reason={edits.lockNotice(detail.id)}
             onretry={() => void commitType(typeError.kind === "conflict" ? "mine" : "retry")}
-            ondismiss={() => (typeError.kind === "conflict" ? cancelType() : edits.dismissError(detail.id, "type"))}
+            ondismiss={() => (typeError.kind === "conflict" ? cancelType() : dismissTypeError())}
           />
         {/if}
       </form>

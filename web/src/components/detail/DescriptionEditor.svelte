@@ -39,6 +39,12 @@
     edits.cancel(detail.id, "description");
     onfinish();
   }
+
+  /** Dismiss on the error panel removes the button that had focus: back to the textarea. */
+  function dismissError(): void {
+    edits.dismissError(detail.id, "description");
+    void refocus(() => textarea);
+  }
 </script>
 
 {#if session}
@@ -52,7 +58,8 @@
     <textarea
       class="ta"
       aria-label="Description"
-      aria-describedby="desc-help-{detail.id}"
+      aria-describedby={problem ? `desc-help-${detail.id} desc-hint-${detail.id}` : `desc-help-${detail.id}`}
+      aria-invalid={problem ? "true" : undefined}
       spellcheck="true"
       value={session.draft}
       readonly={busy}
@@ -68,15 +75,17 @@
       }}
     ></textarea>
     <p class="help" id="desc-help-{detail.id}">Markdown. Leading blank lines and trailing whitespace are dropped when saved.</p>
-    {#if problem}<p class="hint">{problem}</p>{/if}
-    <EditButtons {saving} disabled={!edits.canSave(detail.id, "description")} {busy} oncancel={cancel} />
+    {#if problem}<p class="hint" id="desc-hint-{detail.id}">{problem}</p>{/if}
+    <EditButtons {saving} disabled={!edits.canSave(detail.id, "description")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancel} />
     {#if error}
       <EditError
         {error}
+        field="description"
         draft={session.draft}
         {busy}
+        reason={edits.lockNotice(detail.id)}
         onretry={() => void commit(error.kind === "conflict" ? "mine" : "retry")}
-        ondismiss={() => (error.kind === "conflict" ? cancel() : edits.dismissError(detail.id, "description"))}
+        ondismiss={() => (error.kind === "conflict" ? cancel() : dismissError())}
       />
     {/if}
   </form>

@@ -5,8 +5,9 @@
 </script>
 
 <!-- The container is always mounted, so its live region exists before the first toast arrives:
-     screen readers announce what is added to one that was already there. -->
-<div class="toasts" aria-live="polite" aria-label="Notifications">
+     screen readers announce what is added to one that was already there. role="log" (implicitly
+     polite) so that the aria-label counts: a name on a role-less div is ignored. -->
+<div class="toasts" role="log" aria-live="polite" aria-label="Notifications">
   {#each toasts.items as t (t.id)}
     <div class="toast" data-kind={t.kind} role={t.kind === "danger" ? "alert" : undefined}>
       <span class="ic" aria-hidden="true">{icon[t.kind]}</span>

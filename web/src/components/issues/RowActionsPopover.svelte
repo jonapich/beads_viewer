@@ -145,15 +145,46 @@
     <button type="button" class="opt" disabled={!st.closeCandidate} onclick={() => oncandidate(!st.isCandidate)}>
       {st.isCandidate ? "Remove close-candidate" : "Mark close-candidate"}
     </button>
-    <button type="button" class="opt" disabled={!st.approve} title={st.approve ? "" : SIGNOFF_ONLY_TITLE} onclick={onapprove}>
+    <!-- A refused option is aria-disabled, not disabled: it stays reachable by keyboard, so its reason
+         (the tooltip, and the hidden text that aria-describedby names) is announced. -->
+    <button
+      type="button"
+      class="opt"
+      aria-disabled={st.approve ? undefined : "true"}
+      aria-describedby={st.approve ? undefined : "pop-why-signoff"}
+      title={st.approve ? "" : SIGNOFF_ONLY_TITLE}
+      onclick={() => {
+        if (st.approve) onapprove();
+      }}
+    >
       Approve
     </button>
-    <button type="button" class="opt" disabled={!st.dispute} title={st.dispute ? "" : SIGNOFF_ONLY_TITLE} onclick={ondispute}>
+    <button
+      type="button"
+      class="opt"
+      aria-disabled={st.dispute ? undefined : "true"}
+      aria-describedby={st.dispute ? undefined : "pop-why-signoff"}
+      title={st.dispute ? "" : SIGNOFF_ONLY_TITLE}
+      onclick={() => {
+        if (st.dispute) ondispute();
+      }}
+    >
       Dispute…
     </button>
-    <button type="button" class="opt" disabled={!st.answer} title={st.answer ? "" : ANSWER_ONLY_TITLE} onclick={onanswer}>
+    <button
+      type="button"
+      class="opt"
+      aria-disabled={st.answer ? undefined : "true"}
+      aria-describedby={st.answer ? undefined : "pop-why-answer"}
+      title={st.answer ? "" : ANSWER_ONLY_TITLE}
+      onclick={() => {
+        if (st.answer) onanswer();
+      }}
+    >
       Answer…
     </button>
+    {#if !st.approve || !st.dispute}<span class="sr" id="pop-why-signoff">{SIGNOFF_ONLY_TITLE}</span>{/if}
+    {#if !st.answer}<span class="sr" id="pop-why-answer">{ANSWER_ONLY_TITLE}</span>{/if}
   {/if}
 </div>
 
@@ -238,11 +269,23 @@
     text-align: left;
     cursor: pointer;
   }
-  .opt:hover:not(:disabled) {
+  .opt:hover:not(:disabled):not([aria-disabled="true"]) {
     background: var(--bg-hover);
   }
-  .opt:disabled {
+  .opt:disabled,
+  .opt[aria-disabled="true"] {
     color: var(--text-faint);
     cursor: not-allowed;
+  }
+  .opt:focus-visible {
+    background: var(--bg-hover);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

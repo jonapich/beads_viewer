@@ -104,6 +104,14 @@ export function clip(text: string, max = 90): string {
 
 const statusLabel = (status: string): string => PILL_NAME[status as PillStatus] ?? status;
 
+/** A field's value as the panels show it to a person: a status by its label ("In progress"), the rest as is. */
+export function displayValue(field: EditField, value: string): string {
+  return field === "status" ? statusLabel(value) : value;
+}
+
+/** Why Save, Retry and Save mine are off while the post-warning lock holds (see IssueEdits.locked). */
+export const LOCK_NOTICE = "Saved, but the issue couldn't be reloaded. Editing is off until it reloads.";
+
 function body(field: EditField, value: string, base: string): IssuePatchRequest {
   switch (field) {
     case "title":
@@ -174,6 +182,11 @@ export class IssueEdits {
   /** The last write landed but the detail is still the snapshot it started from: editing would offer a stale value. */
   locked(id: string): boolean {
     return noteHolds(this.staleAt[id], this.env.current(id)?.updated_at ?? "");
+  }
+
+  /** What to tell the user while `locked` holds, "" otherwise: the reason Save, Retry and Save mine are off. */
+  lockNotice(id: string): string {
+    return this.locked(id) ? LOCK_NOTICE : "";
   }
 
   /** Whether an editor can be opened now. */

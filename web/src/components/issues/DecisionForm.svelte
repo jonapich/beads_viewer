@@ -25,19 +25,57 @@
   const recommended = $derived(options.find((o) => o.recommended)?.key ?? "");
   const chosenKey = $derived(options.some((o) => o.key === option) ? option : recommended);
   const chosen = $derived(options.find((o) => o.key === chosenKey) ?? null);
+  // The one Tab stop of the radio group: the checked option, else the first.
+  const tabKey = $derived(chosen ? chosen.key : (options[0]?.key ?? ""));
   const hasText = $derived(text.trim() !== "");
   const long = $derived(tooLong(text));
   const ready = $derived((chosen !== null || hasText) && !long);
   const inert = $derived(busy || disabled);
+  const noteWord = $derived(options.length > 0 ? "note" : "answer");
 
   function post(): void {
     onanswer({ ...(chosen ? { option: chosen.key } : {}), ...(hasText ? { text } : {}) });
+  }
+
+  // The ARIA radio pattern: the checked option is the one Tab stop, and the arrow keys move the
+  // choice (and focus) to the next or previous option, wrapping around; Home and End jump to the ends.
+  function onRadioKey(e: KeyboardEvent): void {
+    const radios = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')];
+    const at = radios.findIndex((r) => r === document.activeElement);
+    if (at < 0 || radios.length === 0) return;
+    let to: number;
+    switch (e.key) {
+      case "ArrowDown":
+      case "ArrowRight":
+        to = (at + 1) % radios.length;
+        break;
+      case "ArrowUp":
+      case "ArrowLeft":
+        to = (at - 1 + radios.length) % radios.length;
+        break;
+      case "Home":
+        to = 0;
+        break;
+      case "End":
+        to = radios.length - 1;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    const next = radios[to];
+    const key = next?.dataset["key"];
+    if (!next || key === undefined) return;
+    onoption(key);
+    next.focus({ preventScroll: true });
   }
 </script>
 
 <div class="df" data-issue={issueId}>
   {#if options.length > 0}
-    <div class="opts" role="radiogroup" aria-label="Options">
+    <!-- The group itself is not a Tab stop: focus sits on its radios (roving tabindex), and the keys bubble up here. -->
+    <!-- svelte-ignore a11y_interactive_supports_focus -->
+    <div class="opts" role="radiogroup" aria-label="Options" onkeydown={onRadioKey}>
       {#each options as o (o.key)}
         <button
           type="button"
@@ -45,6 +83,8 @@
           class:on={o.key === chosenKey}
           role="radio"
           aria-checked={o.key === chosenKey}
+          tabindex={o.key === tabKey ? 0 : -1}
+          data-key={o.key}
           disabled={inert}
           onclick={() => onoption(o.key)}
         >
@@ -64,10 +104,12 @@
     rows="3"
     maxlength={MAX_TEXT}
     disabled={inert}
+    aria-invalid={long ? "true" : undefined}
+    aria-describedby={long ? `answer-long-${issueId}` : undefined}
     value={text}
     oninput={(e) => ontext(e.currentTarget.value)}
   ></textarea>
-  {#if long}<p class="warn" role="alert">Too long: the note can be at most {MAX_TEXT} bytes.</p>{/if}
+  {#if long}<p class="warn" id="answer-long-{issueId}" role="alert">Too long: the {noteWord} can be at most {MAX_TEXT} bytes.</p>{/if}
   {#if ready}
     <p class="prev">
       Posts: <code>{decisionComment(chosen, text)}</code> · removes <code>{decision.label}</code>

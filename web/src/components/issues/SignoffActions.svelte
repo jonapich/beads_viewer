@@ -47,10 +47,12 @@
       maxlength={MAX_TEXT}
       placeholder="What is wrong or missing?"
       disabled={inert}
+      aria-invalid={long ? "true" : undefined}
+      aria-describedby={long ? `dispute-long-${issueId}` : undefined}
       value={note}
       oninput={(e) => onnote(e.currentTarget.value)}
     ></textarea>
-    {#if long}<p class="warn" role="alert">Too long: the note can be at most {MAX_TEXT} bytes.</p>{/if}
+    {#if long}<p class="warn" id="dispute-long-{issueId}" role="alert">Too long: the note can be at most {MAX_TEXT} bytes.</p>{/if}
     <div class="acts">
       <button type="button" class="btn danger" disabled={inert || blank || long} onclick={() => ondispute(note)}>
         {busy ? "Saving…" : "Send dispute"}

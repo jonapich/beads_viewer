@@ -41,7 +41,17 @@ test("decision answer: the picked option and note are posted and the label is re
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pick a payment provider");
   expect(tracker.show(decision).labels).toContain("needs-decision");
 
-  await page.getByRole("radiogroup", { name: "Options" }).getByRole("radio", { name: /Stripe/ }).click();
+  const options = page.getByRole("radiogroup", { name: "Options" });
+  const stripe = options.getByRole("radio", { name: /Stripe/ });
+  await stripe.click();
+  // The arrow keys move the choice and the focus (roving tabindex); Tab does not walk the options.
+  await page.keyboard.press("ArrowDown");
+  await expect(stripe).toHaveAttribute("aria-checked", "false");
+  await expect(options.getByRole("radio", { name: /Adyen/ })).toBeFocused();
+  await expect(options.getByRole("radio", { name: /Adyen/ })).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("ArrowUp");
+  await expect(stripe).toBeFocused();
+  await expect(stripe).toHaveAttribute("aria-checked", "true");
   await page.getByLabel("Add a note (optional)").fill("e2e answer");
 
   const post = writeResponse(page, "POST", decision, "/answer");

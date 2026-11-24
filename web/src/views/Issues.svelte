@@ -217,7 +217,8 @@
 
   // ---- the row actions popover: one instance, here, because a row sits inside the virtual list's
   // transformed window, where position: fixed would be relative to the window and clipped.
-  type Pop = { kind: "prio" | "menu"; id: string; anchor: DOMRect; el: HTMLElement; from: "row" | "drawer" };
+  // `rowKey` is the opener row's own key (an issue under two parents has two rows): "" for the drawer.
+  type Pop = { kind: "prio" | "menu"; id: string; anchor: DOMRect; el: HTMLElement; from: "row" | "drawer"; rowKey: string };
   let pop = $state.raw<Pop | null>(null);
   const popItem = $derived(pop && index ? index.byId.get(pop.id) : undefined);
 
@@ -226,16 +227,36 @@
     if (pop && (!popItem || !writes)) pop = null;
   });
 
-  function togglePop(kind: Pop["kind"], id: string, el: HTMLElement, from: Pop["from"]): void {
+  function togglePop(kind: Pop["kind"], id: string, el: HTMLElement, from: Pop["from"], rowKey = ""): void {
     // The same button again closes it.
     if (pop && pop.el === el) {
       pop = null;
       return;
     }
-    pop = { kind, id, anchor: el.getBoundingClientRect(), el, from };
+    pop = { kind, id, anchor: el.getBoundingClientRect(), el, from, rowKey };
   }
-  /** Which of a row's buttons has its popover open, for aria-expanded. */
-  const rowPopKind = (id: string): "prio" | "menu" | null => (pop && pop.from === "row" && pop.id === id ? pop.kind : null);
+  /** Which of a row's buttons has its popover open, for aria-expanded. Matched by row, not issue id. */
+  const rowPopKind = (key: string): "prio" | "menu" | null => (pop && pop.from === "row" && pop.rowKey === key ? pop.kind : null);
+
+  // A live update can reorder or move rows while the popover is open, and its anchor is a rect
+  // measured at opening: measure it again from the opener (it moves with its row), or close the
+  // popover when the opener is gone (scrolled out of the window, collapsed away).
+  $effect(() => {
+    void flat.rows;
+    const p = untrack(() => pop);
+    if (!p || p.from !== "row") return;
+    void tick().then(() => {
+      if (pop !== p) return;
+      if (!p.el.isConnected) {
+        pop = null;
+        return;
+      }
+      const a = p.el.getBoundingClientRect();
+      if (a.left !== p.anchor.left || a.top !== p.anchor.top || a.width !== p.anchor.width || a.height !== p.anchor.height) {
+        pop = { ...p, anchor: a };
+      }
+    });
+  });
 
   async function closePop(restoreFocus: boolean): Promise<void> {
     const p = pop;
@@ -509,9 +530,9 @@
         onreveal={(id) => void reveal(id)}
         {writes}
         busy={actions.isBusy(r.id)}
-        onprio={(id, el) => togglePop("prio", id, el, "row")}
-        onmenu={(id, el) => togglePop("menu", id, el, "row")}
-        popKind={rowPopKind(r.id)}
+        onprio={(id, el) => togglePop("prio", id, el, "row", r.key)}
+        onmenu={(id, el) => togglePop("menu", id, el, "row", r.key)}
+        popKind={rowPopKind(r.key)}
       />
     {:else if item && r.kind === "issue"}
       <TreeRowView
@@ -527,9 +548,9 @@
         onpeek={openPeek}
         {writes}
         busy={actions.isBusy(r.id)}
-        onprio={(id, el) => togglePop("prio", id, el, "row")}
-        onmenu={(id, el) => togglePop("menu", id, el, "row")}
-        popKind={rowPopKind(r.id)}
+        onprio={(id, el) => togglePop("prio", id, el, "row", r.key)}
+        onmenu={(id, el) => togglePop("menu", id, el, "row", r.key)}
+        popKind={rowPopKind(r.key)}
       />
     {/if}
   {/if}

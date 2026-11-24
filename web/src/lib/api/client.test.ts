@@ -253,6 +253,41 @@ describe("api client writes", () => {
     expect(session.status).toBe("ok");
   });
 
+  it("falls back to http_<status> and the status text when the error body is not the envelope", async () => {
+    const bodies: [string, string][] = [
+      ["JSON without an error member", '{"detail":"nope"}'],
+      ["an error member of the wrong shape", '{"error":"nope"}'],
+      ["an error member without a message", '{"error":{"code":"conflict"}}'],
+      ["a JSON null", "null"],
+      ["malformed JSON under a JSON Content-Type", "{not json"],
+    ];
+    for (const [, body] of bodies) {
+      fetchMock.mockResolvedValueOnce(
+        new Response(body, { status: 409, statusText: "Conflict", headers: { "Content-Type": "application/json" } }),
+      );
+      await expect(postSignoff("x-1", { approve: true })).rejects.toMatchObject({
+        status: 409,
+        code: "http_409",
+        message: "Conflict",
+      });
+    }
+    // A proxy's HTML page on a write.
+    fetchMock.mockResolvedValueOnce(new Response("<html>nope</html>", { status: 502, statusText: "Bad Gateway" }));
+    await expect(putPriority("x-1", 1)).rejects.toMatchObject({ status: 502, code: "http_502", message: "Bad Gateway" });
+    expect(session.status).toBe("ok");
+  });
+
+  it("never leaves the message blank when the body is not the envelope and the status text is empty (HTTP/2)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<html>nope</html>", { status: 502 }));
+    await expect(putPriority("x-1", 1)).rejects.toMatchObject({
+      status: 502,
+      code: "http_502",
+      message: "Request failed (HTTP 502)",
+    });
+    fetchMock.mockResolvedValueOnce(new Response('{"detail":"x"}', { status: 500, headers: { "Content-Type": "application/json" } }));
+    await expect(getJSON("/api/v1/x")).rejects.toMatchObject({ status: 500, code: "http_500", message: "Request failed (HTTP 500)" });
+  });
+
   it("maps 401 on a write to signed-out and a network failure to offline", async () => {
     fetchMock.mockResolvedValueOnce(json({ error: { code: "unauthorized", message: "open the URL" } }, { status: 401 }));
     await expect(putPriority("x-1", 1)).rejects.toMatchObject({ status: 401 });

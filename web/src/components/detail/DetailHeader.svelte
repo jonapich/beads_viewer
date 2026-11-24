@@ -61,6 +61,12 @@
     void refocus(() => pencil);
   }
 
+  /** Dismiss on the error panel removes the button that had focus: back to the input. */
+  function dismissTitleError(): void {
+    edits.dismissError(detail.id, "title");
+    void refocus(() => titleInput);
+  }
+
   // ---- status: the pill is a button that opens a menu; picking a status saves it at once.
   let menu = $state.raw<{ anchor: DOMRect; el: HTMLElement } | null>(null);
   const statusSaving = $derived(edits.isSaving(detail.id, "status"));
@@ -96,6 +102,12 @@
   /** Retry or Save mine on the status panel; focus goes back to the pill (the panel's button is gone). */
   async function commitStatus(mode: "mine" | "retry"): Promise<void> {
     await (mode === "mine" ? edits.saveMine(detail.id, "status") : edits.save(detail.id, "status"));
+    void refocus(() => document.querySelector<HTMLElement>("button[data-status-anchor]"));
+  }
+
+  /** Dismiss or Discard on the status panel: the panel (and its button) is gone, focus goes back to the status pill. */
+  function dismissStatus(): void {
+    edits.cancel(detail.id, "status");
     void refocus(() => document.querySelector<HTMLElement>("button[data-status-anchor]"));
   }
 
@@ -140,6 +152,8 @@
           spellcheck="true"
           value={titleEdit.draft}
           readonly={busy}
+          aria-invalid={titleProblem ? "true" : undefined}
+          aria-describedby={titleProblem ? `title-hint-${detail.id}` : undefined}
           aria-busy={titleSaving ? "true" : undefined}
           bind:this={titleInput}
           use:autofocus
@@ -151,15 +165,17 @@
             }
           }}
         />
-        <EditButtons saving={titleSaving} disabled={!edits.canSave(detail.id, "title")} {busy} oncancel={cancelTitle} />
-        {#if titleProblem}<p class="hint">{titleProblem}</p>{/if}
+        <EditButtons saving={titleSaving} disabled={!edits.canSave(detail.id, "title")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelTitle} />
+        {#if titleProblem}<p class="hint" id="title-hint-{detail.id}">{titleProblem}</p>{/if}
         {#if titleError}
           <EditError
             error={titleError}
+            field="title"
             draft={titleEdit.draft}
             busy={busy}
+            reason={edits.lockNotice(detail.id)}
             onretry={() => void commitTitle(titleError.kind === "conflict" ? "mine" : "retry")}
-            ondismiss={() => (titleError.kind === "conflict" ? cancelTitle() : edits.dismissError(detail.id, "title"))}
+            ondismiss={() => (titleError.kind === "conflict" ? cancelTitle() : dismissTitleError())}
           />
         {/if}
       </form>
@@ -223,10 +239,12 @@
   {#if statusEdit && statusError}
     <EditError
       error={statusError}
+      field="status"
       draft={statusEdit.draft}
       {busy}
+      reason={edits.lockNotice(detail.id)}
       onretry={() => void commitStatus(statusError.kind === "conflict" ? "mine" : "retry")}
-      ondismiss={() => edits.cancel(detail.id, "status")}
+      ondismiss={dismissStatus}
     />
   {/if}
 </header>
