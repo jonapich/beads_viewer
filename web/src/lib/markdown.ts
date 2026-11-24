@@ -41,7 +41,9 @@ export function safeHref(url: string): string | null {
 // One pass over a text run (code spans are already cut out). Leftmost match wins; at one
 // position the alternatives are tried in order: **strong**, [text](url), bare URL.
 // A bare URL ends before whitespace, "<" or ")" and never on trailing punctuation.
-const TOKEN = /\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\(([^)\s]+)\)|https?:\/\/[^\s<)]+[^\s<).,;:]/g;
+// The link text and URL are length-bounded, and the text cannot hold "[": a long run of "[" would
+// otherwise rescan to the end of the line from every one of them.
+const TOKEN = /\*\*([^*\n]+)\*\*|\[([^[\]\n]{1,500})\]\(([^)\s]{1,2000})\)|https?:\/\/[^\s<)]+[^\s<).,;:]/g;
 
 function pushText(out: Inline[], v: string): void {
   if (v !== "") out.push({ t: "text", v });
@@ -86,7 +88,8 @@ const PIPE_SEP = /^\s*\|[\s:|-]+\|\s*$/;
 const FENCE = /^```/;
 
 function isCaps(l: string): boolean {
-  return /^[A-Z][A-Z0-9 /&,'-]{3,}(\s*\(.*\))?:?$/.test(l) && l.replace(/[^A-Z]/g, "").length >= 4 && l.length <= 70;
+  // The length test comes first: the pattern backtracks on a long run of spaces.
+  return l.length <= 70 && /^[A-Z][A-Z0-9 /&,'-]{3,}(\s*\(.*\))?:?$/.test(l) && l.replace(/[^A-Z]/g, "").length >= 4;
 }
 
 function isHeading(l: string): boolean {

@@ -9,9 +9,17 @@
     detail: IssueDetail;
     /** Wall-clock time for the relative "Updated ..." text; changes with every refetch. */
     now: number;
+    /** A write on this issue is in flight. */
+    busy: boolean;
+    /** The tracker (or this issue) takes no writes. */
+    readOnly: boolean;
+    /** The priority popover is open from this pill. */
+    prioOpen: boolean;
+    /** The priority pill was pressed: open the popover at it. */
+    onpickpriority: (anchor: HTMLElement) => void;
   }
 
-  let { detail, now }: Props = $props();
+  let { detail, now, busy, readOnly, prioOpen, onpickpriority }: Props = $props();
 
   const status = $derived(pillStatus(detail, now));
   const parent = $derived(detail.parent);
@@ -40,7 +48,7 @@
 
   <div class="titlerow">
     <span class="ticon"><TypeIcon type={detail.issue_type} /></span>
-    <h1 class="title">{detail.title}</h1>
+    <h1 class="title" tabindex="-1">{detail.title}</h1>
     <span class="idg">
       {detail.id}
       <button type="button" class="iconbtn" aria-label="Copy id" title="Copy id" onclick={() => void copyId()}>
@@ -54,7 +62,7 @@
     <span class="pill st" data-status={status}>
       {#if PILL_GLYPH[status]}<span aria-hidden="true">{PILL_GLYPH[status]}</span>{/if}{PILL_NAME[status]}
     </span>
-    <PriorityPill priority={detail.priority} />
+    <PriorityPill priority={detail.priority} {busy} expanded={prioOpen} disabled={readOnly} onpick={onpickpriority} />
     <span class="dt" title={absTime(detail.updated_at)}>Updated {relTime(detail.updated_at, now)}</span>
     {#if detail.status === "closed" && detail.closed_at}
       <span class="dt" title={absTime(detail.closed_at)}>· Closed {shortDate(detail.closed_at)}</span>
@@ -113,6 +121,9 @@
     line-height: 1.3;
     overflow-wrap: anywhere;
   }
+  .title:focus {
+    outline: none;
+  }
   .idg {
     display: inline-flex;
     align-items: center;
@@ -150,6 +161,10 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-3);
+  }
+  /* PriorityPill sits last in a list row (order: 9); here it keeps the DOM order: status, priority, updated. */
+  .pillrow :global(.pp) {
+    order: 0;
   }
   .dt {
     font-size: var(--text-sm);

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { IssueDetail, Link } from "../api/types";
+import type { IssueDetail, Link, SignoffItem } from "../api/types";
 import {
   absTime,
+  actionTarget,
+  isNothing,
+  isReadOnly,
+  signoffHasParts,
   blockedByMeta,
   blocksMeta,
   commentSummary,
@@ -13,6 +17,7 @@ import {
   isScalar,
   kindCounts,
   linkHost,
+  noteHolds,
   pillStatus,
   readOnlyNotice,
   relatedTag,
@@ -23,6 +28,7 @@ import {
   stageOf,
   typedLinks,
 } from "./detail";
+import { awaitsSignoff, canAnswer } from "./model";
 import { READ_ONLY_TITLE } from "./writes";
 
 describe("absTime / shortDate", () => {
@@ -251,6 +257,55 @@ describe("JSON view helpers", () => {
   it("isScalar is false only for objects and arrays", () => {
     expect([null, 1, "s", true, undefined].every(isScalar)).toBe(true);
     expect([{}, [], [1]].some(isScalar)).toBe(false);
+  });
+});
+
+describe("write gates for the page", () => {
+  const detail = (over: Partial<IssueDetail> = {}) =>
+    ({ id: "a", priority: 0, status: "closed", labels: ["x"], signoff: { state: "pending" }, ...over }) as IssueDetail;
+
+  it("actionTarget has the shape of a list row, with the sign-off state flattened", () => {
+    expect(actionTarget(detail())).toEqual({ id: "a", priority: 0, status: "closed", labels: ["x"], signoff: "pending" });
+    expect(actionTarget(detail({ signoff: undefined })).signoff).toBeUndefined();
+  });
+
+  it("feeds the same gates as a list row", () => {
+    const t = actionTarget(detail());
+    expect(awaitsSignoff(t)).toBe(true);
+    expect(canAnswer(t)).toBe(false);
+    expect(canAnswer(actionTarget(detail({ status: "open", signoff: undefined, labels: ["needs-decision"] })))).toBe(true);
+    expect(canAnswer(actionTarget(detail({ status: "closed", labels: ["needs-decision"] })))).toBe(false);
+  });
+
+  it("is read-only without write access or when the issue's own route is not writable", () => {
+    expect(isReadOnly(true, {})).toBe(false);
+    expect(isReadOnly(true, null)).toBe(false);
+    expect(isReadOnly(false, {})).toBe(true);
+    expect(isReadOnly(true, { read_only_reason: "no route" })).toBe(true);
+  });
+
+  it("noteHolds keeps the note while the detail still has the updated_at the write started with", () => {
+    expect(noteHolds("2026-03-02T10:00:00Z", "2026-03-02T10:00:00Z")).toBe(true);
+    expect(noteHolds("2026-03-02T10:00:00Z", "2026-03-02T10:05:00Z")).toBe(false);
+    expect(noteHolds(undefined, "2026-03-02T10:00:00Z")).toBe(false);
+  });
+
+  it("isNothing is for exactly one line saying nothing", () => {
+    expect(isNothing(["Nothing."])).toBe(true);
+    expect(isNothing([" nothing "])).toBe(true);
+    expect(isNothing(["Nothing", "else"])).toBe(false);
+    expect(isNothing(["Nothing was removed"])).toBe(false);
+    expect(isNothing([])).toBe(false);
+    expect(isNothing(undefined)).toBe(false);
+  });
+
+  it("signoffHasParts is false only for a sign-off with every part empty", () => {
+    const so = (over: object) => ({ id: "a", calls: [], ...over }) as unknown as SignoffItem;
+    expect(signoffHasParts(so({}))).toBe(false);
+    expect(signoffHasParts(so({ what_changed: [] }))).toBe(false);
+    expect(signoffHasParts(so({ calls: [{ call: "x" }] }))).toBe(true);
+    expect(signoffHasParts(so({ commits: ["o/r abcdef1"] }))).toBe(true);
+    expect(signoffHasParts(so({ raw: "free text" }))).toBe(false);
   });
 });
 

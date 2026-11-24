@@ -203,6 +203,28 @@ describe("parseMarkdown", () => {
     expect(blocks[2]).toEqual({ t: "pre", v: "<script>alert(1)</script>" });
   });
 
+  it("parses a long hostile line fast", () => {
+    const hostile = [
+      "AAAA" + " ".repeat(50_000) + "x",
+      "[".repeat(50_000),
+      "[a](" + "b".repeat(50_000),
+      "[" + "a".repeat(50_000) + "](x)",
+      "http://".repeat(7_000),
+      "**".repeat(25_000),
+      "`".repeat(50_000),
+      "| a ".repeat(12_000),
+      "- ".repeat(25_000),
+      "# " + "x ".repeat(25_000) + "\n" + "Q1. ".repeat(10_000),
+    ];
+    for (const line of hostile) {
+      const start = performance.now();
+      parseMarkdown(line);
+      parseMarkdown(line + "\n" + line);
+      const ms = performance.now() - start;
+      expect(ms, `${line.slice(0, 12)}... took ${Math.round(ms)} ms`).toBeLessThan(1000);
+    }
+  });
+
   it("terminates on every kind of odd input", () => {
     for (const s of ["```", "|", "| a |\n|", "-", "- ", "  ", "#", "# ", "\n\n\n", "1.", "Q1.", "  \n  x", "|a|\n|-|\n"]) {
       expect(() => parseMarkdown(s), JSON.stringify(s)).not.toThrow();

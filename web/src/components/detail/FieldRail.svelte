@@ -1,16 +1,26 @@
 <script lang="ts">
   import type { IssueDetail } from "../../lib/api/types";
-  import { absTime, linkHost, signoffPill, stageOf, typedLinks } from "../../lib/issues/detail";
-  import { CLOSE_CANDIDATE } from "../../lib/issues/writes";
+  import { absTime, linkHost, stageOf, typedLinks } from "../../lib/issues/detail";
+  import { CLOSE_CANDIDATE, READ_ONLY_TITLE } from "../../lib/issues/writes";
   import { safeHref } from "../../lib/markdown";
   import TypeIcon from "../issues/TypeIcon.svelte";
   import Field from "./Field.svelte";
+  import SignoffPill from "./SignoffPill.svelte";
 
-  let { detail }: { detail: IssueDetail } = $props();
+  interface Props {
+    detail: IssueDetail;
+    /** A write on this issue is in flight. */
+    busy: boolean;
+    /** The tracker (or this issue) takes no writes: the close-candidate chip is disabled. */
+    readOnly: boolean;
+    /** Mark (true) or unmark (false) the issue as a close candidate. */
+    oncandidate: (on: boolean) => void;
+  }
+
+  let { detail, busy, readOnly, oncandidate }: Props = $props();
 
   const labels = $derived(detail.labels.filter((l) => l !== CLOSE_CANDIDATE));
   const candidate = $derived(detail.labels.includes(CLOSE_CANDIDATE));
-  const signoff = $derived(detail.signoff ? signoffPill(detail.signoff.state) : null);
   const stage = $derived(stageOf(detail));
   const links = $derived(typedLinks(detail));
   /** The date and time without the zone: every timestamp is UTC, said once in the title. */
@@ -31,15 +41,31 @@
 
   <Field label="Labels" name="labels">
     {#each labels as l (l)}<span class="chip">{l}</span>{/each}
-    {#if candidate}<span class="chip warn">{CLOSE_CANDIDATE}</span>{/if}
-    {#if labels.length === 0 && !candidate}<span class="faint">None</span>{/if}
+    <!-- One button for both states, so it survives the toggle and keeps keyboard focus; busy is
+         aria-disabled (not disabled) for the same reason. -->
+    <button
+      type="button"
+      class="chip"
+      class:warn={candidate}
+      class:dash={!candidate}
+      class:busy
+      aria-label={CLOSE_CANDIDATE}
+      aria-pressed={candidate}
+      aria-busy={busy ? "true" : undefined}
+      aria-disabled={busy ? "true" : undefined}
+      disabled={readOnly}
+      title={readOnly ? READ_ONLY_TITLE : candidate ? `Remove ${CLOSE_CANDIDATE}` : `Mark as ${CLOSE_CANDIDATE}`}
+      onclick={() => {
+        if (!busy) oncandidate(!candidate);
+      }}
+    >
+      {#if candidate}{CLOSE_CANDIDATE} {busy ? "…" : "×"}{:else}{busy ? "…" : "+"} {CLOSE_CANDIDATE}{/if}
+    </button>
   </Field>
 
-  {#if detail.signoff && signoff}
+  {#if detail.signoff}
     <Field label="Sign-off" name="signoff">
-      <span class="pill" data-state={detail.signoff.state}>
-        {#if signoff.glyph}<span aria-hidden="true">{signoff.glyph}</span>{/if}{signoff.label}
-      </span>
+      <SignoffPill state={detail.signoff.state} />
     </Field>
   {/if}
 
@@ -102,6 +128,7 @@
       flex-direction: column;
       gap: var(--space-4);
       margin-top: 0;
+      padding-top: 0;
       border-top: 0;
       position: sticky;
       top: var(--space-4);
@@ -138,37 +165,30 @@
   a.chip:hover {
     border-color: var(--border-strong);
   }
+  button.chip {
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  button.chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  button.chip.busy {
+    opacity: 0.55;
+    cursor: progress;
+  }
+  .chip.dash {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-muted);
+  }
+  button.chip.dash:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
   .chip.warn {
     background: color-mix(in srgb, var(--warning) 16%, transparent);
     border-color: color-mix(in srgb, var(--warning) 40%, transparent);
     color: var(--warning);
-  }
-  .pill {
-    --c: var(--text-muted);
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 22px;
-    padding: 0 var(--space-2);
-    border-radius: 11px;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    line-height: 1;
-    white-space: nowrap;
-    color: var(--c);
-    background: color-mix(in srgb, var(--c) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
-  }
-  .pill[data-state="pending"] {
-    --c: var(--warning);
-  }
-  .pill[data-state="approved"] {
-    --c: var(--success);
-  }
-  .pill[data-state="disputed"] {
-    --c: var(--danger);
-  }
-  .pill[data-state="waived"] {
-    --c: var(--status-closed);
   }
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import Activity from "../components/detail/Activity.svelte";
+  import DecisionCard from "../components/detail/DecisionCard.svelte";
   import DetailHeader from "../components/detail/DetailHeader.svelte";
   import DetailSkeleton from "../components/detail/DetailSkeleton.svelte";
   import FieldRail from "../components/detail/FieldRail.svelte";
@@ -8,10 +9,17 @@
   import InlineText from "../components/detail/InlineText.svelte";
   import Markdown from "../components/detail/Markdown.svelte";
   import Relationships from "../components/detail/Relationships.svelte";
+  import ResolvedNote from "../components/detail/ResolvedNote.svelte";
   import Section from "../components/detail/Section.svelte";
-  import { designOpenByDefault, readOnlyNotice, relationshipCount } from "../lib/issues/detail";
+  import SignoffCard from "../components/detail/SignoffCard.svelte";
+  import RowActionsPopover from "../components/issues/RowActionsPopover.svelte";
+  import { postAnswer, postSignoff, putPriority, setCloseCandidate } from "../lib/api/client";
+  import { IssueActions } from "../lib/issues/actions.svelte";
+  import { actionTarget, designOpenByDefault, isReadOnly, noteHolds, readOnlyNotice, relationshipCount } from "../lib/issues/detail";
   import { DetailFeed } from "../lib/issues/detail-feed.svelte";
+  import { awaitsSignoff, canAnswer } from "../lib/issues/model";
   import { route } from "../lib/router/router.svelte";
+  import { toasts } from "../lib/toasts.svelte";
 
   const feed = new DetailFeed();
 
@@ -31,6 +39,85 @@
     return Date.now();
   });
   const notice = $derived(readOnlyNotice(feed.meta, detail));
+
+  // ---- writes: the beads-c2o.19 quick actions, the same ones the peek drawer uses.
+  // Writes need a writable tracker, and an issue whose own route is writable (the detail says why not).
+  const writes = $derived(feed.meta?.capabilities?.writes ?? false);
+  const readOnly = $derived(isReadOnly(writes, detail));
+  const actions = new IssueActions({
+    client: { postSignoff, postAnswer, putPriority, setCloseCandidate },
+    toasts,
+    writable: () => !readOnly,
+    refresh: () => feed.refresh(),
+    sticky: () => {},
+  });
+  const busy = $derived(actions.isBusy(id));
+
+  // The same gates as a list row, fed by the detail.
+  const target = $derived(detail ? actionTarget(detail) : null);
+  // "Approved just now" and the like, shown where the card was: view state, not API data.
+  type Done = "approved" | "disputed" | "answered";
+  let resolved = $state<Record<string, { kind: Done; at: string }>>({});
+  const done = $derived(detail ? resolved[detail.id] : undefined);
+
+  // The cards stay hidden behind the note while the detail is the same snapshot the write started
+  // from: after "saved, but reloading failed" the refetch changes nothing, and the action would be
+  // offered again on stale data (a second click posts a second sign-off).
+  const stale = $derived(!!detail && noteHolds(done?.at, detail.updated_at));
+  const showSignoff = $derived(!!target && !stale && awaitsSignoff(target) && !!detail?.signoff);
+  const showDecision = $derived(!!target && !stale && canAnswer(target) && !!detail?.decision);
+
+  /**
+   * A card write finished: note it, and when the control that had focus went away with the card
+   * (the dispute form, the answer form) park focus on the title, so a keyboard user stays on the page.
+   */
+  async function written(issue: string, startedAt: string, write: Promise<boolean>, kind: Done): Promise<void> {
+    if (!(await write)) return;
+    resolved[issue] = { kind, at: startedAt };
+    await tick();
+    if (!document.activeElement || document.activeElement === document.body) {
+      document.querySelector<HTMLElement>("h1.title")?.focus({ preventScroll: true });
+    }
+  }
+
+  // The priority popover: one instance, opened from the header pill.
+  type Pop = { anchor: DOMRect; el: HTMLElement };
+  let pop = $state.raw<Pop | null>(null);
+
+  // The popover goes with its issue (another one opened, or it is gone) and with write access.
+  $effect(() => {
+    void id;
+    if (pop && (readOnly || !detail)) pop = null;
+  });
+  $effect(() => {
+    void id;
+    untrack(() => (pop = null));
+  });
+
+  function togglePop(el: HTMLElement): void {
+    // The same pill again closes it.
+    if (pop && pop.el === el) {
+      pop = null;
+      return;
+    }
+    pop = { anchor: el.getBoundingClientRect(), el };
+  }
+
+  async function closePop(restoreFocus: boolean): Promise<void> {
+    const p = pop;
+    pop = null;
+    if (!restoreFocus || !p) return;
+    await tick();
+    (p.el.isConnected ? p.el : document.querySelector<HTMLElement>('[data-pop-anchor="prio"]'))?.focus({ preventScroll: true });
+  }
+
+  /** After the write has landed, put focus back on the pill unless the user moved it elsewhere. */
+  async function refocus(write: Promise<boolean>, p: Pop | null): Promise<void> {
+    await write;
+    await tick();
+    if (!p || (document.activeElement && document.activeElement !== document.body)) return;
+    (p.el.isConnected ? p.el : document.querySelector<HTMLElement>('[data-pop-anchor="prio"]'))?.focus({ preventScroll: true });
+  }
 
   // Which sections the user opened or closed, keyed by issue id and section. A refetch (every live
   // update) re-renders in place, so nothing is reset; another issue starts from the defaults.
@@ -52,9 +139,35 @@
   {#if detail}
     <!-- DOM order: header, rail, sections. The rail is rendered once; CSS moves it beside the sections on wide screens. -->
     <div class="grid">
-      <div class="head"><DetailHeader {detail} {now} /></div>
-      <div class="railcell"><FieldRail {detail} /></div>
+      <div class="head">
+        <DetailHeader {detail} {now} {busy} {readOnly} prioOpen={pop !== null} onpickpriority={togglePop} />
+      </div>
+      <div class="railcell">
+        <FieldRail {detail} {busy} {readOnly} oncandidate={(on) => void actions.setCloseCandidate(detail.id, on)} />
+      </div>
       <div class="main">
+        {#if showSignoff && detail.signoff}
+          <SignoffCard
+            id={detail.id}
+            signoff={detail.signoff}
+            {actions}
+            {readOnly}
+            onwrite={(write, kind) => void written(detail.id, detail.updated_at, write, kind)}
+          />
+        {:else if showDecision && detail.decision}
+          <DecisionCard
+            id={detail.id}
+            issueTitle={detail.title}
+            decision={detail.decision}
+            {actions}
+            {readOnly}
+            onwrite={(write, kind) => void written(detail.id, detail.updated_at, write, kind)}
+          />
+        {:else if done}
+          <ResolvedNote kind={done.kind} followUp={actions.followUps[detail.id]} />
+        {/if}
+
+
         {#if detail.status === "closed" && detail.close_reason}
           <Section name="resolution" title="Resolution" bind:open={() => isOpen("resolution", true), (v) => setOpen("resolution", v)}>
             <p class="resolution"><InlineText src={detail.close_reason} /></p>
@@ -113,6 +226,28 @@
   {:else}
     <DetailSkeleton />
   {/if}
+
+  {#if pop && detail && !readOnly}
+    {#key detail.id}
+      <RowActionsPopover
+        kind="prio"
+        item={actionTarget(detail)}
+        anchor={pop.anchor}
+        writes={!readOnly}
+        onclose={(restore) => void closePop(restore)}
+        onpriority={(p) => {
+          const issue = detail.id;
+          const from = pop;
+          void closePop(true);
+          void refocus(actions.setPriority(issue, p), from);
+        }}
+        oncandidate={() => {}}
+        onapprove={() => {}}
+        ondispute={() => {}}
+        onanswer={() => {}}
+      />
+    {/key}
+  {/if}
 </div>
 
 <style>
@@ -160,8 +295,6 @@
       grid-column: 2;
       grid-row: 2;
       margin-top: var(--space-4);
-      padding-top: var(--space-4);
-      border-top: 1px solid var(--border);
     }
   }
   .resolution {

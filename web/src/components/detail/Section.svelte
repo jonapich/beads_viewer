@@ -7,7 +7,11 @@
     title: string;
     count?: number;
     open?: boolean;
-    /** Controls on the right of the header (the Edit button of a text field). Nothing is rendered when absent. */
+    /**
+     * Controls on the right of the header (the Edit button of a text field, beads-c2o.14). Rendered
+     * beside the <summary>, not inside it: a summary is itself a button, and a control inside a
+     * button is not reachable by every assistive technology. Nothing is rendered when absent.
+     */
     actions?: Snippet;
     children: Snippet;
   }
@@ -15,18 +19,21 @@
   let { name, title, count, open = $bindable(true), actions, children }: Props = $props();
 </script>
 
-<details class="sec" data-sec={name} bind:open>
-  <summary>
-    <svg class="chev" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2l4 4-4 4" /></svg>
-    <span>{title}</span>
-    {#if count !== undefined}<span class="cnt">{count}</span>{/if}
-    {#if actions}<span class="sumact">{@render actions()}</span>{/if}
-  </summary>
-  <div class="body">{@render children()}</div>
-</details>
+<div class="secw">
+  {#if actions}<div class="sumact">{@render actions()}</div>{/if}
+  <details class="sec" data-sec={name} bind:open>
+    <summary>
+      <svg class="chev" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2l4 4-4 4" /></svg>
+      <span>{title}</span>
+      {#if count !== undefined}<span class="cnt">{count}</span>{/if}
+    </summary>
+    <div class="body">{@render children()}</div>
+  </details>
+</div>
 
 <style>
-  .sec {
+  .secw {
+    position: relative;
     border-top: 1px solid var(--border);
   }
   summary {
@@ -60,11 +67,16 @@
     line-height: 18px;
     color: var(--text-muted);
   }
+  /* Over the right end of the summary row (the same 36px), clear of the summary itself. */
   .sumact {
-    margin-left: auto;
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 36px;
     display: flex;
     gap: var(--space-2);
     align-items: center;
+    font-size: var(--text-base);
     font-weight: 400;
   }
   .body {

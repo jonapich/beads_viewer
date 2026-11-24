@@ -32,10 +32,9 @@
 </script>
 
 {#snippet actions()}
-  <!-- preventDefault: a click inside <summary> would also toggle the section. -->
-  <button type="button" class="link" onclick={(e) => { e.preventDefault(); setAll(true); }}>Expand all</button>
+  <button type="button" class="link" onclick={() => setAll(true)}>Expand all</button>
   <span class="faint">·</span>
-  <button type="button" class="link" onclick={(e) => { e.preventDefault(); setAll(false); }}>Collapse all</button>
+  <button type="button" class="link" onclick={() => setAll(false)}>Collapse all</button>
 {/snippet}
 
 <Section name="activity" title="Activity" count={detail.comments.length} bind:open {actions}>

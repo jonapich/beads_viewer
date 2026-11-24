@@ -6,7 +6,7 @@
   interface Props {
     /** "prio": the priority pills only. "menu": the pills plus close-candidate, sign-off and answer. */
     kind: "prio" | "menu";
-    item: ListItem;
+    item: Pick<ListItem, "id" | "priority" | "status" | "labels" | "signoff">;
     /** The pressed pill or "..." button, to open next to. */
     anchor: DOMRect;
     /** The tracker takes writes. The popover is only opened for writable trackers; this keeps its buttons honest. */

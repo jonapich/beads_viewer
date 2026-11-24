@@ -34,7 +34,7 @@ export interface ActionState {
   answer: boolean;
 }
 
-export function actionState(item: ListItem, writes: boolean): ActionState {
+export function actionState(item: Pick<ListItem, "labels" | "status" | "signoff">, writes: boolean): ActionState {
   return {
     priority: writes,
     closeCandidate: writes,

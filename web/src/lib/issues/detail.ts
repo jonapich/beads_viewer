@@ -1,6 +1,6 @@
 // Pure rules of the full-page issue detail view (views/IssueDetail.svelte). Everything
 // the page decides from the API's IssueDetail lives here so it is unit-tested.
-import type { BlockerCounts, IssueComment, IssueDetail, Link, MetaResponse, RelatedRef } from "../api/types";
+import type { BlockerCounts, IssueComment, IssueDetail, Link, ListItem, MetaResponse, RelatedRef, SignoffItem } from "../api/types";
 import { displayStatus, type DisplayStatus } from "./model";
 import { READ_ONLY_TITLE } from "./writes";
 
@@ -250,4 +250,41 @@ export function relationshipCount(
   d: Pick<IssueDetail, "parent" | "children" | "blocked_by" | "blocks" | "related">,
 ): number {
   return (d.parent ? 1 : 0) + d.children.length + d.blocked_by.length + d.blocks.length + d.related.length;
+}
+
+/**
+ * The slice of the issue the shared write gates (actionState, awaitsSignoff, canAnswer) and the
+ * priority popover read, the same shape a list row has, so the drawer and the page cannot drift.
+ */
+export function actionTarget(d: IssueDetail): Pick<ListItem, "id" | "priority" | "status" | "labels" | "signoff"> {
+  return { id: d.id, priority: d.priority, status: d.status, labels: d.labels, signoff: d.signoff?.state };
+}
+
+/** Writes need a writable tracker and an issue whose own route is writable (the detail says why not). */
+export function isReadOnly(writes: boolean, d: Pick<IssueDetail, "read_only_reason"> | null): boolean {
+  return !writes || !!d?.read_only_reason;
+}
+
+/** A "removed or renamed" part that just says nothing was: drawn faint. */
+export function isNothing(lines: readonly string[] | undefined): boolean {
+  return lines?.length === 1 && /^nothing\.?$/i.test((lines[0] ?? "").trim());
+}
+
+/** The sign-off comment filled at least one of the card's parts (else its raw text is shown). */
+export function signoffHasParts(so: SignoffItem): boolean {
+  return (
+    so.calls.length > 0 ||
+    [so.calls_made, so.what_changed, so.removed_or_renamed, so.where_to_see, so.captures, so.commits].some((p) => (p?.length ?? 0) > 0)
+  );
+}
+
+/**
+ * Whether the "done" note must keep standing in for a sign-off or answer card: the write was
+ * accepted ("saved, but reloading the tracker failed" included) and the detail still has the
+ * `updated_at` it had when the write started, so it is the same stale snapshot and the action
+ * would be offered again. A newer updated_at (the refetch landed, or someone changed it since)
+ * lets the card back.
+ */
+export function noteHolds(resolvedAt: string | undefined, updatedAt: string): boolean {
+  return resolvedAt !== undefined && resolvedAt === updatedAt;
 }

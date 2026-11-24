@@ -39,6 +39,8 @@ export class IssueActions {
   /** The issue whose dispute note form is open, if any. */
   disputeOpen = $state<string | null>(null);
   private drafts = $state.raw<Readonly<Record<string, string>>>({});
+  /** The follow-up bead a dispute filed, by disputed issue id (the full-page view links to it). */
+  followUps = $state.raw<Readonly<Record<string, string>>>({});
 
   private readonly env: ActionsEnv;
 
@@ -122,7 +124,10 @@ export class IssueActions {
     const ok = await this.run(
       id,
       () => this.env.client.postSignoff(id, { approve: false, note: text }),
-      (r) => (r.created_id ? `Disputed ${id} (follow-up ${r.created_id} filed)` : `Disputed ${id}`),
+      (r) => {
+        if (r.created_id) this.followUps = { ...this.followUps, [id]: r.created_id };
+        return r.created_id ? `Disputed ${id} (follow-up ${r.created_id} filed)` : `Disputed ${id}`;
+      },
     );
     if (ok) {
       this.dropDrafts(noteKey(id));

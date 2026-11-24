@@ -73,12 +73,12 @@ export function isBlockedAny(item: ListItem): boolean {
 }
 
 /** Labelled needs-decision or needs-design: waiting for the user. */
-export function needsAnswer(item: ListItem): boolean {
+export function needsAnswer(item: Pick<ListItem, "labels">): boolean {
   return item.labels.includes("needs-decision") || item.labels.includes("needs-design");
 }
 
 /** A closed issue whose sign-off is still pending. */
-export function awaitsSignoff(item: ListItem): boolean {
+export function awaitsSignoff(item: Pick<ListItem, "status" | "signoff">): boolean {
   return item.status === "closed" && item.signoff === "pending";
 }
 
@@ -87,6 +87,6 @@ export function awaitsSignoff(item: ListItem): boolean {
  * applies. The server sends no decision for a closed issue, and an answer would be
  * refused (409), so a closed issue that still carries the label is not answerable.
  */
-export function canAnswer(item: ListItem): boolean {
+export function canAnswer(item: Pick<ListItem, "status" | "labels">): boolean {
   return item.status !== "closed" && needsAnswer(item);
 }

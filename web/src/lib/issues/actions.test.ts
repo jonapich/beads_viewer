@@ -105,6 +105,17 @@ describe("IssueActions", () => {
     expect(log).toContain("refresh");
   });
 
+  it("remembers the follow-up a dispute filed, per disputed issue", async () => {
+    const { actions } = setup({
+      client: { postSignoff: vi.fn(async (id: string) => resp(id === "x-1" ? { created_id: "x-9" } : {})) },
+    });
+    expect(actions.followUps).toEqual({});
+    await actions.dispute("x-1", "wrong");
+    await actions.dispute("x-2", "also wrong");
+    await actions.approve("x-3");
+    expect(actions.followUps).toEqual({ "x-1": "x-9" });
+  });
+
   it("refuses a blank dispute note without a request", async () => {
     const { actions, client } = setup();
     await expect(actions.dispute("x-1", "  \n ")).resolves.toBe(false);
