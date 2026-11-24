@@ -65,6 +65,10 @@ type Config struct {
 
 	// writeTimeout bounds one tracker write; 0 means defaultWriteTimeout.
 	writeTimeout time.Duration
+
+	// now is the clock GET /api/v1/pipeline measures staleness against; nil means
+	// time.Now. Tests pin it.
+	now func() time.Time
 }
 
 // NewHandler returns the complete `bv serve` handler: guard, headers, /auth,
@@ -141,6 +145,12 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSearch(w, r)
 	case "/api/v1/signoff":
 		s.handleSignoff(w, r)
+	case "/api/v1/inbox":
+		s.handleInbox(w, r)
+	case "/api/v1/pipeline":
+		s.handlePipeline(w, r)
+	case "/api/v1/slice-metrics":
+		s.handleSliceMetrics(w, r)
 	case "/api/v1/triage":
 		s.handleTriage(w, r)
 	case "/api/v1/insights":

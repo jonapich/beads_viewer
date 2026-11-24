@@ -27,6 +27,15 @@ export interface Manifest {
   conflict: string;
   /** "Live target": changed from outside while the page is open. */
   live: string;
+  /** "Desk question one" and "Desk question two": needs-decision; the agent desk answer flow owns them. */
+  deskA: string;
+  deskB: string;
+  /** "Desk sign-off target": closed and awaiting sign-off; the desk approve target. */
+  deskSignoff: string;
+  /** "Claimed target": claimed, stage code; the only row of the desk Pipeline tab. */
+  claimed: string;
+  /** "Sliced target": carries slice_outcome metadata; the only row of the desk Metrics tab. */
+  sliced: string;
 }
 
 export const TITLES: Record<keyof Manifest, string> = {
@@ -41,6 +50,11 @@ export const TITLES: Record<keyof Manifest, string> = {
   edit: "Edit target",
   conflict: "Conflict target",
   live: "Live target",
+  deskA: "Desk question one",
+  deskB: "Desk question two",
+  deskSignoff: "Desk sign-off target",
+  claimed: "Claimed target",
+  sliced: "Sliced target",
 };
 
 /** Runs bd in `dir` and returns stdout. Throws (with bd's output in the message) on a non-zero exit. */
@@ -111,6 +125,20 @@ const DECISION_DESCRIPTION = [
   "C: Braintree: already in the legacy stack",
 ].join("\n");
 
+const DESK_DESCRIPTION = (question: string): string =>
+  [question, "", `Question: ${question}`, "", "A (recommended): Go ahead", "B: Hold off"].join("\n");
+
+const SLICE_METADATA = JSON.stringify({
+  slice_outcome: "committed",
+  review_rounds: 1,
+  test_runs: 3,
+  test_red_runs: 1,
+  slice_wall_minutes: 20,
+  coder_tokens: 12000,
+  reviewer_tokens: 3000,
+  other_agent_tokens: 0,
+});
+
 /**
  * Creates the fixture tracker in `dir` (a git repo, with an embedded-Dolt bd database) and exports
  * it. Returns the role -> id manifest. ~25 bd calls.
@@ -136,15 +164,25 @@ export function buildFixture(bdExe: string, dir: string): Manifest {
   const conflict = create(TITLES.conflict, "--type", "task");
   const live = create(TITLES.live, "--type", "task");
 
+  // The agent desk (beads-c2o.11): its own beads, so the answer and approve flows there do not race the ones above.
+  const deskA = create(TITLES.deskA, "--type", "task", "--label", "needs-decision", "--description", DESK_DESCRIPTION("Ship the beta this week?"));
+  const deskB = create(TITLES.deskB, "--type", "task", "--label", "needs-decision", "--description", DESK_DESCRIPTION("Rename the export flag?"));
+  const deskSignoff = create(TITLES.deskSignoff, "--type", "task", "--label", "needs-signoff");
+  const claimed = create(TITLES.claimed, "--type", "task");
+  const sliced = create(TITLES.sliced, "--type", "task", "--metadata", SLICE_METADATA);
+
   bd(bdExe, dir, "dep", "add", payform, cart);
   bd(bdExe, dir, "comments", "add", payform, "--kind", "brief", "Brief: the payment form must support saved cards.");
   bd(bdExe, dir, "comments", "add", payform, "Plain comment: pushed a fixup.");
   bd(bdExe, dir, "comments", "add", signoff, "--kind", "signoff", SIGNOFF_COMMENT);
+  bd(bdExe, dir, "comments", "add", deskSignoff, "--kind", "signoff", SIGNOFF_COMMENT);
   bd(bdExe, dir, "close", signoff, "--reason", "Shipped.");
+  bd(bdExe, dir, "close", deskSignoff, "--reason", "Shipped.");
+  bd(bdExe, dir, "update", claimed, "--claim", "--stage", "code");
   bd(bdExe, dir, "close", oldtask, "--reason", "Done.");
 
   exportJsonl(bdExe, dir);
-  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live };
+  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live, deskA, deskB, deskSignoff, claimed, sliced };
 }
 
 /**

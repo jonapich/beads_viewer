@@ -1,0 +1,23 @@
+{
+  "epics": [],
+  "total": {
+    "coder_tokens": 0,
+    "committed": 0,
+    "epic": "all",
+    "escaped_bugs": 0,
+    "first_pass_approvals": 0,
+    "followup_beads": 0,
+    "other_agent_tokens": 0,
+    "review_blocking": 0,
+    "review_rounds": 0,
+    "reviewer_tokens": 0,
+    "slice_wall_minutes": 0,
+    "slices": 0,
+    "slices_with_unknown_tokens": 0,
+    "stopped": 0,
+    "test_red_runs": 0,
+    "test_runs": 0,
+    "test_timeouts": 0,
+    "test_wall_minutes": 0
+  }
+}

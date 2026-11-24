@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Dicklesworthstone/beads_viewer/pkg/agentdesk"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/snapshot"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/tracker"
 )
@@ -43,6 +44,7 @@ func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 	snap := v.Snap
+	awaiting, signoffs := agentdesk.BadgeCounts(snap.Issues)
 	m := MetaResponse{
 		Version:             s.cfg.Version,
 		DataHash:            snap.DataHash,
@@ -70,6 +72,9 @@ func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 			Ready:   snap.CountReady,
 			Blocked: snap.CountBlocked,
 			Closed:  snap.CountClosed,
+
+			Awaiting:       awaiting,
+			SignoffPending: signoffs,
 		},
 		Capabilities: MetaCaps{Writes: writable(snap), Events: s.cfg.Store.Watching()},
 		Generation:   v.Gen,

@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -122,21 +121,7 @@ func (m *Model) deskBadgeCounts() (awaiting, signoffs int) {
 		return c.awaiting, c.signoffs
 	}
 	*c = deskBadgeCache{valid: true, gen: m.semanticDataGeneration, first: first, n: len(issues)}
-	for i := range issues {
-		issue := issues[i]
-		if model.IsClosedLikeStatus(issue.Status) {
-			if agentdesk.SignoffState(issue) == agentdesk.SignoffPending {
-				c.signoffs++
-			}
-			continue
-		}
-		for _, l := range agentdesk.AwaitingLabels {
-			if slices.Contains(issue.Labels, l) {
-				c.awaiting++
-				break
-			}
-		}
-	}
+	c.awaiting, c.signoffs = agentdesk.BadgeCounts(issues)
 	return c.awaiting, c.signoffs
 }
 

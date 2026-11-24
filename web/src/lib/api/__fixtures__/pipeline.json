@@ -1,0 +1,51 @@
+{
+  "by_stage": {
+    "code": 1,
+    "review": 1,
+    "unstaged": 1
+  },
+  "generated_at": "2026-03-10T12:00:00Z",
+  "rows": [
+    {
+      "claimed_at": "2026-03-02T10:00:00Z",
+      "epic": "fx-epic",
+      "holder": "grace",
+      "id": "fx-c",
+      "last_activity": "2026-03-02T10:00:00Z",
+      "stage_age": "8d2h",
+      "stage_age_seconds": 698400,
+      "stage_since": "2026-03-02T10:00:00Z",
+      "stale": true,
+      "stale_reason": "no activity for 8d2h",
+      "title": "Receipt email"
+    },
+    {
+      "epic": "fx-epic",
+      "holder": "ada",
+      "id": "fx-a",
+      "last_activity": "2026-03-10T10:30:00Z",
+      "session": "s-fx-a",
+      "stage": "code",
+      "stage_age": "1h30m",
+      "stage_age_seconds": 5400,
+      "stage_since": "2026-03-10T10:30:00Z",
+      "stale": false,
+      "title": "Cart model"
+    },
+    {
+      "holder": "lead",
+      "id": "fx-cy1",
+      "last_activity": "2026-03-10T11:20:00Z",
+      "lease_expires_at": "2026-03-10T12:12:00Z",
+      "stage": "review",
+      "stage_age": "40m",
+      "stage_age_seconds": 2400,
+      "stage_since": "2026-03-10T11:20:00Z",
+      "stale": false,
+      "title": "Cycle one"
+    }
+  ],
+  "stale": 1,
+  "stale_after": "2h",
+  "total": 3
+}

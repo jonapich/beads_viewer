@@ -5,10 +5,12 @@
     "writes": false
   },
   "counts": {
+    "awaiting": 1,
     "blocked": 0,
     "closed": 1,
     "open": 11,
-    "ready": 7
+    "ready": 7,
+    "signoff_pending": 1
   },
   "data_hash": "0415b8c49b8875541576adcdbd0748d446501afe574fdda14b9705c0699a314a",
   "generation": 1,

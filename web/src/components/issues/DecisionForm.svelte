@@ -9,6 +9,8 @@
     busy: boolean;
     /** The tracker (or this issue) takes no writes. */
     disabled: boolean;
+    /** Why the form cannot be used although the tracker takes writes (the agent desk: nothing to judge yet); shown as a hint. */
+    blocked?: string;
     /** The picked option's key, "" when the user has not picked; the recommended one stands in then. */
     option: string;
     /** The unsent note or answer; the owner keeps both, so they survive a re-render. */
@@ -18,7 +20,7 @@
     onanswer: (answer: { option?: string; text?: string }) => void;
   }
 
-  let { issueId, decision, busy, disabled, option, text, onoption, ontext, onanswer }: Props = $props();
+  let { issueId, decision, busy, disabled, blocked = "", option, text, onoption, ontext, onanswer }: Props = $props();
 
   const options = $derived(decision.options);
   // The TUI starts its cursor on the recommended option; so does this.
@@ -30,7 +32,7 @@
   const hasText = $derived(text.trim() !== "");
   const long = $derived(tooLong(text));
   const ready = $derived((chosen !== null || hasText) && !long);
-  const inert = $derived(busy || disabled);
+  const inert = $derived(busy || disabled || blocked !== "");
   const noteWord = $derived(options.length > 0 ? "note" : "answer");
 
   function post(): void {
@@ -115,7 +117,8 @@
       Posts: <code>{decisionComment(chosen, text)}</code> · removes <code>{decision.label}</code>
     </p>
   {/if}
-  <button type="button" class="btn primary" disabled={inert || !ready} title={disabled ? READ_ONLY_TITLE : ""} onclick={post}>
+  {#if blocked}<p class="faint">{blocked}</p>{/if}
+  <button type="button" class="btn primary" disabled={inert || !ready} title={disabled ? READ_ONLY_TITLE : blocked} onclick={post}>
     {busy ? "Saving…" : "Post answer"}
   </button>
 </div>

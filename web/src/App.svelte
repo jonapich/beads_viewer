@@ -4,6 +4,7 @@
   import Nav from "./components/Nav.svelte";
   import SignedOut from "./components/SignedOut.svelte";
   import Toasts from "./components/Toasts.svelte";
+  import { startNavCounts } from "./lib/desk/nav-counts.svelte";
   import { refreshHealth } from "./lib/health";
   import { startLive } from "./lib/live.svelte";
   import { route, startRouter } from "./lib/router/router.svelte";
@@ -17,6 +18,7 @@
     const stopTheme = startTheme();
     const stopRouter = startRouter(routes);
     const stopLive = startLive();
+    const stopNavCounts = startNavCounts();
     // A restarted server means a new token, so re-check when the tab returns.
     const onVisible = () => {
       if (document.visibilityState === "visible") void refreshHealth();
@@ -26,6 +28,7 @@
     return () => {
       stopTheme();
       stopRouter();
+      stopNavCounts();
       stopLive();
       document.removeEventListener("visibilitychange", onVisible);
     };

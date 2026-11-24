@@ -4,14 +4,17 @@
 import type {
   ApiErrorBody,
   HealthResponse,
+  InboxResponse,
   IssueDetail,
   InsightsResponse,
   IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
+  PipelineResponse,
   PlanResponse,
   SearchResponse,
   SignoffResponse,
+  SliceMetricsResponse,
   SnapshotEvent,
   TriageResponse,
   WriteResponse,
@@ -28,6 +31,12 @@ import issueDetail from "./__fixtures__/issue-detail.json";
 import issueDetailDecision from "./__fixtures__/issue-detail-decision.json";
 import issueDetailSignoff from "./__fixtures__/issue-detail-signoff.json";
 import signoff from "./__fixtures__/signoff.json";
+import inbox from "./__fixtures__/inbox.json";
+import inboxEmpty from "./__fixtures__/inbox-empty.json";
+import pipeline from "./__fixtures__/pipeline.json";
+import pipelineEmpty from "./__fixtures__/pipeline-empty.json";
+import sliceMetrics from "./__fixtures__/slice-metrics.json";
+import sliceMetricsEmpty from "./__fixtures__/slice-metrics-empty.json";
 import notFound from "./__fixtures__/error-not-found.json";
 import triage from "./__fixtures__/triage.json";
 import insights from "./__fixtures__/insights.json";
@@ -52,6 +61,12 @@ export const issueDetailFixture: IssueDetail = issueDetail;
 export const issueDetailDecisionFixture: IssueDetail = issueDetailDecision;
 export const issueDetailSignoffFixture: IssueDetail = issueDetailSignoff;
 export const signoffFixture: SignoffResponse = signoff;
+export const inboxFixture: InboxResponse = inbox;
+export const inboxEmptyFixture: InboxResponse = inboxEmpty;
+export const pipelineFixture: PipelineResponse = pipeline;
+export const pipelineEmptyFixture: PipelineResponse = pipelineEmpty;
+export const sliceMetricsFixture: SliceMetricsResponse = sliceMetrics;
+export const sliceMetricsEmptyFixture: SliceMetricsResponse = sliceMetricsEmpty;
 export const notFoundFixture: ApiErrorBody = notFound;
 export const triageFixture: TriageResponse = triage;
 export const insightsFixture: InsightsResponse = insights;

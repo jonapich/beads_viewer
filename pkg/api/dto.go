@@ -82,6 +82,12 @@ type MetaCounts struct {
 	Ready   int `json:"ready"`
 	Blocked int `json:"blocked"`
 	Closed  int `json:"closed"`
+	// Awaiting is the open beads awaiting the user (needs-decision or
+	// needs-design): GET /api/v1/inbox's total. SignoffPending is the closed
+	// beads pending sign-off: GET /api/v1/signoff's total. Both come from
+	// agentdesk.BadgeCounts, like the TUI footer, and drive the nav badge.
+	Awaiting       int `json:"awaiting"`
+	SignoffPending int `json:"signoff_pending"`
 }
 
 // MetaCaps tells the client what the server can do.

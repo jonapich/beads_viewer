@@ -1,0 +1,89 @@
+{
+  "groups": [
+    {
+      "epic": "fx-epic",
+      "epic_title": "Checkout epic",
+      "items": [
+        {
+          "awaiting_labels": [
+            "needs-design"
+          ],
+          "epic": "fx-epic",
+          "id": "fx-style",
+          "label": "needs-design",
+          "links": [
+            {
+              "at": "2026-03-08T09:00:00Z",
+              "by": "poet",
+              "kind": "mock",
+              "note": "receipt mock",
+              "source": "typed",
+              "url": "https://example.com/mock-receipt"
+            }
+          ],
+          "options": [
+            {
+              "key": "a",
+              "text": "compact"
+            },
+            {
+              "key": "b",
+              "recommended": true,
+              "text": "detailed"
+            }
+          ],
+          "priority": 1,
+          "ready_to_judge": true,
+          "status": "open",
+          "title": "Pick the receipt style",
+          "updated_at": "2026-03-08T10:00:00Z"
+        }
+      ],
+      "ready_to_judge": 1
+    },
+    {
+      "epic": "",
+      "items": [
+        {
+          "awaiting_labels": [
+            "needs-decision"
+          ],
+          "id": "fx-decide",
+          "label": "needs-decision",
+          "options": [
+            {
+              "key": "a",
+              "recommended": true,
+              "text": "Stripe: lowest effort"
+            },
+            {
+              "key": "b",
+              "text": "Adyen: better EU rates"
+            }
+          ],
+          "priority": 2,
+          "ready_to_judge": false,
+          "status": "open",
+          "title": "Pick a payment provider",
+          "updated_at": "2026-03-02T10:00:00Z"
+        },
+        {
+          "awaiting_labels": [
+            "needs-design"
+          ],
+          "id": "fx-logo",
+          "label": "needs-design",
+          "priority": 3,
+          "ready_to_judge": false,
+          "status": "open",
+          "title": "Choose the logo direction",
+          "updated_at": "2026-03-05T10:00:00Z",
+          "waiting_on": "a poet direction, then an HTML mock"
+        }
+      ],
+      "ready_to_judge": 0
+    }
+  ],
+  "ready_to_judge": 1,
+  "total": 3
+}

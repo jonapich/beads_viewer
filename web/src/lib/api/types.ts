@@ -33,6 +33,10 @@ export interface MetaCounts {
   ready: number;
   blocked: number;
   closed: number;
+  /** Open beads awaiting the user (needs-decision / needs-design): GET /api/v1/inbox total. Drives the nav badge. */
+  awaiting: number;
+  /** Closed beads pending sign-off: GET /api/v1/signoff total. Drives the nav badge. */
+  signoff_pending: number;
 }
 
 /** What the server can do (pkg/api/dto.go MetaCaps). */
@@ -240,6 +244,126 @@ export interface SignoffGroup {
 export interface SignoffResponse {
   total: number;
   groups: SignoffGroup[];
+}
+
+/** One open bead awaiting the user (pkg/agentdesk InboxItem). */
+export interface InboxItem {
+  id: string;
+  title: string;
+  /** "needs-decision" | "needs-design": the first awaiting label that applies. */
+  label: string;
+  awaiting_labels: string[];
+  priority: number;
+  status: string;
+  /** Epic id; absent for beads with no epic. */
+  epic?: string;
+  /** A design bead with a mock or artifact link to judge. */
+  ready_to_judge: boolean;
+  /** For a design bead not ready to judge: the artifact it waits for. */
+  waiting_on?: string;
+  links?: Link[];
+  options?: DecisionOption[];
+  /** RFC 3339 */
+  updated_at: string;
+}
+
+export interface InboxGroup {
+  /** Epic id; "" for beads with no epic (listed last). */
+  epic: string;
+  epic_title?: string;
+  ready_to_judge: number;
+  items: InboxItem[];
+}
+
+/** GET /api/v1/inbox: beads awaiting the user, grouped by epic, in the server's order. */
+export interface InboxResponse {
+  /** Equals meta.counts.awaiting. */
+  total: number;
+  ready_to_judge: number;
+  groups: InboxGroup[];
+}
+
+/** One in-progress bead (pkg/agentdesk PipelineRow). */
+export interface PipelineRow {
+  id: string;
+  title: string;
+  epic?: string;
+  /** Pipeline stage; absent when the bead carries none (the pipeline counts it as "unstaged"). */
+  stage?: string;
+  /** RFC 3339: when the bead entered its stage (else when it was claimed). */
+  stage_since?: string;
+  /** Compact age in the stage: "45s", "12m", "3h05m", "2d4h". */
+  stage_age?: string;
+  stage_age_seconds: number;
+  /** The assignee. */
+  holder?: string;
+  /** metadata claim.session */
+  session?: string;
+  claimed_at?: string;
+  lease_expires_at?: string;
+  heartbeat_at?: string;
+  last_activity: string;
+  /** Lease expired, or no live lease and no activity for `stale_after`. */
+  stale: boolean;
+  stale_reason?: string;
+}
+
+/**
+ * GET /api/v1/pipeline: the claimed work, stale rows first, then by stage order,
+ * then the longest in stage first. Staleness depends on the clock: generated_at
+ * is the start of the current minute and the ETag carries that minute, so poll
+ * about once a minute while the tab shows.
+ */
+export interface PipelineResponse {
+  /** RFC 3339 */
+  generated_at: string;
+  /** Compact threshold, e.g. "2h". */
+  stale_after: string;
+  total: number;
+  stale: number;
+  /** Count per stage; beads without one count under "unstaged". */
+  by_stage: Record<string, number>;
+  rows: PipelineRow[];
+}
+
+/** Sums of the logged slices of one epic, or of all of them (pkg/agentdesk SliceMetrics). */
+export interface SliceMetrics {
+  /** Epic id; "" for slices outside any epic; "all" in `total`. */
+  epic: string;
+  epic_title?: string;
+  slices: number;
+  committed: number;
+  stopped: number;
+  review_rounds: number;
+  /** Slices approved on the first review round. */
+  first_pass_approvals: number;
+  review_blocking: number;
+  test_runs: number;
+  test_red_runs: number;
+  test_timeouts: number;
+  test_wall_minutes: number;
+  slice_wall_minutes: number;
+  followup_beads: number;
+  coder_tokens: number;
+  reviewer_tokens: number;
+  other_agent_tokens: number;
+  /** Slices that logged no token figure for some role. */
+  slices_with_unknown_tokens: number;
+  escaped_bugs: number;
+}
+
+/** A bead whose metadata caused_by names a cause. */
+export interface EscapedBug {
+  bug: string;
+  cause: string;
+}
+
+/** GET /api/v1/slice-metrics: per-epic slice summary, ordered by slice count then epic id. */
+export interface SliceMetricsResponse {
+  total: SliceMetrics;
+  epics: SliceMetrics[];
+  /** Escapes naming a cause that is not a logged slice. */
+  unmatched_escapes?: EscapedBug[];
 }
 
 /**

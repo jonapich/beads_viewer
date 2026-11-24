@@ -3,16 +3,19 @@ import type {
   AnswerRequest,
   ApiErrorBody,
   HealthResponse,
+  InboxResponse,
   InsightsResponse,
   IssueDetail,
   IssuePatchRequest,
   IssuesResponse,
   MetaResponse,
+  PipelineResponse,
   PlanResponse,
   PriorityRequest,
   SearchResponse,
   SignoffRequest,
   SignoffResponse,
+  SliceMetricsResponse,
   TriageResponse,
   WriteResponse,
 } from "./types";
@@ -155,6 +158,35 @@ export const getIssueIfChanged = (id: string, etag: string | null, signal?: Abor
 
 /** Closed beads awaiting sign-off, grouped by epic. */
 export const getSignoff = (signal?: AbortSignal) => getJSON<SignoffResponse>("/api/v1/signoff", { signal });
+
+/** Conditional GET of the sign-off list: null means the cached copy is current. */
+export const getSignoffIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<SignoffResponse>("/api/v1/signoff", etag, { signal });
+
+/** The agent desk inbox: open beads awaiting the user (needs-decision / needs-design), grouped by epic. */
+export const getInbox = (signal?: AbortSignal) => getJSON<InboxResponse>("/api/v1/inbox", { signal });
+
+/** Conditional GET of the inbox: null means the cached copy is current. */
+export const getInboxIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<InboxResponse>("/api/v1/inbox", etag, { signal });
+
+/**
+ * The claimed work with staleness. The ETag carries the minute the response was measured at, so a
+ * conditional poll about once a minute sees a claim go stale.
+ */
+export const getPipeline = (signal?: AbortSignal) => getJSON<PipelineResponse>("/api/v1/pipeline", { signal });
+
+/** Conditional GET of the pipeline: null means the cached copy is current. */
+export const getPipelineIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<PipelineResponse>("/api/v1/pipeline", etag, { signal });
+
+/** The per-epic summary of logged slices. */
+export const getSliceMetrics = (signal?: AbortSignal) =>
+  getJSON<SliceMetricsResponse>("/api/v1/slice-metrics", { signal });
+
+/** Conditional GET of the slice metrics: null means the cached copy is current. */
+export const getSliceMetricsIfChanged = (etag: string | null, signal?: AbortSignal) =>
+  getJSONIfChanged<SliceMetricsResponse>("/api/v1/slice-metrics", etag, { signal });
 
 /**
  * Triage. Rejects with ApiError 503 "analysis_pending" while it is still being
