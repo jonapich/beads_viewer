@@ -21,7 +21,7 @@
   let { tone, label, compact = false, bell = true, title, aside, sub, children }: Props = $props();
 </script>
 
-<section class="needs" class:compact data-needs data-tone={tone} aria-label={label}>
+<section class="needs" class:compact data-needs={label} data-tone={tone} aria-label={label}>
   <div class="nh">
     {#if bell}
       <svg class="bell" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 118 0v4l1 1.5H3z" /><path d="M6.5 14h3" /></svg>

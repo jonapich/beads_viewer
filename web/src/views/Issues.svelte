@@ -248,7 +248,14 @@
     void tick().then(() => {
       if (pop !== p) return;
       if (!p.el.isConnected) {
+        // Closing unmounts the popover: if it holds focus, park it on the list, not <body>.
+        const held = !!document.getElementById("row-actions-pop")?.contains(document.activeElement);
         pop = null;
+        if (held) {
+          void tick().then(() =>
+            document.querySelector<HTMLElement>('[role="region"][aria-label="Issues"]')?.focus({ preventScroll: true }),
+          );
+        }
         return;
       }
       const a = p.el.getBoundingClientRect();

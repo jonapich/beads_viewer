@@ -100,7 +100,7 @@
     await tick();
     if (!document.activeElement || document.activeElement === document.body) {
       if (ok) document.querySelector<HTMLElement>("h1.title")?.focus({ preventScroll: true });
-      else refocusForm(document.querySelector("[data-needs]"));
+      else refocusForm(document.querySelector(`[data-needs="${kind === "answered" ? "Decision" : "Sign-off"}"]`));
     }
   }
 

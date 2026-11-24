@@ -277,7 +277,7 @@
     color: var(--text-faint);
     cursor: not-allowed;
   }
-  .opt:focus-visible {
+  .opt:focus-visible:not(:disabled):not([aria-disabled="true"]) {
     background: var(--bg-hover);
   }
   .sr {

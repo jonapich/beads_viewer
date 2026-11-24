@@ -127,7 +127,7 @@
             }
           }}
         />
-        <EditButtons saving={assigneeSaving} disabled={!edits.canSave(detail.id, "assignee")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelAssignee} />
+        <EditButtons saving={assigneeSaving} disabled={!edits.canSave(detail.id, "assignee")} {busy} reason={assigneeError ? "" : edits.lockNotice(detail.id)} oncancel={cancelAssignee} />
         {#if assigneeProblem}<p class="hint" id="assignee-hint-{detail.id}">{assigneeProblem}</p>{/if}
         {#if assigneeError}
           <EditError
@@ -189,7 +189,7 @@
         >
           {#each withCurrent(EDIT_TYPES, detail.issue_type) as t (t)}<option value={t}>{t}</option>{/each}
         </select>
-        <EditButtons saving={typeSaving} disabled={!edits.canSave(detail.id, "type")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelType} />
+        <EditButtons saving={typeSaving} disabled={!edits.canSave(detail.id, "type")} {busy} reason={typeError ? "" : edits.lockNotice(detail.id)} oncancel={cancelType} />
         {#if typeError}
           <EditError
             error={typeError}

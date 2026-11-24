@@ -165,7 +165,7 @@
             }
           }}
         />
-        <EditButtons saving={titleSaving} disabled={!edits.canSave(detail.id, "title")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancelTitle} />
+        <EditButtons saving={titleSaving} disabled={!edits.canSave(detail.id, "title")} {busy} reason={titleError ? "" : edits.lockNotice(detail.id)} oncancel={cancelTitle} />
         {#if titleProblem}<p class="hint" id="title-hint-{detail.id}">{titleProblem}</p>{/if}
         {#if titleError}
           <EditError

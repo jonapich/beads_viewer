@@ -76,7 +76,7 @@
     ></textarea>
     <p class="help" id="desc-help-{detail.id}">Markdown. Leading blank lines and trailing whitespace are dropped when saved.</p>
     {#if problem}<p class="hint" id="desc-hint-{detail.id}">{problem}</p>{/if}
-    <EditButtons {saving} disabled={!edits.canSave(detail.id, "description")} {busy} reason={edits.lockNotice(detail.id)} oncancel={cancel} />
+    <EditButtons {saving} disabled={!edits.canSave(detail.id, "description")} {busy} reason={error ? "" : edits.lockNotice(detail.id)} oncancel={cancel} />
     {#if error}
       <EditError
         {error}
