@@ -31,8 +31,11 @@
     actions: IssueActions;
     /** The tracker takes writes (meta.capabilities.writes). */
     writes: boolean;
-    /** The priority pill was pressed: open the row actions popover at it. */
-    onpickpriority: (id: string, anchor: HTMLElement) => void;
+    /**
+     * The priority pill was pressed: open the row actions popover at it. The third argument is the
+     * priority the drawer shows, for a host that has no list row for this issue.
+     */
+    onpickpriority: (id: string, anchor: HTMLElement, priority: number) => void;
     /** The priority popover is open from this drawer's pill. */
     prioOpen: boolean;
   }
@@ -211,7 +214,7 @@
               {busy}
               expanded={prioOpen}
               disabled={readOnly}
-              onpick={(el) => onpickpriority(id, el)}
+              onpick={(el) => onpickpriority(id, el, item?.priority ?? base.priority)}
             />
           </dd>
           <dt>Type</dt>
