@@ -17,10 +17,10 @@ List the two `web/*.go` files explicitly: `gofmt` ignores the `go.mod` `ignore` 
 
 ### Test run time (`tests/e2e`)
 
-`tests/e2e` drives a once-built `bv` binary and is the slow package. On the Windows dev host the default run takes ~5 min (it took ~40 min while serial; each `--export-pages` run costs ~10s there because Defender scans the freshly written `vendor/mermaid.min.js`, so the export tests overlap that wait with `t.Parallel`). Use `-count=1` for a fresh gate run: without it `go test` spent another ~75s after the tests finished writing its result cache.
+`tests/e2e` drives a once-built `bv` binary and is the slow package. On the Windows dev host the default run takes ~3 min (it took ~40 min while serial; the export tests also overlap their waits with `t.Parallel`). An `--export-pages` run takes ~1s there: the offline manifest hashes files from the bytes as they are written, because Defender scans a freshly written file on its first open (even a stat), which blocked every export for ~10s on `vendor/mermaid.min.js` (beads-c2o.40). Use `-count=1` for a fresh gate run: without it `go test` spent another ~75s after the tests finished writing its result cache.
 
 ```powershell
-go test -count=1 -timeout 30m ./tests/e2e/...                              # default, ~5 min
+go test -count=1 -timeout 30m ./tests/e2e/...                              # default, ~3 min
 $env:BV_E2E_SLOW = "1"; go test -count=1 -timeout 60m ./tests/e2e/...      # full set, ~8 min
 ```
 

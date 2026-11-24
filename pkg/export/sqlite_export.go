@@ -1225,7 +1225,7 @@ func pruneStaleChunks(bundle *Bundle, chunksDir string, keep int) error {
 		if !ok || idx < keep {
 			continue
 		}
-		if err := bundle.root.Remove(filepath.Join(chunksDir, entry.Name())); err != nil && !os.IsNotExist(err) {
+		if err := bundle.Remove(filepath.Join(chunksDir, entry.Name())); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove stale chunk %s: %w", entry.Name(), err)
 		}
 	}
@@ -1243,7 +1243,7 @@ func removeChunkArtifacts(bundle *Bundle, chunksDir string) error {
 		return err
 	}
 	// Best-effort: drop the directory only if our chunks were the only contents.
-	_ = bundle.root.Remove(chunksDir)
+	_ = bundle.Remove(chunksDir)
 	return nil
 }
 

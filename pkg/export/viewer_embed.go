@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/internal/env"
@@ -37,6 +38,49 @@ var ViewerAssetsFS embed.FS
 type Bundle struct {
 	root               *os.Root
 	hybridWasmPrepared bool
+
+	// written remembers the SHA-256 of every file this bundle wrote, computed
+	// from the bytes as they were written, keyed by slash-separated relative
+	// path. The offline manifest uses it instead of reading the files back: on
+	// Windows, real-time antivirus scans a file on the first open after it is
+	// written (even a stat), which blocked an export for ~10s on the 3.3 MB
+	// vendor/mermaid.min.js alone. So a recorded file is never opened again, and
+	// the digest is trusted: everything in the bundle is written through
+	// writeFile, and Remove forgets the entries it deletes.
+	writtenMu sync.Mutex
+	written   map[string][sha256.Size]byte
+}
+
+func (b *Bundle) recordWritten(name string, sum [sha256.Size]byte) {
+	b.writtenMu.Lock()
+	defer b.writtenMu.Unlock()
+	if b.written == nil {
+		b.written = make(map[string][sha256.Size]byte)
+	}
+	b.written[offlineKey(name)] = sum
+}
+
+// writtenSum returns the digest recorded when the bundle wrote name.
+func (b *Bundle) writtenSum(name string) ([sha256.Size]byte, bool) {
+	b.writtenMu.Lock()
+	defer b.writtenMu.Unlock()
+	sum, ok := b.written[offlineKey(name)]
+	return sum, ok
+}
+
+// Remove deletes a file or empty directory relative to the bundle root and
+// forgets any digest recorded for it, so a file later put there by other code is
+// hashed from disk.
+func (b *Bundle) Remove(name string) error {
+	b.writtenMu.Lock()
+	delete(b.written, offlineKey(name))
+	b.writtenMu.Unlock()
+	return b.root.Remove(name)
+}
+
+// offlineKey normalises a bundle-relative path to the slash form the manifest uses.
+func offlineKey(name string) string {
+	return filepath.ToSlash(filepath.Clean(name))
 }
 
 // HybridWasmPrepared reports whether optional hybrid WASM assets were prepared in this bundle.
@@ -135,7 +179,8 @@ func (b *Bundle) writeFile(name string, perm os.FileMode, write func(io.Writer) 
 		return fmt.Errorf("create temporary export file: %w", err)
 	}
 	defer b.root.Remove(temporary)
-	if err := write(file); err != nil {
+	digest := sha256.New()
+	if err := write(io.MultiWriter(file, digest)); err != nil {
 		file.Close()
 		return err
 	}
@@ -154,6 +199,9 @@ func (b *Bundle) writeFile(name string, perm os.FileMode, write func(io.Writer) 
 	if err := b.root.Rename(temporary, name); err != nil {
 		return fmt.Errorf("publish export file %s: %w", name, err)
 	}
+	var sum [sha256.Size]byte
+	copy(sum[:], digest.Sum(nil))
+	b.recordWritten(name, sum)
 	return nil
 }
 
@@ -362,11 +410,18 @@ func bindOfflineAssets(bundle *Bundle, files []string) error {
 	}
 	assets := make([]asset, 0, len(files))
 	for _, name := range files {
-		data, err := bundle.root.ReadFile(filepath.FromSlash(name))
-		if err != nil {
-			return fmt.Errorf("hashing offline asset %s: %w", name, err)
+		sum, ok := bundle.writtenSum(name)
+		if !ok {
+			// Not written by this bundle (left by an earlier export, written by
+			// another Bundle or process, or removed via Bundle.Remove): hash what
+			// is on disk.
+			data, err := bundle.root.ReadFile(filepath.FromSlash(name))
+			if err != nil {
+				return fmt.Errorf("hashing offline asset %s: %w", name, err)
+			}
+			sum = sha256.Sum256(data)
 		}
-		assets = append(assets, asset{name, fmt.Sprintf("%x", sha256.Sum256(data))})
+		assets = append(assets, asset{name, fmt.Sprintf("%x", sum)})
 	}
 	encoded, err := json.Marshal(assets)
 	if err != nil {

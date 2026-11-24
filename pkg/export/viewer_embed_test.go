@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Dicklesworthstone/beads_viewer/pkg/model"
 )
 
 func openTestBundle(t *testing.T, dir string) *Bundle {
@@ -901,4 +903,216 @@ func TestBundle_HybridWasmPreparedAndSkipsDotfilesInOfflineAssets(t *testing.T) 
 	if strings.Contains(swStr, ".gitignore") || strings.Contains(swStr, ".hidden") {
 		t.Fatalf("dotfiles/dotdirs must be excluded from OFFLINE_ASSETS, got:\n%s", swStr)
 	}
+}
+
+type offlineManifestEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+func readOfflineManifest(t *testing.T, dir string) []offlineManifestEntry {
+	t.Helper()
+	sw, err := os.ReadFile(filepath.Join(dir, "coi-serviceworker.js"))
+	if err != nil {
+		t.Fatalf("read coi-serviceworker.js: %v", err)
+	}
+	m := regexp.MustCompile(`const OFFLINE_ASSETS = (\[[^\n;]+\]);`).FindSubmatch(sw)
+	if len(m) != 2 {
+		t.Fatal("coi-serviceworker.js missing bound OFFLINE_ASSETS array")
+	}
+	var assets []offlineManifestEntry
+	if err := json.Unmarshal(m[1], &assets); err != nil {
+		t.Fatalf("unmarshal OFFLINE_ASSETS: %v", err)
+	}
+	return assets
+}
+
+// readBackManifest is the reference: hash every manifest path by reading the
+// file from disk, as bindOfflineAssets did before it used write-time digests.
+func readBackManifest(t *testing.T, dir string, assets []offlineManifestEntry) []offlineManifestEntry {
+	t.Helper()
+	want := make([]offlineManifestEntry, 0, len(assets))
+	for _, a := range assets {
+		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(a.Path)))
+		if err != nil {
+			t.Fatalf("read back %s: %v", a.Path, err)
+		}
+		want = append(want, offlineManifestEntry{a.Path, fmt.Sprintf("%x", sha256.Sum256(data))})
+	}
+	return want
+}
+
+func TestOfflineManifestMatchesReadBackHashes(t *testing.T) {
+	dir := t.TempDir()
+	bundle := openTestBundle(t, dir)
+
+	// A mix of files: written through the bundle (digest known at write time),
+	// written directly into the directory (read back), and chunk-style nesting.
+	if err := bundle.WriteFile("data/meta.json", []byte(`{"issue_count":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := bundle.CopyFile("data/streamed.bin", bytes.NewReader(bytes.Repeat([]byte{0xAB, 0xCD}, 100_000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := bundle.WriteFile("chunks/00000.bin", []byte("chunk zero"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "wasm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "wasm", "direct.js"), []byte("// written behind the bundle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "beads.sqlite3"), []byte("not really sqlite"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bundle.CopyEmbeddedAssets("Manifest test"); err != nil {
+		t.Fatalf("CopyEmbeddedAssets: %v", err)
+	}
+
+	got := readOfflineManifest(t, dir)
+	if want := readBackManifest(t, dir, got); !equalManifests(got, want) {
+		t.Fatalf("manifest differs from read-back hashes:\n got: %v\nwant: %v", got, want)
+	}
+
+	paths := map[string]bool{}
+	for _, a := range got {
+		paths[a.Path] = true
+	}
+	for _, p := range []string{"index.html", "vendor/mermaid.min.js", "data/meta.json", "data/streamed.bin", "chunks/00000.bin", "wasm/direct.js", "beads.sqlite3"} {
+		if !paths[p] {
+			t.Errorf("manifest is missing %s", p)
+		}
+	}
+
+	// The embedded assets and bundle-written data must not have been re-read.
+	for _, p := range []string{"vendor/mermaid.min.js", "index.html", "data/meta.json", "data/streamed.bin", "chunks/00000.bin"} {
+		if _, ok := bundle.writtenSum(p); !ok {
+			t.Errorf("%s: no write-time digest recorded", p)
+		}
+	}
+	for _, p := range []string{"wasm/direct.js", "beads.sqlite3"} {
+		if _, ok := bundle.writtenSum(p); ok {
+			t.Errorf("%s: digest recorded for a file the bundle did not write", p)
+		}
+	}
+}
+
+func TestOfflineManifestRehashesRemovedAndReplacedFiles(t *testing.T) {
+	dir := t.TempDir()
+	bundle := openTestBundle(t, dir)
+
+	if err := bundle.WriteFile("data/removed.json", []byte("written by the bundle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := bundle.WriteFile("data/rewritten.json", []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Removed through the bundle, then recreated by other code: the stale digest
+	// must be dropped and the new bytes hashed from disk.
+	if err := bundle.Remove("data/removed.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "data", "removed.json"), []byte("recreated behind the bundle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Rewritten through the bundle: the newer digest wins.
+	if err := bundle.WriteFile("data/rewritten.json", []byte("second, longer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bundle.CopyEmbeddedAssets(""); err != nil {
+		t.Fatalf("CopyEmbeddedAssets: %v", err)
+	}
+	got := readOfflineManifest(t, dir)
+	if want := readBackManifest(t, dir, got); !equalManifests(got, want) {
+		t.Fatalf("manifest kept a stale write-time digest:\n got: %v\nwant: %v", got, want)
+	}
+	var seen int
+	for _, a := range got {
+		if a.Path == "data/removed.json" || a.Path == "data/rewritten.json" {
+			seen++
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("expected both data files in the manifest, got %v", got)
+	}
+}
+
+// A real export through SQLiteExporter.ExportBundle covers the writers the
+// manifest now trusts: the database, robot JSON, graph layout, chunks and the
+// pruning of a stale chunk through Bundle.Remove.
+func TestOfflineManifestMatchesReadBack_RealExport(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "chunks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(dir, "chunks", "00099.bin")
+	if err := os.WriteFile(stale, []byte("stale chunk from an earlier, larger export"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	issues := []*model.Issue{
+		makeTestIssue("real-1", "First issue", model.StatusOpen, 1, model.TypeTask),
+		makeTestIssue("real-2", "Second issue", model.StatusInProgress, 2, model.TypeBug),
+	}
+	exporter := NewSQLiteExporter(issues, nil, nil, nil)
+	exporter.Config.ChunkThreshold = 1
+	exporter.Config.ChunkSize = 4096
+	exporter.Config.IncludeRobotOutputs = true
+
+	bundle := openTestBundle(t, dir)
+	if err := exporter.ExportBundle(bundle); err != nil {
+		t.Fatalf("ExportBundle: %v", err)
+	}
+	if err := bundle.CopyEmbeddedAssets(""); err != nil {
+		t.Fatalf("CopyEmbeddedAssets: %v", err)
+	}
+
+	got := readOfflineManifest(t, dir)
+	if want := readBackManifest(t, dir, got); !equalManifests(got, want) {
+		t.Fatalf("manifest differs from read-back hashes:\n got: %v\nwant: %v", got, want)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale chunk should have been pruned, stat err = %v", err)
+	}
+	var chunks int
+	for _, a := range got {
+		if a.Path == "chunks/00099.bin" {
+			t.Fatal("pruned chunk is still in the manifest")
+		}
+		if strings.HasPrefix(a.Path, "chunks/") {
+			chunks++
+		}
+	}
+	if chunks < 2 {
+		t.Fatalf("expected the database to be split into several chunks, manifest has %d", chunks)
+	}
+	for _, p := range []string{"beads.sqlite3", "beads.sqlite3.config.json", "data/meta.json", "chunks/00000.bin"} {
+		if _, ok := bundle.writtenSum(p); !ok {
+			t.Errorf("%s: no write-time digest recorded", p)
+		}
+	}
+
+	// The dev fallback rebinds from a directory scan; it must agree too.
+	if err := bundle.BindOfflineBundleAssets(); err != nil {
+		t.Fatalf("BindOfflineBundleAssets: %v", err)
+	}
+	rebound := readOfflineManifest(t, dir)
+	if want := readBackManifest(t, dir, rebound); !equalManifests(rebound, want) {
+		t.Fatalf("rebound manifest differs from read-back hashes:\n got: %v\nwant: %v", rebound, want)
+	}
+}
+func equalManifests(a, b []offlineManifestEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
