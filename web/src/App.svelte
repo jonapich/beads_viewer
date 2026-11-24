@@ -3,6 +3,7 @@
   import Header from "./components/Header.svelte";
   import Nav from "./components/Nav.svelte";
   import SignedOut from "./components/SignedOut.svelte";
+  import Toasts from "./components/Toasts.svelte";
   import { refreshHealth } from "./lib/health";
   import { startLive } from "./lib/live.svelte";
   import { route, startRouter } from "./lib/router/router.svelte";
@@ -53,6 +54,7 @@
     </div>
   </div>
 {/if}
+<Toasts />
 
 <style>
   .shell {

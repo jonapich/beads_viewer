@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from "svelte";
   import FilterChips from "../components/issues/FilterChips.svelte";
   import PeekDrawer from "../components/issues/PeekDrawer.svelte";
+  import RowActionsPopover from "../components/issues/RowActionsPopover.svelte";
   import FlatRowView from "../components/issues/FlatRow.svelte";
   import ListEmpty from "../components/issues/ListEmpty.svelte";
   import ListSkeleton from "../components/issues/ListSkeleton.svelte";
@@ -10,6 +11,8 @@
   import Toolbar from "../components/issues/Toolbar.svelte";
   import TreeRowView from "../components/issues/TreeRow.svelte";
   import VirtualList from "../components/VirtualList.svelte";
+  import { postAnswer, postSignoff, putPriority, setCloseCandidate } from "../lib/api/client";
+  import { IssueActions } from "../lib/issues/actions.svelte";
   import { isDefaultFilters, passesFilters } from "../lib/issues/filter";
   import { IssuesFeed } from "../lib/issues/feed.svelte";
   import { reloadNotice } from "../lib/issues/reload-notice";
@@ -31,6 +34,7 @@
   } from "../lib/issues/tree";
   import { fromQuery, onlyQueryDiffers, toQuery } from "../lib/issues/url";
   import { replaceQuery, route } from "../lib/router/router.svelte";
+  import { toasts } from "../lib/toasts.svelte";
 
   /** A row of the list: a tree placement (or cycle marker) or a flat search/filter hit. */
   type Row = TreeRow | { kind: "flat"; key: string; id: string };
@@ -50,6 +54,16 @@
       runner.stop();
       clearTimeout(flashTimer);
     };
+  });
+
+  // Writes (the quick actions) need a tracker bv can write to: meta.capabilities.writes.
+  const writes = $derived(feed.meta?.capabilities?.writes ?? false);
+  const actions = new IssueActions({
+    client: { postSignoff, postAnswer, putPriority, setCloseCandidate },
+    toasts,
+    writable: () => writes,
+    refresh: () => feed.refresh(),
+    sticky: (id) => list.markSticky(id),
   });
 
   const index = $derived(feed.data ? buildIndex(feed.data) : null);
@@ -148,7 +162,7 @@
     // A query with no ranking yet (first request in flight, too long, failed) matches nothing.
     if (hasQuery && list.rank === null) return out;
     for (const it of index.items) {
-      if (passesFilters(it, list.filters) && (!hasQuery || list.rank?.has(it.id))) out.add(it.id);
+      if (passesFilters(it, list.filters, list.sticky) && (!hasQuery || list.rank?.has(it.id))) out.add(it.id);
     }
     return out;
   });
@@ -199,6 +213,66 @@
   function openPeek(id: string, section?: PeekSection): void {
     missingNotice = null;
     list.openPeek(id, section ?? null);
+  }
+
+  // ---- the row actions popover: one instance, here, because a row sits inside the virtual list's
+  // transformed window, where position: fixed would be relative to the window and clipped.
+  type Pop = { kind: "prio" | "menu"; id: string; anchor: DOMRect; el: HTMLElement; from: "row" | "drawer" };
+  let pop = $state.raw<Pop | null>(null);
+  const popItem = $derived(pop && index ? index.byId.get(pop.id) : undefined);
+
+  // The popover goes with its issue (it left the tracker) and with write access.
+  $effect(() => {
+    if (pop && (!popItem || !writes)) pop = null;
+  });
+
+  function togglePop(kind: Pop["kind"], id: string, el: HTMLElement, from: Pop["from"]): void {
+    // The same button again closes it.
+    if (pop && pop.el === el) {
+      pop = null;
+      return;
+    }
+    pop = { kind, id, anchor: el.getBoundingClientRect(), el, from };
+  }
+  /** Which of a row's buttons has its popover open, for aria-expanded. */
+  const rowPopKind = (id: string): "prio" | "menu" | null => (pop && pop.from === "row" && pop.id === id ? pop.kind : null);
+
+  async function closePop(restoreFocus: boolean): Promise<void> {
+    const p = pop;
+    pop = null;
+    if (!restoreFocus || !p) return;
+    await tick();
+    const target = p.el.isConnected
+      ? p.el
+      : document.querySelector<HTMLElement>(`[data-row][data-id="${CSS.escape(p.id)}"] [data-pop-anchor="${p.kind}"]`);
+    target?.focus({ preventScroll: true });
+  }
+
+  /**
+   * A write that reorders or re-renders the list moves the row's DOM node, which drops focus to
+   * <body> for a keyboard user. Once it has landed, put focus back on the button the popover
+   * was opened from, unless the user has moved it elsewhere meanwhile.
+   */
+  async function refocus(write: Promise<boolean>, p: Pop | null): Promise<void> {
+    await write;
+    await tick();
+    if (!p || (document.activeElement && document.activeElement !== document.body)) return;
+    const target = p.el.isConnected
+      ? p.el
+      : document.querySelector<HTMLElement>(
+          p.from === "drawer"
+            ? `aside.drawer [data-pop-anchor="${p.kind}"]`
+            : `[data-row][data-id="${CSS.escape(p.id)}"] [data-pop-anchor="${p.kind}"]`,
+        );
+    target?.focus({ preventScroll: true });
+  }
+
+  /** Opens the drawer at a form (sign-off note, answer) and puts the cursor in it, even when it is already open there. */
+  async function openAt(id: string, section: PeekSection): Promise<void> {
+    missingNotice = null;
+    list.openPeek(id, null);
+    await tick();
+    list.openPeek(id, section);
   }
 
   function peekMissing(id: string): void {
@@ -370,7 +444,51 @@
       onclose={() => list.closePeek()}
       onopen={(id) => openPeek(id)}
       onmissing={peekMissing}
+      {actions}
+      {writes}
+      onpickpriority={(id, el) => togglePop("prio", id, el, "drawer")}
+      prioOpen={pop?.from === "drawer" && pop.id === list.peek}
     />
+  {/if}
+  {#if pop && popItem && writes}
+    {#key `${pop.kind}:${pop.id}:${pop.from}`}
+    <RowActionsPopover
+      kind={pop.kind}
+      item={popItem}
+      anchor={pop.anchor}
+      {writes}
+      onclose={(restore) => void closePop(restore)}
+      onpriority={(p) => {
+        const id = popItem.id;
+        const from = pop;
+        void closePop(true);
+        void refocus(actions.setPriority(id, p), from);
+      }}
+      oncandidate={(on) => {
+        const id = popItem.id;
+        const from = pop;
+        void closePop(true);
+        void refocus(actions.setCloseCandidate(id, on), from);
+      }}
+      onapprove={() => {
+        const id = popItem.id;
+        const from = pop;
+        void closePop(true);
+        void refocus(actions.approve(id), from);
+      }}
+      ondispute={() => {
+        const id = popItem.id;
+        void closePop(false);
+        actions.openDispute(id);
+        void openAt(id, "signoff");
+      }}
+      onanswer={() => {
+        const id = popItem.id;
+        void closePop(false);
+        void openAt(id, "answer");
+      }}
+    />
+    {/key}
   {/if}
 </section>
 
@@ -389,6 +507,11 @@
         {narrow}
         onpeek={openPeek}
         onreveal={(id) => void reveal(id)}
+        {writes}
+        busy={actions.isBusy(r.id)}
+        onprio={(id, el) => togglePop("prio", id, el, "row")}
+        onmenu={(id, el) => togglePop("menu", id, el, "row")}
+        popKind={rowPopKind(r.id)}
       />
     {:else if item && r.kind === "issue"}
       <TreeRowView
@@ -402,6 +525,11 @@
         {narrow}
         ontoggle={(id) => list.toggle(id)}
         onpeek={openPeek}
+        {writes}
+        busy={actions.isBusy(r.id)}
+        onprio={(id, el) => togglePop("prio", id, el, "row")}
+        onmenu={(id, el) => togglePop("menu", id, el, "row")}
+        popKind={rowPopKind(r.id)}
       />
     {/if}
   {/if}

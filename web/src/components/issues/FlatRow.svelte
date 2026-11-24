@@ -2,12 +2,13 @@
   import type { ListItem } from "../../lib/api/types";
   import { ancestors, crumbLabel } from "../../lib/issues/breadcrumb";
   import { highlight } from "../../lib/issues/highlight";
-  import { awaitsSignoff, displayStatus, needsAnswer, type IssueIndex } from "../../lib/issues/model";
+  import { awaitsSignoff, canAnswer, displayStatus, type IssueIndex } from "../../lib/issues/model";
   import type { PeekSection } from "../../lib/issues/peek";
   import { ago, triageText } from "../../lib/issues/present";
   import AssigneeDot from "./AssigneeDot.svelte";
   import LabelChips from "./LabelChips.svelte";
   import PriorityPill from "./PriorityPill.svelte";
+  import RowMenuButton from "./RowMenuButton.svelte";
   import StatusGlyph from "./StatusGlyph.svelte";
   import TitleLine from "./TitleLine.svelte";
 
@@ -21,19 +22,28 @@
     /** The list is narrower than the breakpoint: two-line rows. */
     narrow: boolean;
     onpeek: (id: string, section?: PeekSection) => void;
+    /** The tracker takes writes (meta.capabilities.writes). */
+    writes: boolean;
+    /** A write on this issue is in flight. */
+    busy: boolean;
+    /** The priority pill or the "..." button was pressed: open the row actions popover at it. */
+    onprio: (id: string, anchor: HTMLElement) => void;
+    onmenu: (id: string, anchor: HTMLElement) => void;
+    /** Which of this row's buttons has its popover open. */
+    popKind: "prio" | "menu" | null;
     /** "Show in tree" and the breadcrumb segments: reveal this id in the tree. */
     onreveal: (id: string) => void;
   }
 
-  let { item, index, query, now, selected, narrow, onpeek, onreveal }: Props = $props();
+  let { item, index, query, now, selected, narrow, onpeek, onreveal, writes, busy, onprio, onmenu, popKind }: Props = $props();
 
   const status = $derived(displayStatus(item, now));
   const crumbs = $derived(ancestors(item.id, index.byId));
   const idSegments = $derived(highlight(item.id, query));
-  const attention = $derived(awaitsSignoff(item) ? "Sign off" : needsAnswer(item) ? "Answer" : null);
+  const attention = $derived(awaitsSignoff(item) ? "Sign off" : canAnswer(item) ? "Answer" : null);
 </script>
 
-<div class="row" class:closed={item.status === "closed"} class:sel={selected} class:narrow data-row data-id={item.id}>
+<div class="row" class:closed={item.status === "closed"} class:sel={selected} class:narrow class:busy data-row data-id={item.id}>
   <div class="rl1">
     <StatusGlyph {status} />
     <TitleLine {item} {index} muted={item.status === "closed"} {query} {onpeek} below={crumb} />
@@ -45,10 +55,11 @@
     {/if}
     <LabelChips labels={item.labels} />
     <AssigneeDot assignee={item.assignee} />
-    <PriorityPill priority={item.priority} />
+    <PriorityPill priority={item.priority} {busy} expanded={popKind === "prio"} disabled={!writes} onpick={(el) => onprio(item.id, el)} />
     <span class="c-tri" class:dash={item.triage_score === undefined} title="Triage score">{triageText(item.triage_score)}</span>
     <span class="c-upd" title="Updated">{ago(item.updated_at, now)}</span>
     <button type="button" class="showtree" onclick={() => onreveal(item.id)}>Show in tree</button>
+    <RowMenuButton id={item.id} {busy} expanded={popKind === "menu"} disabled={!writes} onmenu={(el) => onmenu(item.id, el)} />
   </div>
 </div>
 
@@ -77,6 +88,9 @@
   }
   .row:hover {
     background: var(--bg-hover);
+  }
+  .row.busy {
+    cursor: progress;
   }
   .row.sel {
     background: var(--bg-selected);
@@ -225,4 +239,7 @@
   }
   .row.narrow .showtree {
     margin-left: auto;
+  }
+  .row.narrow :global(.menu) {
+    height: 20px;
   }</style>

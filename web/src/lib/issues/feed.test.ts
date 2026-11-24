@@ -319,3 +319,73 @@ describe("IssuesFeed live updates", () => {
     expect(sent.length).toBe(before);
   });
 });
+
+describe("IssuesFeed.refresh", () => {
+  it("refetches the list and resolves once that refetch is in", async () => {
+    reply(issuesPath, () => json(issues(true, "a"), { headers: { ETag: '"i1"' } }), () => json(issues(true, "a", "b"), { headers: { ETag: '"i2"' } }));
+    reply(metaPath, () => json(meta(true), { headers: { ETag: '"m1"' } }), () => new Response(null, { status: 304 }));
+    const feed = new IssuesFeed();
+    const stop = feed.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feed.data?.items).toHaveLength(1);
+
+    let done = false;
+    const p = feed.refresh().then(() => (done = true));
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    await p;
+    expect(feed.data?.items).toHaveLength(2);
+    expect(count(issuesPath)).toBe(2);
+    expect(sent.filter((s) => s.path === issuesPath)[1]?.inm).toBe('"i1"');
+    stop();
+  });
+
+  it("asked while a tick runs, waits for the next full tick, not the one in flight", async () => {
+    let releaseFirst: () => void = () => {};
+    let issueCalls = 0;
+    fetchMock.mockImplementation((path: string) => {
+      if (path === metaPath) return Promise.resolve(json(meta(true), { headers: { ETag: '"m1"' } }));
+      issueCalls++;
+      if (issueCalls === 1) {
+        return new Promise<Response>((resolve) => {
+          releaseFirst = () => resolve(json(issues(true, "a")));
+        });
+      }
+      return Promise.resolve(json(issues(true, "a", "b")));
+    });
+    const feed = new IssuesFeed();
+    const stop = feed.start();
+    await vi.advanceTimersByTimeAsync(0); // the first tick waits on the list
+
+    const p = feed.refresh();
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(0);
+    await p;
+    expect(issueCalls).toBe(2);
+    expect(feed.data?.items).toHaveLength(2);
+    stop();
+  });
+
+  it("resolves at once before start and after stop", async () => {
+    await expect(new IssuesFeed().refresh()).resolves.toBeUndefined();
+    reply(issuesPath, () => json(issues(true, "a")));
+    reply(metaPath, () => json(meta(true)));
+    const feed = new IssuesFeed();
+    const stop = feed.start();
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    await expect(feed.refresh()).resolves.toBeUndefined();
+  });
+
+  it("a refresh pending when the feed stops is released", async () => {
+    fetchMock.mockImplementation((path: string) =>
+      path === metaPath ? Promise.resolve(json(meta(true))) : new Promise<Response>(() => {}),
+    );
+    const feed = new IssuesFeed();
+    const stop = feed.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const p = feed.refresh();
+    stop();
+    await expect(p).resolves.toBeUndefined();
+  });
+});

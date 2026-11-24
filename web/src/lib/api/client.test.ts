@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getHealth, getJSON, getJSONIfChanged, getInsights, getInsightsIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, getTriage, getTriageIfChanged, search } from "./client";
+import { ApiError, getHealth, getJSON, getJSONIfChanged, getInsights, getInsightsIfChanged, getIssue, getIssueIfChanged, getIssues, getIssuesIfChanged, getMeta, getMetaIfChanged, getSignoff, getTriage, getTriageIfChanged, postAnswer, postSignoff, putPriority, search, sendJSON, setCloseCandidate } from "./client";
 import { session } from "../session.svelte";
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -171,5 +171,83 @@ describe("api client", () => {
     fetchMock.mockRejectedValue(abort);
     await expect(getJSON("/api/v1/x")).rejects.toBe(abort);
     expect(session.status).toBe("unknown");
+  });
+});
+
+describe("api client writes", () => {
+  const ok = { id: "x-1", generation: 3, data_hash: "abc" };
+  const sent = () => fetchMock.mock.calls[0] as [string, RequestInit];
+  const header = (init: RequestInit, name: string) => (init.headers as Record<string, string>)[name];
+
+  it("postSignoff POSTs the JSON body to the escaped id", async () => {
+    fetchMock.mockResolvedValue(json({ ...ok, created_id: "x-2" }));
+    await expect(postSignoff("a b/c", { approve: false, note: "broken" })).resolves.toEqual({ ...ok, created_id: "x-2" });
+    const [path, init] = sent();
+    expect(path).toBe("/api/v1/issues/a%20b%2Fc/signoff");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe('{"approve":false,"note":"broken"}');
+    expect(header(init, "Content-Type")).toBe("application/json");
+    expect(init.credentials).toBe("same-origin");
+    expect(session.status).toBe("ok");
+  });
+
+  it("postAnswer POSTs the option and text", async () => {
+    fetchMock.mockResolvedValue(json(ok));
+    await postAnswer("x-1", { option: "b", text: "because" });
+    const [path, init] = sent();
+    expect(path).toBe("/api/v1/issues/x-1/answer");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ option: "b", text: "because" });
+  });
+
+  it("putPriority PUTs {priority}, P0 included", async () => {
+    fetchMock.mockResolvedValue(json(ok));
+    await putPriority("x-1", 0);
+    const [path, init] = sent();
+    expect(path).toBe("/api/v1/issues/x-1/priority");
+    expect(init.method).toBe("PUT");
+    expect(init.body).toBe('{"priority":0}');
+  });
+
+  it("setCloseCandidate is PUT to mark and DELETE to unmark, with no body", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(ok)));
+    await setCloseCandidate("x-1", true);
+    await setCloseCandidate("x-1", false);
+    const [put, del] = fetchMock.mock.calls as [[string, RequestInit], [string, RequestInit]];
+    expect(put[0]).toBe("/api/v1/issues/x-1/labels/close-candidate");
+    expect(put[1].method).toBe("PUT");
+    expect(del[0]).toBe("/api/v1/issues/x-1/labels/close-candidate");
+    expect(del[1].method).toBe("DELETE");
+    for (const [, init] of [put, del]) {
+      expect(init.body).toBeUndefined();
+      expect(header(init, "Content-Type")).toBeUndefined();
+    }
+  });
+
+  it("sendJSON without a body sets no Content-Type", async () => {
+    fetchMock.mockResolvedValue(json(ok));
+    await sendJSON("PUT", "/api/v1/x");
+    expect(header(sent()[1], "Content-Type")).toBeUndefined();
+  });
+
+  it("rejects with the server's error envelope (a refused write)", async () => {
+    for (const [status, code, message] of [
+      [403, "read_only", "source is read-only"],
+      [409, "conflict", "x-1 is no longer awaiting sign-off"],
+      [502, "tracker_failed", "Error: no such label"],
+    ] as const) {
+      fetchMock.mockResolvedValueOnce(json({ error: { code, message } }, { status }));
+      await expect(postSignoff("x-1", { approve: true })).rejects.toMatchObject({ status, code, message });
+    }
+    expect(session.status).toBe("ok");
+  });
+
+  it("maps 401 on a write to signed-out and a network failure to offline", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: { code: "unauthorized", message: "open the URL" } }, { status: 401 }));
+    await expect(putPriority("x-1", 1)).rejects.toMatchObject({ status: 401 });
+    expect(session.status).toBe("signed-out");
+    fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+    await expect(putPriority("x-1", 1)).rejects.toMatchObject({ status: 0, code: "network" });
+    expect(session.status).toBe("offline");
   });
 });

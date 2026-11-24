@@ -1,14 +1,18 @@
 import { session } from "../session.svelte";
 import type {
+  AnswerRequest,
   ApiErrorBody,
   HealthResponse,
   InsightsResponse,
   IssueDetail,
   IssuesResponse,
   MetaResponse,
+  PriorityRequest,
   SearchResponse,
+  SignoffRequest,
   SignoffResponse,
   TriageResponse,
+  WriteResponse,
 } from "./types";
 
 export type ApiPath = `/api/v1/${string}`;
@@ -170,3 +174,35 @@ export const getInsightsIfChanged = (limit: number | undefined, etag: string | n
     etag,
     { signal },
   );
+
+/**
+ * A write: JSON in (when there is a body), JSON out. The browser adds the Origin
+ * header the server checks on every non-GET; the session cookie goes along. Errors
+ * reject with ApiError carrying the server's {error:{code,message}}.
+ */
+export async function sendJSON<T>(method: "POST" | "PUT" | "DELETE", path: ApiPath, body?: unknown): Promise<T> {
+  const res = await request(
+    method,
+    path,
+    body === undefined ? {} : { body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+  );
+  return parseJSON<T>(res);
+}
+
+const issueActionPath = (id: string, tail: string): ApiPath => `/api/v1/issues/${encodeURIComponent(id)}/${tail}`;
+
+/** Approves (approve: true) or disputes (approve: false, with a note) a closed issue awaiting sign-off. */
+export const postSignoff = (id: string, req: SignoffRequest) =>
+  sendJSON<WriteResponse>("POST", issueActionPath(id, "signoff"), req);
+
+/** Answers a needs-decision / needs-design issue: an option key, free text, or both. */
+export const postAnswer = (id: string, req: AnswerRequest) =>
+  sendJSON<WriteResponse>("POST", issueActionPath(id, "answer"), req);
+
+/** Sets the priority, 0 (P0) to 4 (P4). */
+export const putPriority = (id: string, priority: number) =>
+  sendJSON<WriteResponse>("PUT", issueActionPath(id, "priority"), { priority } satisfies PriorityRequest);
+
+/** Marks (PUT) or unmarks (DELETE) an issue as a close candidate. */
+export const setCloseCandidate = (id: string, on: boolean) =>
+  sendJSON<WriteResponse>(on ? "PUT" : "DELETE", issueActionPath(id, "labels/close-candidate"));

@@ -247,3 +247,34 @@ describe("IssueListState peek", () => {
     expect(s.peekSection).toBeNull();
   });
 });
+
+describe("IssueListState sticky rows", () => {
+  it("keeps marked ids until the filters or the query change", () => {
+    const s = new IssueListState();
+    s.markSticky("a");
+    s.markSticky("b");
+    expect([...s.sticky].sort()).toEqual(["a", "b"]);
+    s.setFilters({ ...defaultFilters(), state: "open" });
+    expect(s.sticky.size).toBe(0);
+
+    s.markSticky("a");
+    s.setQuery("cart");
+    expect(s.sticky.size).toBe(0);
+
+    s.markSticky("a");
+    s.clearFilters();
+    expect(s.sticky.size).toBe(0);
+
+    s.markSticky("a");
+    s.applyUrl(fromQuery(new URLSearchParams("")));
+    expect(s.sticky.size).toBe(0);
+  });
+
+  it("is replaced, never mutated in place", () => {
+    const s = new IssueListState();
+    const before = s.sticky;
+    s.markSticky("a");
+    expect(s.sticky).not.toBe(before);
+    expect(before.size).toBe(0);
+  });
+});

@@ -31,11 +31,16 @@ export function isStateFilter(v: unknown): v is StateFilter {
   return typeof v === "string" && (STATE_FILTERS as readonly string[]).includes(v);
 }
 
-export function stateMatches(item: ListItem, s: StateFilter): boolean {
+/**
+ * `sticky`: ids that stay in "Active" although they no longer qualify (a sign-off
+ * just approved), so the row does not vanish under the cursor. The list state
+ * empties it whenever the filters or the query change.
+ */
+export function stateMatches(item: ListItem, s: StateFilter, sticky?: ReadonlySet<string>): boolean {
   switch (s) {
     case "active":
       // "disputed" stays in: it still needs attention.
-      return item.status !== "closed" || item.signoff === "pending" || item.signoff === "disputed";
+      return item.status !== "closed" || item.signoff === "pending" || item.signoff === "disputed" || !!sticky?.has(item.id);
     case "open":
       return item.status !== "closed";
     case "ready":
@@ -48,8 +53,8 @@ export function stateMatches(item: ListItem, s: StateFilter): boolean {
 }
 
 /** Facets AND across chips; within one chip the values are OR (a label chip with two labels matches either). */
-export function passesFilters(item: ListItem, f: ListFilters): boolean {
-  if (!stateMatches(item, f.state)) return false;
+export function passesFilters(item: ListItem, f: ListFilters, sticky?: ReadonlySet<string>): boolean {
+  if (!stateMatches(item, f.state, sticky)) return false;
   if (f.priority.length > 0 && !f.priority.includes(item.priority)) return false;
   if (f.type.length > 0 && !f.type.includes(item.issue_type)) return false;
   if (f.label.length > 0 && !item.labels.some((l) => f.label.includes(l))) return false;

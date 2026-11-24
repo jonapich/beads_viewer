@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { ListItem } from "../../lib/api/types";
-  import { awaitsSignoff, displayStatus, needsAnswer, type IssueIndex } from "../../lib/issues/model";
+  import { awaitsSignoff, canAnswer, displayStatus, type IssueIndex } from "../../lib/issues/model";
   import { ago, triageText } from "../../lib/issues/present";
   import type { PeekSection } from "../../lib/issues/peek";
   import type { IssueRow } from "../../lib/issues/tree";
   import AssigneeDot from "./AssigneeDot.svelte";
   import LabelChips from "./LabelChips.svelte";
   import PriorityPill from "./PriorityPill.svelte";
+  import RowMenuButton from "./RowMenuButton.svelte";
   import StatusGlyph from "./StatusGlyph.svelte";
   import TitleLine from "./TitleLine.svelte";
 
@@ -23,16 +24,25 @@
     narrow: boolean;
     ontoggle: (id: string) => void;
     onpeek: (id: string, section?: PeekSection) => void;
+    /** The tracker takes writes (meta.capabilities.writes). */
+    writes: boolean;
+    /** A write on this issue is in flight. */
+    busy: boolean;
+    /** The priority pill or the "..." button was pressed: open the row actions popover at it. */
+    onprio: (id: string, anchor: HTMLElement) => void;
+    onmenu: (id: string, anchor: HTMLElement) => void;
+    /** Which of this row's buttons has its popover open. */
+    popKind: "prio" | "menu" | null;
   }
 
-  let { row, item, index, via, now, selected, flash, narrow, ontoggle, onpeek }: Props = $props();
+  let { row, item, index, via, now, selected, flash, narrow, ontoggle, onpeek, writes, busy, onprio, onmenu, popKind }: Props = $props();
 
   /** Narrow rows indent 12px per level and stop at depth 4; deeper rows show "+n" instead. */
   const visualDepth = $derived(Math.min(row.depth, 4));
 
   const status = $derived(displayStatus(item, now));
   const edge = $derived(row.edges[row.edges.length - 1]);
-  const attention = $derived(awaitsSignoff(item) ? "Sign off" : needsAnswer(item) ? "Answer" : null);
+  const attention = $derived(awaitsSignoff(item) ? "Sign off" : canAnswer(item) ? "Answer" : null);
 </script>
 
 <div
@@ -42,6 +52,7 @@
   class:sel={selected}
   class:flash
   class:narrow
+  class:busy
   data-depth={visualDepth}
   data-row
   data-id={item.id}
@@ -75,9 +86,10 @@
     {/if}
     <LabelChips labels={item.labels} />
     <AssigneeDot assignee={item.assignee} />
-    <PriorityPill priority={item.priority} />
+    <PriorityPill priority={item.priority} {busy} expanded={popKind === "prio"} disabled={!writes} onpick={(el) => onprio(item.id, el)} />
     <span class="c-tri" class:dash={item.triage_score === undefined} title="Triage score">{triageText(item.triage_score)}</span>
     <span class="c-upd" title="Updated">{ago(item.updated_at, now)}</span>
+    <RowMenuButton id={item.id} {busy} expanded={popKind === "menu"} disabled={!writes} onmenu={(el) => onmenu(item.id, el)} />
   </div>
 </div>
 
@@ -93,6 +105,9 @@
   }
   .row:hover {
     background: var(--bg-hover);
+  }
+  .row.busy {
+    cursor: progress;
   }
   .row.sel {
     background: var(--bg-selected);
@@ -268,6 +283,10 @@
   }
   .row.narrow .c-upd {
     display: none;
+  }
+  .row.narrow :global(.menu) {
+    height: 20px;
+    margin-left: auto;
   }
   /* Line 2 starts under the title: indent gap 6 + caret 24 + gap 6 + glyph 16 + gap 6, plus 12 per level. */
   .row.narrow[data-depth="0"] .rl2 {

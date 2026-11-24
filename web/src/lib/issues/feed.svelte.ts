@@ -54,6 +54,14 @@ export class IssuesFeed {
   /** Reloads after an error (the Retry button). Replaced by start(). */
   reload: () => void = () => {};
 
+  /**
+   * Refetches the list and meta now and resolves once a refetch that started after
+   * this call has finished (never rejects; failures show in `error`). A write awaits
+   * this so its row stays busy until the list shows the result. Replaced by start();
+   * resolves at once before that and after stop.
+   */
+  refresh: () => Promise<void> = () => Promise.resolve();
+
   /** Begins loading and polling; returns the cleanup that aborts both. Call from onMount. */
   start(): () => void {
     const ac = new AbortController();
@@ -62,6 +70,14 @@ export class IssuesFeed {
     let issuesStale = false;
     /** An event arrived during a tick: run one more full refetch when it ends. */
     let again = false;
+    /** Ticks started so far, and the refresh() callers waiting for a tick numbered `from` or later to end. */
+    let started = 0;
+    let waiters: Array<{ from: number; resolve: () => void }> = [];
+    const settle = (finished: number): void => {
+      const done = waiters.filter((w) => w.from <= finished);
+      waiters = waiters.filter((w) => w.from > finished);
+      for (const w of done) w.resolve();
+    };
 
     /** Resolves true when the call should be retried shortly. */
     const failed = (err: unknown, which: "issues" | "meta"): boolean => {
@@ -108,6 +124,7 @@ export class IssuesFeed {
     };
 
     const tick = async (withIssues: boolean): Promise<void> => {
+      const mine = ++started;
       running = true;
       timer = undefined;
       try {
@@ -127,6 +144,7 @@ export class IssuesFeed {
         if (retry || poll) timer = setTimeout(() => void tick(false), POLL_MS);
       } finally {
         running = false;
+        settle(mine);
         if (again && !ac.signal.aborted) {
           again = false;
           void tick(true);
@@ -153,12 +171,21 @@ export class IssuesFeed {
       void tick(true);
     };
 
+    this.refresh = () => {
+      if (ac.signal.aborted) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        waiters.push({ from: started + 1, resolve });
+        kick();
+      });
+    };
+
     const offLive = onLive(kick);
     void tick(true);
     return () => {
       offLive();
       ac.abort();
       clearTimeout(timer);
+      settle(Infinity);
     };
   }
 }

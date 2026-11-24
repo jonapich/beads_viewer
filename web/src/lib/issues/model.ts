@@ -81,3 +81,12 @@ export function needsAnswer(item: ListItem): boolean {
 export function awaitsSignoff(item: ListItem): boolean {
   return item.status === "closed" && item.signoff === "pending";
 }
+
+/**
+ * An open issue labelled needs-decision or needs-design, so the Answer action
+ * applies. The server sends no decision for a closed issue, and an answer would be
+ * refused (409), so a closed issue that still carries the label is not answerable.
+ */
+export function canAnswer(item: ListItem): boolean {
+  return item.status !== "closed" && needsAnswer(item);
+}

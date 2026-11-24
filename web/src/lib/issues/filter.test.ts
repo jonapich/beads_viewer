@@ -102,3 +102,21 @@ describe("mode", () => {
     expect(nextModePick("tree", false)).toBeNull();
   });
 });
+
+describe("sticky rows", () => {
+  const approved = mkItem("a", { status: "closed", signoff: "approved" });
+  it("keeps a just-written issue in Active, and only there", () => {
+    const sticky = new Set(["a"]);
+    expect(stateMatches(approved, "active")).toBe(false);
+    expect(stateMatches(approved, "active", sticky)).toBe(true);
+    expect(stateMatches(approved, "active", new Set(["other"]))).toBe(false);
+    expect(stateMatches(approved, "open", sticky)).toBe(false);
+    expect(stateMatches(approved, "closed", sticky)).toBe(true);
+  });
+
+  it("passesFilters honours it for the state only; the other facets still apply", () => {
+    const sticky = new Set(["a"]);
+    expect(passesFilters(approved, defaultFilters(), sticky)).toBe(true);
+    expect(passesFilters(approved, { ...defaultFilters(), priority: [0] }, sticky)).toBe(false);
+  });
+});

@@ -1,11 +1,14 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import type { DepRef, IssueRef, ListItem } from "../../lib/api/types";
-  import { displayStatus, needsAnswer } from "../../lib/issues/model";
+  import { answerKey, noteKey, optionKey, type IssueActions } from "../../lib/issues/actions.svelte";
+  import { awaitsSignoff, canAnswer, displayStatus } from "../../lib/issues/model";
   import { callView, childProgress, refStatus, signoffLabel, signoffTone, topReasons, type PeekSection } from "../../lib/issues/peek";
   import { PeekLoader } from "../../lib/issues/peek.svelte";
   import { percent, STATUS_NAME, triageText } from "../../lib/issues/present";
+  import DecisionForm from "./DecisionForm.svelte";
   import PriorityPill from "./PriorityPill.svelte";
+  import SignoffActions from "./SignoffActions.svelte";
   import StatusGlyph from "./StatusGlyph.svelte";
 
   interface Props {
@@ -22,30 +25,44 @@
     onopen: (id: string) => void;
     /** The issue is gone from the tracker (404). */
     onmissing: (id: string) => void;
+    /** The quick actions: their state (busy, drafts, the open dispute form) and calls. */
+    actions: IssueActions;
+    /** The tracker takes writes (meta.capabilities.writes). */
+    writes: boolean;
+    /** The priority pill was pressed: open the row actions popover at it. */
+    onpickpriority: (id: string, anchor: HTMLElement) => void;
+    /** The priority popover is open from this drawer's pill. */
+    prioOpen: boolean;
   }
 
-  let { id, item, section, now, reloadKey, onclose, onopen, onmissing }: Props = $props();
+  let { id, item, section, now, reloadKey, onclose, onopen, onmissing, actions, writes, onpickpriority, prioOpen }: Props = $props();
 
   const loader = new PeekLoader();
   let root = $state<HTMLElement>();
   let heading = $state<HTMLElement>();
   let highlighted = $state<PeekSection | null>(null);
   let scrolledFor = "";
+  let focusedFor = "";
   let hlTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Below 1280px the drawer is an overlay or sheet, so it takes focus; the push panel leaves focus in the list. */
   const overlayMode = () => matchMedia("(max-width: 1279px)").matches;
 
   let firstLoad = true;
+  let lastId = "";
   $effect(() => {
     const current = id;
     void reloadKey;
     untrack(() => {
       loader.load(current);
+      // Only a different issue moves focus to the heading: a data refresh (every live update)
+      // must not pull it out of a textarea the user is typing in.
+      const changed = current !== lastId;
+      lastId = current;
       // Another issue opened from inside an overlay drawer (a ref click): the clicked button is
       // gone, so keep focus in the drawer.
       const holdsFocus = !!root && (document.activeElement === document.body || root.contains(document.activeElement));
-      if (!firstLoad && overlayMode() && holdsFocus) heading?.focus({ preventScroll: true });
+      if (!firstLoad && changed && overlayMode() && holdsFocus) heading?.focus({ preventScroll: true });
       firstLoad = false;
     });
   });
@@ -58,6 +75,18 @@
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (overlayMode()) heading?.focus({ preventScroll: true });
   });
+
+  /**
+   * A write that succeeds can remove the control that had focus (the dispute form, the answer
+   * form): focus would fall to <body>. Park it on the drawer heading, so a keyboard user stays
+   * in the drawer.
+   */
+  async function keepFocus(write: Promise<boolean>): Promise<void> {
+    if (!(await write)) return;
+    await tick();
+    // Only when it really fell: if the user moved focus elsewhere meanwhile, leave it.
+    if (!document.activeElement || document.activeElement === document.body) heading?.focus({ preventScroll: true });
+  }
 
   async function close(): Promise<void> {
     const hadFocus = !!root?.contains(document.activeElement);
@@ -98,9 +127,16 @@
   const title = $derived(detail?.title ?? item?.title ?? "");
   const status = $derived(base ? displayStatus(base, now) : "open");
   const labels = $derived(base?.labels ?? []);
-  const signoffState = $derived(detail?.signoff?.state ?? item?.signoff ?? "");
+  // The list item is fresher than the detail, which keeps the old copy until its own refetch
+  // lands: after a write the list says "done" first. Gate the actions on it, so a write that
+  // just succeeded is not offered again.
+  const signoffState = $derived(item ? (item.signoff ?? "") : (detail?.signoff?.state ?? ""));
   // The server sends no decision for a closed issue even if it still carries the label.
-  const hasDecision = $derived(detail ? !!detail.decision : !!item && item.status !== "closed" && needsAnswer(item));
+  const hasDecision = $derived(item ? canAnswer(item) : !!detail?.decision);
+  // Writes need a writable tracker, and an issue whose own route is writable (the detail says why not).
+  const readOnly = $derived(!writes || !!detail?.read_only_reason);
+  const busy = $derived(actions.isBusy(id));
+  const awaitsSignoffNow = $derived(item ? awaitsSignoff(item) : base?.status === "closed" && signoffState === "pending");
   const progress = $derived(childProgress(detail?.children ?? []));
   const reasons = $derived(topReasons(detail?.triage));
 
@@ -110,18 +146,30 @@
     void detail;
     if (!s) {
       scrolledFor = "";
+      focusedFor = "";
       return;
     }
     if (!root) return;
     const key = `${id}:${s}`;
-    if (scrolledFor === key) return;
     const el = root.querySelector(`[data-sec="${s}"]`);
     if (!el) return;
-    scrolledFor = key;
-    el.scrollIntoView({ block: "nearest" });
-    highlighted = s;
-    clearTimeout(hlTimer);
-    hlTimer = setTimeout(() => (highlighted = null), 1300);
+    if (scrolledFor !== key) {
+      scrolledFor = key;
+      el.scrollIntoView({ block: "nearest" });
+      highlighted = s;
+      clearTimeout(hlTimer);
+      hlTimer = setTimeout(() => (highlighted = null), 1300);
+    }
+    // Opened from the row menu (Dispute..., Answer...): put the cursor in the form, once its
+    // textarea exists (the answer form waits for the detail). element.focus(), not autofocus,
+    // which does nothing on a re-render.
+    if (focusedFor !== key) {
+      const ta = el.querySelector<HTMLTextAreaElement>("textarea:not(:disabled)");
+      if (ta) {
+        focusedFor = key;
+        ta.focus({ preventScroll: true });
+      }
+    }
   });
 </script>
 
@@ -164,7 +212,15 @@
             {#if base.ready && base.status === "open" && base.issue_type !== "epic"}<span class="tag ready">Ready</span>{/if}
           </dd>
           <dt>Priority</dt>
-          <dd><PriorityPill priority={base.priority} /></dd>
+          <dd>
+            <PriorityPill
+              priority={item?.priority ?? base.priority}
+              {busy}
+              expanded={prioOpen}
+              disabled={readOnly}
+              onpick={(el) => onpickpriority(id, el)}
+            />
+          </dd>
           <dt>Type</dt>
           <dd>{base.issue_type}</dd>
           <dt>Assignee</dt>
@@ -181,6 +237,20 @@
       <div class="sec" class:hl={highlighted === "signoff"} data-sec="signoff">
         <h3>Sign-off</h3>
         <span class="badge" data-tone={signoffTone(signoffState)}>{signoffLabel(signoffState)}</span>
+        {#if awaitsSignoffNow}
+          <SignoffActions
+            issueId={id}
+            {busy}
+            disabled={readOnly}
+            open={actions.disputeOpen === id}
+            note={actions.getDraft(noteKey(id))}
+            onapprove={() => void keepFocus(actions.approve(id))}
+            onopen={() => actions.openDispute(id)}
+            oncancel={() => actions.closeDispute()}
+            onnote={(v) => actions.setDraft(noteKey(id), v)}
+            ondispute={(note) => void keepFocus(actions.dispute(id, note))}
+          />
+        {/if}
         {#if detail?.signoff}
           {@const so = detail.signoff}
           {#if so.what_changed?.length}
@@ -220,16 +290,18 @@
         {#if detail?.decision}
           {@const dc = detail.decision}
           <p class="q">{dc.question ?? title}</p>
-          {#if dc.options.length > 0}
-            <ul class="plain">
-              {#each dc.options as o (o.key)}
-                <li><span class="key">{o.key}</span> {o.text}{#if o.recommended} <span class="tag ready">recommended</span>{/if}</li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="faint">The description offers no options; an answer needs free text.</p>
-          {/if}
           {#if dc.waiting_on}<p class="faint">Waiting on: {dc.waiting_on}</p>{/if}
+          <DecisionForm
+            issueId={id}
+            decision={dc}
+            {busy}
+            disabled={readOnly}
+            option={actions.getDraft(optionKey(id))}
+            text={actions.getDraft(answerKey(id))}
+            onoption={(k) => actions.setDraft(optionKey(id), k)}
+            ontext={(v) => actions.setDraft(answerKey(id), v)}
+            onanswer={(a) => void keepFocus(actions.answer(id, a))}
+          />
         {:else if loader.status === "loading"}
           <p class="faint">Loading…</p>
         {/if}
@@ -474,10 +546,6 @@
     margin: 0;
     font-size: var(--text-sm);
     font-weight: 600;
-  }
-  .key {
-    font-family: var(--font-mono);
-    color: var(--text-muted);
   }
   .lnk {
     display: flex;

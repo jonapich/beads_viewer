@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../api/__fixtures__/issues-tree.json";
 import type { IssuesResponse } from "../api/types";
-import { awaitsSignoff, buildIndex, displayStatus, isBlockedAny, needsAnswer } from "./model";
+import { awaitsSignoff, buildIndex, canAnswer, displayStatus, isBlockedAny, needsAnswer } from "./model";
 import { mkItem, mkResponse } from "./test-helpers";
 
 const fx: IssuesResponse = fixture;
@@ -62,5 +62,28 @@ describe("status helpers", () => {
     expect(needsAnswer(mkItem("a", { labels: ["needs-signoff"] }))).toBe(false);
     expect(awaitsSignoff(mkItem("a", { status: "closed", signoff: "pending" }))).toBe(true);
     expect(awaitsSignoff(mkItem("a", { status: "open", signoff: "pending" }))).toBe(false);
+  });
+});
+
+describe("write gating helpers", () => {
+  it("awaitsSignoff: a closed issue whose sign-off is pending, nothing else", () => {
+    expect(awaitsSignoff(mkItem("a", { status: "closed", signoff: "pending" }))).toBe(true);
+    for (const signoff of ["approved", "disputed", "waived", "none", undefined]) {
+      expect(awaitsSignoff(mkItem("a", { status: "closed", signoff }))).toBe(false);
+    }
+    expect(awaitsSignoff(mkItem("a", { status: "in_progress", signoff: "pending" }))).toBe(false);
+  });
+
+  it("canAnswer: an open issue labelled needs-decision or needs-design", () => {
+    expect(canAnswer(mkItem("a", { labels: ["needs-decision"] }))).toBe(true);
+    expect(canAnswer(mkItem("a", { labels: ["x", "needs-design"], status: "in_progress" }))).toBe(true);
+    expect(canAnswer(mkItem("a", { labels: ["needs-signoff"] }))).toBe(false);
+    expect(canAnswer(mkItem("a"))).toBe(false);
+  });
+
+  it("canAnswer is false for a closed issue that still carries the label (the server would refuse)", () => {
+    const closed = mkItem("a", { status: "closed", labels: ["needs-decision"] });
+    expect(needsAnswer(closed)).toBe(true);
+    expect(canAnswer(closed)).toBe(false);
   });
 });

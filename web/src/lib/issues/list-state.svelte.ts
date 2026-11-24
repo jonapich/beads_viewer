@@ -44,6 +44,8 @@ export class IssueListState {
   /** Set when "Show in tree" left flat results: where to return to (scroll offset and the mode pick). */
   backTo = $state.raw<{ scrollTop: number; modePick: Mode | null } | null>(null);
   flashId = $state<string | null>(null);
+  /** Issues a write just changed: kept in "Active" until the filters or the query change (see stateMatches). */
+  sticky = $state.raw<ReadonlySet<string>>(new Set());
   /** Search hits in rank order (id -> position); null = no query. */
   rank = $state.raw<Map<string, number> | null>(null);
   /** Set once the URL and remembered prefs have been applied. */
@@ -81,19 +83,27 @@ export class IssueListState {
     this.peekSection = null;
     this.pruneCollapsed = new Set();
     this.backTo = null;
+    this.sticky = new Set();
   }
   isExpanded(id: string): boolean {
     return this.pruning ? !this.pruneCollapsed.has(id) : this.expanded.has(id);
   }
 
+  /** A write changed this issue: keep its row in the list under "Active". */
+  markSticky(id: string): void {
+    this.sticky = new Set(this.sticky).add(id);
+  }
+
   setQuery(q: string): void {
     this.backTo = null;
+    this.sticky = new Set();
     this.query = q;
     this.modePick = nextModePick(this.modePick, this.triggered);
   }
 
   setFilters(f: ListFilters): void {
     this.backTo = null;
+    this.sticky = new Set();
     this.filters = f;
     this.modePick = nextModePick(this.modePick, this.triggered);
   }
