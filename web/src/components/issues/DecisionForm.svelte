@@ -9,9 +9,7 @@
     busy: boolean;
     /** The tracker (or this issue) takes no writes. */
     disabled: boolean;
-    /** Why the form cannot be used although the tracker takes writes (the agent desk: nothing to judge yet); shown as a hint. */
-    blocked?: string;
-    /** The picked option's key, "" when the user has not picked; the recommended one stands in then. */
+    /** The picked option's key, "" when the user has not picked (nothing is pre-selected, the recommended option included). */
     option: string;
     /** The unsent note or answer; the owner keeps both, so they survive a re-render. */
     text: string;
@@ -20,19 +18,19 @@
     onanswer: (answer: { option?: string; text?: string }) => void;
   }
 
-  let { issueId, decision, busy, disabled, blocked = "", option, text, onoption, ontext, onanswer }: Props = $props();
+  let { issueId, decision, busy, disabled, option, text, onoption, ontext, onanswer }: Props = $props();
 
   const options = $derived(decision.options);
-  // The TUI starts its cursor on the recommended option; so does this.
-  const recommended = $derived(options.find((o) => o.recommended)?.key ?? "");
-  const chosenKey = $derived(options.some((o) => o.key === option) ? option : recommended);
+  // Nothing is pre-selected, not even the recommended option (it only carries a tag): a pre-selected
+  // answer reads as a decision already taken. Post stays off until an option is picked or a note typed.
+  const chosenKey = $derived(options.some((o) => o.key === option) ? option : "");
   const chosen = $derived(options.find((o) => o.key === chosenKey) ?? null);
   // The one Tab stop of the radio group: the checked option, else the first.
   const tabKey = $derived(chosen ? chosen.key : (options[0]?.key ?? ""));
   const hasText = $derived(text.trim() !== "");
   const long = $derived(tooLong(text));
   const ready = $derived((chosen !== null || hasText) && !long);
-  const inert = $derived(busy || disabled || blocked !== "");
+  const inert = $derived(busy || disabled);
   const noteWord = $derived(options.length > 0 ? "note" : "answer");
 
   function post(): void {
@@ -113,12 +111,12 @@
   ></textarea>
   {#if long}<p class="warn" id="answer-long-{issueId}" role="alert">Too long: the {noteWord} can be at most {MAX_TEXT} bytes.</p>{/if}
   {#if ready}
-    <p class="prev">
-      Posts: <code>{decisionComment(chosen, text)}</code> · removes <code>{decision.label}</code>
-    </p>
+    <div class="prev" data-preview>
+      <span class="pl">Will post when you click Post answer:</span>
+      <code>{decisionComment(chosen, text)}</code> · removes <code>{decision.label}</code>
+    </div>
   {/if}
-  {#if blocked}<p class="faint">{blocked}</p>{/if}
-  <button type="button" class="btn primary" disabled={inert || !ready} title={disabled ? READ_ONLY_TITLE : blocked} onclick={post}>
+  <button type="button" class="btn primary" disabled={inert || !ready} title={disabled ? READ_ONLY_TITLE : ""} onclick={post}>
     {busy ? "Saving…" : "Post answer"}
   </button>
 </div>
@@ -205,11 +203,20 @@
     font-size: var(--text-xs);
     color: var(--danger);
   }
+  /* A preview of what the button will do, not a record of anything: muted, in a dashed box. */
   .prev {
     margin: 8px 0;
+    padding: 6px 8px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
     font-size: var(--text-xs);
     color: var(--text-muted);
     overflow-wrap: anywhere;
+  }
+  .pl {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-faint);
   }
   .btn {
     height: 28px;

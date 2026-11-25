@@ -211,7 +211,8 @@ describe("pane helpers", () => {
       { key: "b", text: "Adyen", recommended: true },
     ];
     expect(answerSummary(opts, "a", "")).toBe("(a) Stripe");
-    expect(answerSummary(opts, "", "")).toBe("(b) Adyen"); // the recommended one stands in
+    expect(answerSummary(opts, "", "")).toBe(""); // nothing picked, nothing posted: the recommended one is not pre-selected
+    expect(answerSummary(opts, "", "just a note")).toBe("just a note");
     expect(answerSummary(opts, "a", " cheaper ")).toBe("(a) Stripe — cheaper");
     expect(answerSummary([], "", " free text ")).toBe("free text");
   });

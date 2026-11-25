@@ -15,13 +15,11 @@
     busy?: boolean;
     /** The tracker (or this issue) takes no writes. */
     readOnly: boolean;
-    /** Why the form cannot be used although the tracker takes writes (the agent desk: nothing to judge yet). */
-    blocked?: string;
     /** Hands a started write to the page, which keeps focus and shows the "done" note once it landed. */
     onwrite: (write: Promise<boolean>, kind: "answered") => void;
   }
 
-  let { id, issueTitle, decision, actions, readOnly, blocked = "", busy: busyProp, onwrite }: Props = $props();
+  let { id, issueTitle, decision, actions, readOnly, busy: busyProp, onwrite }: Props = $props();
 
   // The page passes its combined busy state (a field edit in flight counts too).
   const busy = $derived(busyProp ?? actions.isBusy(id));
@@ -36,7 +34,6 @@
     {decision}
     {busy}
     disabled={readOnly}
-    {blocked}
     option={actions.getDraft(optionKey(id))}
     text={actions.getDraft(answerKey(id))}
     onoption={(k) => actions.setDraft(optionKey(id), k)}

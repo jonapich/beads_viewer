@@ -30,6 +30,8 @@ export interface Manifest {
   /** "Desk question one" and "Desk question two": needs-decision; the agent desk answer flow owns them. */
   deskA: string;
   deskB: string;
+  /** "Desk design question": needs-design with no mock attached; the desk must still let the user answer it. */
+  deskDesign: string;
   /** "Desk sign-off target": closed and awaiting sign-off; the desk approve target. */
   deskSignoff: string;
   /** "Claimed target": claimed, stage code; the only row of the desk Pipeline tab. */
@@ -52,6 +54,7 @@ export const TITLES: Record<keyof Manifest, string> = {
   live: "Live target",
   deskA: "Desk question one",
   deskB: "Desk question two",
+  deskDesign: "Desk design question",
   deskSignoff: "Desk sign-off target",
   claimed: "Claimed target",
   sliced: "Sliced target",
@@ -128,6 +131,17 @@ const DECISION_DESCRIPTION = [
 const DESK_DESCRIPTION = (question: string): string =>
   [question, "", `Question: ${question}`, "", "A (recommended): Go ahead", "B: Hold off"].join("\n");
 
+const DESK_DESIGN_DESCRIPTION = [
+  "Which receipt layout do we ship?",
+  "",
+  "Question: Which receipt layout do we ship?",
+  "",
+  "Next artifact: an HTML mock of both layouts.",
+  "",
+  "A (recommended): Compact",
+  "B: Detailed",
+].join("\n");
+
 const SLICE_METADATA = JSON.stringify({
   slice_outcome: "committed",
   review_rounds: 1,
@@ -167,6 +181,7 @@ export function buildFixture(bdExe: string, dir: string): Manifest {
   // The agent desk (beads-c2o.11): its own beads, so the answer and approve flows there do not race the ones above.
   const deskA = create(TITLES.deskA, "--type", "task", "--label", "needs-decision", "--description", DESK_DESCRIPTION("Ship the beta this week?"));
   const deskB = create(TITLES.deskB, "--type", "task", "--label", "needs-decision", "--description", DESK_DESCRIPTION("Rename the export flag?"));
+  const deskDesign = create(TITLES.deskDesign, "--type", "task", "--label", "needs-design", "--description", DESK_DESIGN_DESCRIPTION);
   const deskSignoff = create(TITLES.deskSignoff, "--type", "task", "--label", "needs-signoff");
   const claimed = create(TITLES.claimed, "--type", "task");
   const sliced = create(TITLES.sliced, "--type", "task", "--metadata", SLICE_METADATA);
@@ -182,7 +197,7 @@ export function buildFixture(bdExe: string, dir: string): Manifest {
   bd(bdExe, dir, "close", oldtask, "--reason", "Done.");
 
   exportJsonl(bdExe, dir);
-  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live, deskA, deskB, deskSignoff, claimed, sliced };
+  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live, deskA, deskB, deskDesign, deskSignoff, claimed, sliced };
 }
 
 /**

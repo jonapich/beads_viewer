@@ -65,6 +65,13 @@ test.describe("agent desk", () => {
     await expect(pane.getByRole("heading", { level: 2 })).toHaveText("Desk question one");
     expect(tracker.show(deskA).labels).toContain("needs-decision");
 
+    // Nothing is pre-selected (the recommended option only carries a tag): Post is off and nothing is previewed.
+    await expect(pane.getByRole("radio", { checked: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Post answer" })).toBeDisabled();
+    await expect(pane.locator("[data-preview]")).toHaveCount(0);
+    await pane.getByRole("radio", { name: /Go ahead/ }).click();
+    await expect(pane.locator("[data-preview]")).toContainText("Will post when you click Post answer:");
+    await expect(pane.locator("[data-preview]")).toContainText("Decision: (a) Go ahead");
     await pane.getByLabel("Add a note (optional)").fill("e2e desk answer");
     const post = writeResponse(page, "POST", deskA, "/answer");
     await page.getByRole("button", { name: "Post answer" }).click();
@@ -93,6 +100,24 @@ test.describe("agent desk", () => {
     await expect(selected).toHaveCount(1);
   });
 
+  test("Inbox: a design question with no mock yet says so and can still be answered", async ({ page, rw, tracker }) => {
+    const { deskDesign } = tracker.ids;
+    await page.goto(`${rw.base}/desk?tab=inbox&id=${deskDesign}`);
+    const pane = page.locator(".pane");
+    await expect(pane).toHaveAttribute("data-pane", deskDesign);
+    await expect(pane.getByRole("status").filter({ hasText: "No mock or artifact is attached" })).toContainText("waiting on: an HTML mock of both layouts");
+
+    // The notice is information, not a lock: the form works as it does on the issue page.
+    const post = pane.getByRole("button", { name: "Post answer" });
+    await expect(pane.getByRole("radio", { name: /Compact/ })).toBeEnabled();
+    await expect(post).toBeDisabled(); // nothing picked yet: not blocked by the missing mock, just nothing to post
+    await pane.getByRole("radio", { name: /Compact/ }).click();
+    await expect(post).toBeEnabled();
+    const answer = writeResponse(page, "POST", deskDesign, "/answer");
+    await post.click();
+    expect((await answer).status()).toBe(200);
+    expect(tracker.show(deskDesign).labels ?? []).not.toContain("needs-design");
+  });
   test("Sign-off: approving marks the row at once, removes the label and drops the nav badge", async ({ page, rw, tracker }) => {
     const { deskSignoff } = tracker.ids;
     const before = await badgeTotal(page, rw.base);

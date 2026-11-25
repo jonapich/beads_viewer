@@ -237,7 +237,8 @@ export function judgeLink(links: readonly Link[]): Link | undefined {
 
 /** "(b) keep the cart", "(b) keep the cart — note" or the free text: what an answer posted. */
 export function answerSummary(options: readonly DecisionOption[], picked: string, text: string): string {
-  const opt = options.find((o) => o.key === picked) ?? options.find((o) => o.recommended);
+  // Only an option the user picked: the recommended one is not pre-selected.
+  const opt = options.find((o) => o.key === picked);
   const note = text.trim();
   if (opt && note !== "") return `(${opt.key}) ${opt.text} — ${note}`;
   if (opt) return `(${opt.key}) ${opt.text}`;

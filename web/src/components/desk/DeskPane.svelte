@@ -120,6 +120,13 @@
       {#if judge}
         <p class="mock"><a class="btn" href={judge.url} target="_blank" rel="noopener noreferrer">Open {judge.kind} ↗</a>{#if judge.note}<span class="mnote">{judge.note}</span>{/if}</p>
       {/if}
+      {#if designWaiting && !judge}
+        <!-- Informational only: the user can always answer, here and on the issue page. -->
+        <Notice
+          tone="info"
+          text="No mock or artifact is attached to this design question yet{detail.decision.waiting_on ? ` (waiting on: ${detail.decision.waiting_on})` : ""}, so there is nothing to look at. You can still answer."
+        />
+      {/if}
       <DecisionCard
         id={detail.id}
         issueTitle={detail.title}
@@ -127,7 +134,6 @@
         {actions}
         busy={actions.isBusy(detail.id)}
         {readOnly}
-        blocked={designWaiting && !judge ? "Nothing to judge yet." : ""}
         onwrite={(write, kind) => onwrite(write, kind)}
       />
     {:else if card === "signoff" && detail.signoff}
