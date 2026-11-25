@@ -6,7 +6,11 @@ export type Attention = "danger" | "warning";
 
 export interface IssueRow {
   kind: "issue";
-  /** Unique per placement: the parent row's key + ">" + id. */
+  /**
+   * Unique per placement and stable across rebuilds of the same tree: the id, plus
+   * (below a root) a hash of the path from the root. Its length does not grow with
+   * the depth, so hashing and comparing keys is O(1) in the depth.
+   */
   key: string;
   id: string;
   depth: number;
@@ -69,6 +73,37 @@ function lazyEdges(path: EdgePath | null, depth: number): () => EdgeKind[] {
     return built;
   };
 }
+
+/** A running 2 x 32-bit hash of the ids on the path from a root. */
+interface PathHash {
+  a: number;
+  b: number;
+}
+
+const ROOT_HASH: PathHash = { a: 0x9e3779b9, b: 0x85ebca6b };
+
+/**
+ * The hash of `p` followed by one more id: O(id length), whatever the depth. It
+ * is order-sensitive and deterministic, so a placement keeps its key from one
+ * rebuild to the next. Two paths colliding needs a 64-bit coincidence among the
+ * (at most maxRows) rows of one list.
+ */
+function extendHash(p: PathHash, id: string): PathHash {
+  let a = p.a ^ 0x7f4a7c15;
+  let b = p.b ^ 0x165667b1;
+  for (let i = 0; i < id.length; i++) {
+    const c = id.charCodeAt(i);
+    a = Math.imul(a ^ c, 2654435761);
+    b = Math.imul(b ^ c, 1597334677);
+  }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+  return { a: a >>> 0, b: b >>> 0 };
+}
+
+/** The key of a placement: the id, and below a root the hash of its path (which includes the root). */
+const placementKey = (id: string, h: PathHash, depth: number): string =>
+  depth === 0 ? id : `${id}~${h.a.toString(36)}.${h.b.toString(36)}`;
 
 /** children[id] without the prototype chain (an id such as "constructor" is not a node). */
 function kidsOf(children: Record<string, TreeEdge[]>, id: string): readonly TreeEdge[] {
@@ -268,14 +303,14 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
     id: string;
     depth: number;
     path: EdgePath | null;
-    key: string;
+    hash: PathHash;
     kids: OrderedEdge[];
     next: number;
   }
   const stack: Frame[] = [];
 
   /** Emits the row for `id` and returns its frame when its kids are to be walked. */
-  const enter = (id: string, depth: number, path: EdgePath | null, key: string, viaId: string | null): Frame | null => {
+  const enter = (id: string, depth: number, path: EdgePath | null, hash: PathHash, viaId: string | null): Frame | null => {
     if (truncated || !a.byId.has(id)) return null;
     const inf = info(id);
     if (!inf.hasMatch) return null;
@@ -286,7 +321,7 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
     const edges = lazyEdges(path, depth);
     const shown = push({
       kind: "issue",
-      key,
+      key: placementKey(id, hash, depth),
       id,
       depth,
       get edges() {
@@ -299,13 +334,13 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
       descCount: inf.descCount,
       attention: inf.attention,
     });
-    if (shown && expanded) return { id, depth, path, key, kids, next: 0 };
+    if (shown && expanded) return { id, depth, path, hash, kids, next: 0 };
     onPath.delete(id);
     return null;
   };
 
   for (const id of order.roots()) {
-    const first = enter(id, 0, null, id, null);
+    const first = enter(id, 0, null, extendHash(ROOT_HASH, id), null);
     if (first) stack.push(first);
     while (stack.length > 0) {
       const f = stack[stack.length - 1] as Frame;
@@ -317,12 +352,12 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
       }
       const k = f.kids[f.next++] as OrderedEdge;
       const kPath: EdgePath = { kind: k.kind, up: f.path };
-      const kKey = `${f.key}>${k.id}`;
+      const kHash = extendHash(f.hash, k.id);
       if (onPath.has(k.id)) {
         const edges = lazyEdges(kPath, f.depth + 1);
         push({
           kind: "cycle",
-          key: `${kKey}#cycle`,
+          key: `${placementKey(k.id, kHash, f.depth + 1)}#cycle`,
           id: k.id,
           depth: f.depth + 1,
           get edges() {
@@ -330,7 +365,7 @@ export function flattenTree(a: FlattenArgs): { rows: TreeRow[]; truncated: boole
           },
         });
       } else {
-        const child = enter(k.id, f.depth + 1, kPath, kKey, f.id);
+        const child = enter(k.id, f.depth + 1, kPath, kHash, f.id);
         if (child) stack.push(child);
       }
     }

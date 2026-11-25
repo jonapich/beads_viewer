@@ -59,7 +59,9 @@ describe("flattenTree on the server fixture", () => {
   it("records depth, edge kinds and the blocker", () => {
     const { rows } = run(ix);
     const bUnderA = rows[2] as Extract<TreeRow, { kind: "issue" }>;
-    expect(bUnderA).toMatchObject({ id: "fx-b", depth: 2, edges: ["child", "block"], viaId: "fx-a", key: "fx-epic>fx-a>fx-b" });
+    expect(bUnderA).toMatchObject({ id: "fx-b", depth: 2, edges: ["child", "block"], viaId: "fx-a" });
+    expect(bUnderA.key).toMatch(/^fx-b~[0-9a-z]+\.[0-9a-z]+$/);
+    expect((rows[0] as Extract<TreeRow, { kind: "issue" }>).key).toBe("fx-epic");
     const cycle = rows[12] as Extract<TreeRow, { kind: "cycle" }>;
     expect(cycle).toMatchObject({ kind: "cycle", depth: 2, edges: ["block", "block"] });
   });
@@ -142,7 +144,12 @@ describe("placement and context rows", () => {
     );
     const { rows } = run(buildIndex(resp));
     expect(shape(rows)).toEqual(["a", "b", "leaf", "x", "b", "leaf"]);
-    expect(rows.filter((r) => r.kind === "issue" && r.id === "b").map((r) => r.key)).toEqual(["a>b", "x>b"]);
+    const bKeys = rows.filter((r) => r.kind === "issue" && r.id === "b").map((r) => r.key);
+    expect(bKeys).toHaveLength(2);
+    expect(new Set(bKeys).size).toBe(2);
+    const leafKeys = rows.filter((r) => r.kind === "issue" && r.id === "leaf").map((r) => r.key);
+    expect(new Set(leafKeys).size).toBe(2); // same id, same parent id, different path
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
     expect((rows[0] as Extract<TreeRow, { kind: "issue" }>).descCount).toBe(2);
   });
 });
@@ -259,9 +266,28 @@ describe("deep chains", () => {
     );
   };
 
+  /**
+   * The time budget for walking a deep chain: a multiple of the time the same walk
+   * takes on a flat list of N roots, measured in the same run. A fixed millisecond
+   * budget flaked (1055 ms against 1000 on a throttled host, beads-c2o.66) because
+   * the host's speed is not ours to fix; a slow host slows both measurements. What
+   * the test guards is a walk that stops being linear in the depth (an O(depth^2)
+   * path copy took many seconds, a hundred times the flat walk), so the ratio is
+   * generous and a floor keeps a very fast flat walk from making it hair-trigger.
+   */
+  function chainBudgetMs(): number {
+    const flat = buildIndex(mkResponse(ids.map((id) => mkItem(id)), ids));
+    run(flat); // warm up the JIT, as the chain run below is
+    const t0 = performance.now();
+    run(flat);
+    const flatMs = performance.now() - t0;
+    return Math.max(300, 25 * flatMs);
+  }
+
   for (const kind of ["child", "block"] as const) {
     it(`walks a ${N}-deep ${kind} chain quickly`, () => {
       const ix = buildIndex(chain(kind));
+      const budget = chainBudgetMs();
       const t0 = performance.now();
       const { rows, truncated } = run(ix);
       const ms = performance.now() - t0;
@@ -274,7 +300,7 @@ describe("deep chains", () => {
       expect(last.edges[0]).toBe(kind);
       expect(last.viaId).toBe(`n${N - 2}`);
       expect(rows[0]).toMatchObject({ depth: 0, descCount: N - 1 });
-      expect(ms).toBeLessThan(1000);
+      expect(ms).toBeLessThan(budget);
     });
 
     it(`counts descendants and attention along a ${N}-deep ${kind} chain`, () => {
@@ -299,6 +325,36 @@ describe("deep chains", () => {
       expect(performance.now() - t0).toBeLessThan(1000);
     });
   }
+
+  it("keeps row keys short at any depth, unique, and the same across rebuilds (beads-c2o.49)", () => {
+    const first = run(buildIndex(chain("child"))).rows;
+    const again = run(buildIndex(chain("child"))).rows;
+    const keys = first.map((r) => r.key);
+    // `n19999` is the longest id; a key is the id plus a fixed-size hash, never the path.
+    expect(Math.max(...keys.map((k) => k.length))).toBeLessThan(40);
+    expect((first[N - 1] as TreeRow).key.length).toBeLessThan(40);
+    expect(new Set(keys).size).toBe(N);
+    expect(again.map((r) => r.key)).toEqual(keys);
+  });
+
+  it("keeps a placement's key when other branches collapse, expand or re-sort", () => {
+    const resp = mkResponse(
+      [mkItem("r"), mkItem("p"), mkItem("q"), mkItem("leaf", { parent_id: "p" })],
+      ["r"],
+      { r: ["p", "q"], p: ["leaf"] },
+    );
+    const keyOf = (rows: TreeRow[], id: string) => rows.find((r) => r.id === id)?.key;
+    const all = run(buildIndex(resp)).rows;
+    const qCollapsed = run(buildIndex(resp), { expanded: new Set(["r", "p"]) }).rows;
+    const pCollapsed = run(buildIndex(resp), { expanded: new Set(["r"]) }).rows;
+    const reversed = run(buildIndex(resp), { cmp: (a, b) => b.id.localeCompare(a.id) }).rows;
+    for (const rows of [qCollapsed, pCollapsed, reversed]) {
+      expect(keyOf(rows, "p")).toBe(keyOf(all, "p"));
+      expect(keyOf(rows, "r")).toBe(keyOf(all, "r"));
+    }
+    expect(keyOf(qCollapsed, "leaf")).toBe(keyOf(all, "leaf"));
+    expect(keyOf(reversed, "leaf")).toBe(keyOf(all, "leaf"));
+  });
 
   it("still ends a deep chain that loops back on itself with a cycle row", () => {
     const resp = chain("block");
