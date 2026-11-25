@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -96,6 +97,8 @@ type Store struct {
 
 	path string
 	opts snapshot.LoadOptions
+	// watchOut receives the file watcher's warnings; nil means stderr. Tests set it.
+	watchOut io.Writer
 
 	load     loadFunc     // snapshot.Load
 	complete completeFunc // (*snapshot.Snapshot).CompletePhase2
@@ -377,13 +380,15 @@ func (s *Store) StartWatching() error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
+	out := s.watchOut
+	if out == nil {
+		out = os.Stderr
+	}
+	reporter := newWatchReporter(s.path, out)
 	w, err := watcher.NewWatcher(s.path,
 		watcher.WithDebounceDuration(watchDebounce),
 		watcher.WithRemovalGrace(watchRemovalGrace),
-		watcher.WithOnError(func(err error) {
-			// ErrWatchUnavailable means it fell back to polling; stderr only.
-			fmt.Fprintf(os.Stderr, "bv serve: file watcher: %v\n", err)
-		}))
+		watcher.WithOnError(reporter.handle))
 	if err != nil {
 		return err
 	}
@@ -393,11 +398,11 @@ func (s *Store) StartWatching() error {
 	s.w = w
 	s.watching.Store(true)
 	s.wg.Add(1)
-	go s.watchLoop(w)
+	go s.watchLoop(w, reporter)
 	return nil
 }
 
-func (s *Store) watchLoop(w *watcher.Watcher) {
+func (s *Store) watchLoop(w *watcher.Watcher, reporter *watchReporter) {
 	defer s.wg.Done()
 	defer s.watching.Store(false)
 	for {
@@ -407,6 +412,7 @@ func (s *Store) watchLoop(w *watcher.Watcher) {
 		case <-w.Done():
 			return
 		case <-w.Changed():
+			reporter.recovered()
 			s.Reload()
 		}
 	}

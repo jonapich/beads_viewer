@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/internal/env"
+	"github.com/Dicklesworthstone/beads_viewer/pkg/debug"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -1190,8 +1191,11 @@ func (w *Watcher) armRemovalReport(runGeneration uint64) {
 	if w.removalTimer != nil {
 		w.removalTimer.Stop()
 	}
-	w.removalTimer = time.AfterFunc(w.effectiveRemovalGraceLocked(), func() {
-		w.reportIfStillRemoved(runGeneration)
+	grace := w.effectiveRemovalGraceLocked()
+	seen := time.Now()
+	debug.Log("watcher: %s is missing; reporting it only if it stays missing for %v", w.path, grace)
+	w.removalTimer = time.AfterFunc(grace, func() {
+		w.reportIfStillRemoved(runGeneration, seen)
 	})
 }
 
@@ -1199,7 +1203,7 @@ func (w *Watcher) armRemovalReport(runGeneration uint64) {
 // the file is still missing. A file that is back (the swap finished) reports
 // nothing: its Create or Write event, or the next poll, takes the normal change
 // path and the reload fires.
-func (w *Watcher) reportIfStillRemoved(runGeneration uint64) {
+func (w *Watcher) reportIfStillRemoved(runGeneration uint64, seen time.Time) {
 	watchPath, _ := w.watchedPaths()
 	_, err := os.Stat(watchPath)
 	w.mu.Lock()
@@ -1211,8 +1215,11 @@ func (w *Watcher) reportIfStillRemoved(runGeneration uint64) {
 	gone := !w.lastExists && err != nil && os.IsNotExist(err)
 	w.mu.Unlock()
 	if gone {
+		debug.Log("watcher: %s still missing %v after it disappeared", w.path, time.Since(seen).Round(time.Millisecond))
 		w.reportError(runGeneration, ErrFileRemoved)
+		return
 	}
+	debug.Log("watcher: %s is back (checked %v after it disappeared); not a removal", w.path, time.Since(seen).Round(time.Millisecond))
 }
 
 func (w *Watcher) stopRemovalTimerLocked() {
