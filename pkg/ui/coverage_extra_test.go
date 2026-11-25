@@ -195,10 +195,19 @@ func runEditorTrackerTestProcess() bool {
 		if mode == "comment-fail" {
 			fail(fmt.Errorf("controlled comment failure"))
 		}
+		// An optional `--kind <k>` is stored as bd stores it: a "bd-kind: <k>" header line.
+		kind := ""
+		if len(args) > 3 && args[1] == "add" && args[2] == "--kind" {
+			kind, args = args[3], append([]string{args[0], args[1]}, args[4:]...)
+		}
 		if len(args) != 5 || args[1] != "add" || args[2] != "--" {
 			fail(fmt.Errorf("unexpected comments argv: %q", args))
 		}
-		issue.Comments = append(issue.Comments, &model.Comment{IssueID: issue.ID, Text: args[4]})
+		text := args[4]
+		if kind != "" {
+			text = "bd-kind: " + kind + "\n" + text
+		}
+		issue.Comments = append(issue.Comments, &model.Comment{IssueID: issue.ID, Text: text})
 		data, _ = json.Marshal(issue)
 		if err := os.WriteFile(statePath, data, 0o600); err != nil {
 			fail(err)

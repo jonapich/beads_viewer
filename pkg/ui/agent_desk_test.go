@@ -261,7 +261,7 @@ func TestModelAnswerWritesCommentAndRemovesLabel(t *testing.T) {
 	if len(ops) < 2 {
 		t.Fatalf("expected comment + update calls, got %q", ops)
 	}
-	wantComment := []string{"comments", "add", "--", issue.Origin.LocalID, "Decision: (a) yes"}
+	wantComment := []string{"comments", "add", "--kind", "answer", "--", issue.Origin.LocalID, "Decision: (a) yes"}
 	wantUpdate := []string{"update", "--json", "--remove-label=needs-decision", "--", issue.Origin.LocalID}
 	if !slices.Equal(ops[0], wantComment) || !slices.Equal(ops[1], wantUpdate) {
 		t.Fatalf("tracker calls:\n got %q\nwant %q then %q", ops, wantComment, wantUpdate)
@@ -275,7 +275,7 @@ func TestModelAnswerWritesCommentAndRemovesLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if slices.Contains(saved.Labels, "needs-decision") || !slices.Contains(saved.Labels, "keep-this-label") ||
-		len(saved.Comments) != 1 || saved.Comments[0].Text != "Decision: (a) yes" {
+		len(saved.Comments) != 1 || saved.Comments[0].Text != "bd-kind: answer\nDecision: (a) yes" {
 		t.Fatalf("tracker state after answer: labels=%v comments=%+v", saved.Labels, saved.Comments)
 	}
 	if _, err := os.Stat(filepath.Dir(path)); err != nil {

@@ -150,10 +150,17 @@ func (c *Client) AddComment(ctx context.Context, text string) (Result, error) {
 	return c.write(ctx, []op{commentOp(text)})
 }
 
-// AnswerQuestion posts text as a comment, then removes removeLabel.
+// AnswerQuestion posts text as a comment of kind answer, then removes
+// removeLabel. Agents read answers with `bd comments <id> --kind answer --last`,
+// so on bd the comment is kinded (the author stays the default: these are the
+// user's own words). Any other tracker gets a plain comment: br has no --kind.
 func (c *Client) AnswerQuestion(ctx context.Context, text, removeLabel string) (Result, error) {
+	post := commentOp(text)
+	if c.origin.Tracker == "bd" {
+		post = op{args: []string{"comments", "add", "--kind", agentdesk.KindAnswer}, trailing: []string{text}}
+	}
 	return c.write(ctx, []op{
-		commentOp(text),
+		post,
 		{args: []string{"update", "--json", "--remove-label=" + removeLabel}},
 	})
 }

@@ -13,6 +13,9 @@ const KindHeader = "bd-kind: "
 // KindHandoff is the structured handoff comment kind.
 const KindHandoff = "handoff"
 
+// KindAnswer is the kind of a decision posted by the user from the desk.
+const KindAnswer = "answer"
+
 // ParsedComment is a comment split into its bd kind header and body.
 type ParsedComment struct {
 	Kind string         // "" for a plain comment

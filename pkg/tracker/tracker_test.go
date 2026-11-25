@@ -508,6 +508,30 @@ func TestAnswerAndQuickActions(t *testing.T) {
 	}
 }
 
+// On bd an answer is a comment of kind answer (agents read it with
+// `bd comments <id> --kind answer --last`); the author stays the default, so
+// there is no --author. The label removal is unchanged.
+func TestAnswerQuestionIsKindedOnBd(t *testing.T) {
+	fb := &fakeBackend{}
+	c := newTestClient(t, "bd", "x.db", fb)
+	if _, err := c.AnswerQuestion(context.Background(), "Decision: (a) yes", "needs-decision"); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"comments", "add", "--kind", "answer", "--", "local-1", "Decision: (a) yes"},
+		{"update", "--json", "--remove-label=needs-decision", "--", "local-1"},
+	}
+	got := fb.runs()
+	if len(got) != len(want) {
+		t.Fatalf("runs %q want %q", got, want)
+	}
+	for i := range want {
+		if !slices.Equal(got[i], want[i]) {
+			t.Fatalf("run %d: %q want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // showJSON encodes issue the way `show --json` would.
 func showJSON(t *testing.T, issue model.Issue, local string) []byte {
 	t.Helper()
