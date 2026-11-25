@@ -11,6 +11,11 @@ export interface RouteDef {
    * <main> stops scrolling and becomes a flex column the view's root grows in.
    */
   fill?: boolean;
+  /**
+   * A path to replace this one with (no history entry): a retired page whose address still works,
+   * such as "/" opening the agent desk. The component is not rendered.
+   */
+  redirect?: string;
 }
 
 export const route = $state({
@@ -30,6 +35,14 @@ function resolve(url: URL): void {
   for (const def of table) {
     const params = match(def.pattern, url.pathname);
     if (params) {
+      if (def.redirect !== undefined && def.redirect !== url.pathname) {
+        const to = new URL(def.redirect, url);
+        to.search = "";
+        to.hash = "";
+        history.replaceState(null, "", to);
+        resolve(to);
+        return;
+      }
       route.def = def;
       route.params = params;
       document.title = `${def.title} - bv`;

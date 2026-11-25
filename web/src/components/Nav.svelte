@@ -4,7 +4,6 @@
   import { route } from "../lib/router/router.svelte";
 
   const items = [
-    { href: "/", label: "Overview" },
     { href: "/issues", label: "Issues" },
     { href: "/desk", label: "Agent desk" },
     { href: "/triage", label: "Triage" },
@@ -12,8 +11,7 @@
     { href: "/insights", label: "Insights" },
   ];
 
-  const active = (href: string) =>
-    href === "/" ? route.path === "/" : route.path === href || route.path.startsWith(href + "/");
+  const active = (href: string) => route.path === href || route.path.startsWith(href + "/");
 
   // The Agent desk badge: questions plus sign-offs awaiting the user, hidden at 0.
   const deskBadge = $derived(badgeCount(navCounts));

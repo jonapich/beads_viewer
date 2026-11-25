@@ -1,5 +1,10 @@
 <script lang="ts">
+  import { live, type LiveStatus } from "../lib/live.svelte";
   import { session } from "../lib/session.svelte";
+
+  const liveLabel: Record<LiveStatus, string> = { live: "live", connecting: "reconnecting", down: "polling", off: "off" };
+  // What the retired Overview page showed: where bv serve is, and how updates reach the page.
+  const title = $derived(`bv serve at ${location.origin} · live updates: ${liveLabel[live.status]}`);
 
   const state = $derived(
     session.status === "ok"
@@ -10,7 +15,7 @@
   );
 </script>
 
-<span class="pill" title="bv serve status">
+<span class="pill" {title}>
   <span class="dot {state.kind}"></span>
   <span class="label">{state.label}</span>
 </span>

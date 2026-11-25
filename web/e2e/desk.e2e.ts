@@ -26,6 +26,17 @@ test.describe("agent desk", () => {
     await rw.signIn(page);
   });
 
+  test("/ opens the desk in place, and there is no Overview", async ({ page, rw }) => {
+    const entries = await page.evaluate(() => history.length);
+    await page.goto(rw.base + "/");
+    await expect(page).toHaveURL(/\/desk(\?|$)/);
+    await expect(page.getByRole("heading", { level: 1, name: "Agent desk" })).toBeVisible();
+    await expect(deskLink(page)).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: "Overview" })).toHaveCount(0);
+    // The redirect replaced "/" instead of adding a history entry: loading "/" costs exactly one entry.
+    expect(await page.evaluate(() => history.length)).toBe(entries + 1);
+  });
+
   test("the nav badge counts questions plus sign-offs, and the desk opens on the Inbox", async ({ page, rw, tracker: { ids } }) => {
     const total = await badgeTotal(page, rw.base);
     expect(total).toBeGreaterThanOrEqual(3); // deskA, deskB and deskSignoff at least

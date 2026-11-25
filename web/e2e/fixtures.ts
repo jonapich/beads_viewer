@@ -42,8 +42,9 @@ function site(inst: State["rw"]): Site {
     base: inst.base,
     async signIn(page) {
       await page.goto(inst.signIn);
-      await expect(page).toHaveURL(inst.base + "/");
-      await expect(page.getByRole("region", { name: "Server health" })).toBeVisible();
+      // The landing page is the agent desk: "/" replaces itself with /desk.
+      await expect(page).toHaveURL(new RegExp("^" + inst.base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "/desk"));
+      await expect(page.getByRole("heading", { level: 1, name: "Agent desk" })).toBeVisible();
     },
   };
 }

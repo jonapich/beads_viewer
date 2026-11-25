@@ -4,7 +4,7 @@
 </script>
 
 <header>
-  <a class="brand" href="/">bv</a>
+  <a class="brand" href="/desk">bv</a>
   <div class="right">
     <StatusPill />
     <ThemeToggle />

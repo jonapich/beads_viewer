@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { replaceQuery, route } from "./router.svelte";
+import { replaceQuery, route, startRouter, type RouteDef } from "./router.svelte";
 
 let current: URL;
 let replaceState: ReturnType<typeof vi.fn>;
@@ -44,5 +44,46 @@ describe("replaceQuery", () => {
   it("does nothing when the URL would not change", () => {
     replaceQuery(new URLSearchParams("state=all"));
     expect(replaceState).not.toHaveBeenCalled();
+  });
+});
+
+describe("route redirects", () => {
+  const Page = (() => {}) as unknown as RouteDef["component"];
+  const table: RouteDef[] = [
+    { pattern: "/", title: "Home", component: Page, redirect: "/desk" },
+    { pattern: "/desk", title: "Desk", component: Page },
+    { pattern: "*", title: "Nope", component: Page },
+  ];
+  let stop: () => void = () => {};
+
+  beforeEach(() => {
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn(), title: "" });
+  });
+  afterEach(() => stop());
+
+  it("replaces / with its target, dropping the query and hash, and resolves the target", () => {
+    current = new URL("http://127.0.0.1:7777/?tab=x#h");
+    stop = startRouter(table);
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    const [, , url] = replaceState.mock.calls[0] as [unknown, string, URL];
+    expect(url.pathname + url.search + url.hash).toBe("/desk");
+    expect(route.path).toBe("/desk");
+    expect(route.def?.title).toBe("Desk");
+  });
+
+  it("leaves other paths alone", () => {
+    current = new URL("http://127.0.0.1:7777/desk?tab=signoff");
+    stop = startRouter(table);
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(route.path).toBe("/desk");
+    expect(route.query.get("tab")).toBe("signoff");
+  });
+
+  it("does not loop on a redirect to its own path", () => {
+    current = new URL("http://127.0.0.1:7777/");
+    stop = startRouter([{ pattern: "/", title: "Self", component: Page, redirect: "/" }]);
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(route.path).toBe("/");
   });
 });

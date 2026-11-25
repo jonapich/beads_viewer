@@ -36,7 +36,7 @@ test.describe("Triage, Plan and Insights", () => {
   test("the nav lists the views in order", async ({ page }) => {
     const links = page.getByRole("navigation", { name: "Main" }).getByRole("link");
     // The Agent desk link carries a count badge while something awaits the user.
-    await expect(links).toHaveText(["Overview", "Issues", /^Agent desk/, "Triage", "Plan", "Insights"]);
+    await expect(links).toHaveText(["Issues", /^Agent desk/, "Triage", "Plan", "Insights"]);
   });
 
   test("Triage shows Start here cards and recommendations, and a row opens the drawer", async ({ page, rw }) => {
