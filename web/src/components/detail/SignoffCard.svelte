@@ -2,6 +2,7 @@
   import type { SignoffItem } from "../../lib/api/types";
   import { noteKey, type IssueActions } from "../../lib/issues/actions.svelte";
   import { absTime, commitHref, isNothing, signoffHasParts } from "../../lib/issues/detail";
+  import CaptureStrip from "../files/CaptureStrip.svelte";
   import SignoffActions from "../issues/SignoffActions.svelte";
   import InlineText from "./InlineText.svelte";
   import Markdown from "./Markdown.svelte";
@@ -75,7 +76,7 @@
     {#if so.captures?.length}
       <div class="part">
         <h4>Captures</h4>
-        {#each so.captures as l, i (i)}<div class="mono">{l}</div>{/each}
+        <CaptureStrip captures={so.captures} />
       </div>
     {/if}
     {#if so.commits?.length}
@@ -145,11 +146,6 @@
   .empty {
     color: var(--text-faint);
     font-style: italic;
-  }
-  .mono {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    overflow-wrap: anywhere;
   }
   .commit {
     display: inline-block;

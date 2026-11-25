@@ -100,6 +100,12 @@ type MetaCaps struct {
 	// Events is true while the server watches the tracker and serves
 	// GET /api/v1/events.
 	Events bool `json:"events"`
+	// Files is true when GET /api/v1/file serves local files (at least one allowed
+	// root). With false the UI shows file paths in bead text as plain text.
+	Files bool `json:"files"`
+	// Reveal is true when POST /api/v1/file/reveal can show a file in the file manager: files
+	// are served, the platform supports it (Windows) and the tracker takes writes.
+	Reveal bool `json:"reveal"`
 }
 
 // IssuesResponse is GET /api/v1/issues?view=tree|flat: every issue of the
@@ -539,4 +545,40 @@ type WriteResponse struct {
 	// reloading failed: the list may lag until the next change. It is never an
 	// error status, because the client would retry a write that took effect.
 	Warning string `json:"warning,omitempty"`
+}
+
+// FileStat is what GET /api/v1/file/stat says about one path of bead text.
+type FileStat struct {
+	// Path is the text as requested.
+	Path string `json:"path"`
+	// Status is ok, missing, outside (not under a directory the server may
+	// serve; whether it exists is not said), ambiguous (a relative path that
+	// matches in more than one repository), unsupported (a file type that is not
+	// served), too_large or invalid.
+	Status string `json:"status"`
+	// Abs is the resolved absolute path, for a Copy path action; absent for
+	// invalid and ambiguous.
+	Abs string `json:"abs,omitempty"`
+	// Kind is image, video, pdf or text (status ok only).
+	Kind string `json:"kind,omitempty"`
+	Size int64  `json:"size,omitempty"`
+	// URL is GET /api/v1/file?path=<abs>, status ok only.
+	URL string `json:"url,omitempty"`
+}
+
+// FileStatResponse is GET /api/v1/file/stat: one FileStat per requested path, in order.
+type FileStatResponse struct {
+	Files []FileStat `json:"files"`
+}
+
+// RevealRequest is the body of POST /api/v1/file/reveal.
+type RevealRequest struct {
+	// Path is the file, as bead text writes it or as FileStat.abs gives it.
+	Path string `json:"path"`
+}
+
+// RevealResponse is the answer of POST /api/v1/file/reveal.
+type RevealResponse struct {
+	// Path is the absolute path that was shown.
+	Path string `json:"path"`
 }

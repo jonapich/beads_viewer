@@ -129,10 +129,12 @@ test.describe("agent desk", () => {
     const post = writeResponse(page, "POST", deskSignoff, "/signoff");
     await page.getByRole("button", { name: "Approve", exact: true }).click();
 
-    // Before the POST has an answer: the row and the pane already show the result.
-    await expect(page.locator(`[data-row="${deskSignoff}"]`)).toContainText("Approved");
-    await expect(page.getByText("Approved just now")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+    // Before the POST has an answer: the row already shows the result, and the selection has moved on
+    // to another pending sign-off (the fixture has more than one).
+    const approved = page.locator(`[data-row="${deskSignoff}"]`);
+    await expect(approved).toContainText("Approved");
+    await expect(approved).not.toHaveAttribute("aria-current", "true");
+    await expect(page.locator('[data-desk-list] [aria-current="true"]')).toHaveCount(1);
 
     expect((await post).status()).toBe(200);
     expect(tracker.show(deskSignoff).labels ?? []).not.toContain("needs-signoff");

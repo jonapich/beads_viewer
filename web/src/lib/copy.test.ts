@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { copyFailure, copyIssueId } from "./copy";
+import { copyFailure, copyIssueId, copyText } from "./copy";
 import type { ToastKind } from "./toasts.svelte";
 
 function env(writeText?: (t: string) => Promise<void>) {
@@ -46,5 +46,21 @@ describe("copyFailure", () => {
     expect(copyFailure(new Error(" denied "))).toBe("denied");
     expect(copyFailure(new Error(""))).toBe("the clipboard is not available");
     expect(copyFailure(undefined)).toBe("the clipboard is not available");
+  });
+});
+
+describe("copyText", () => {
+  it("copies any text with the message it is given", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const e = env(write);
+    await expect(copyText("C:\\shots\\a.png", "Copied path", e.env)).resolves.toBe(true);
+    expect(write).toHaveBeenCalledExactlyOnceWith("C:\\shots\\a.png");
+    expect(e.pushed).toEqual([["success", "Copied path"]]);
+  });
+
+  it("warns the same way as an id copy", async () => {
+    const e = env(() => Promise.reject(new Error("denied")));
+    await expect(copyText("x", "Copied path", e.env)).resolves.toBe(false);
+    expect(e.pushed).toEqual([["warning", "Couldn't copy: denied"]]);
   });
 });

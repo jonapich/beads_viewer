@@ -8,27 +8,28 @@
   const blocks = $derived(parseMarkdown(src));
 </script>
 
-<div class="prose">
+<!-- data-lightbox-group: the images of this text step together in the lightbox. -->
+<div class="prose" data-lightbox-group>
   {#each blocks as b, i (i)}
     {#if b.t === "p"}
-      <p><Inlines nodes={b.c} /></p>
+      <p><Inlines nodes={b.c} thumbs /></p>
     {:else if b.t === "h"}
       <h4><Inlines nodes={b.c} /></h4>
     {:else if b.t === "ul"}
-      <ul>{#each b.items as item, j (j)}<li><Inlines nodes={item} /></li>{/each}</ul>
+      <ul>{#each b.items as item, j (j)}<li><Inlines nodes={item} thumbs /></li>{/each}</ul>
     {:else if b.t === "ol"}
-      <ol>{#each b.items as item, j (j)}<li><Inlines nodes={item} /></li>{/each}</ol>
+      <ol>{#each b.items as item, j (j)}<li><Inlines nodes={item} thumbs /></li>{/each}</ol>
     {:else if b.t === "pre"}
       <pre><code>{b.v}</code></pre>
     {:else if b.t === "table"}
       <div class="tw">
         <table>
           <thead>
-            <tr>{#each b.head as cell, j (j)}<th><Inlines nodes={cell} /></th>{/each}</tr>
+            <tr>{#each b.head as cell, j (j)}<th><Inlines nodes={cell} thumbs /></th>{/each}</tr>
           </thead>
           <tbody>
             {#each b.rows as row, r (r)}
-              <tr>{#each row as cell, j (j)}<td><Inlines nodes={cell} /></td>{/each}</tr>
+              <tr>{#each row as cell, j (j)}<td><Inlines nodes={cell} thumbs /></td>{/each}</tr>
             {/each}
           </tbody>
         </table>

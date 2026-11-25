@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import CopyId from "../CopyId.svelte";
+  import CaptureStrip from "../files/CaptureStrip.svelte";
+  import InlineText from "../detail/InlineText.svelte";
   import IdLink from "../IdLink.svelte";
   import type { ListItem } from "../../lib/api/types";
   import { answerKey, noteKey, optionKey, type IssueActions } from "../../lib/issues/actions.svelte";
@@ -277,7 +279,11 @@
           {/if}
           {#if so.where_to_see?.length}
             <p class="lead">Where to see it</p>
-            <ul class="plain">{#each so.where_to_see as w, i (i)}<li>{w}</li>{/each}</ul>
+            <ul class="plain">{#each so.where_to_see as w, i (i)}<li><InlineText src={w} /></li>{/each}</ul>
+          {/if}
+          {#if so.captures?.length}
+            <p class="lead">Captures</p>
+            <CaptureStrip captures={so.captures} size="compact" />
           {/if}
         {/if}
       </div>

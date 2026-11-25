@@ -170,6 +170,8 @@ func modifierRecoveryExamples(modifier string) []string {
 		return []string{"bv serve --serve-port 8080"}
 	case "serve-no-open", "serve-dev":
 		return []string{"bv serve --" + modifier}
+	case "serve-allow":
+		return []string{"bv serve --serve-allow D:\\captures"}
 	case "debug-width", "debug-height":
 		return []string{"bv --debug-render triage --debug-width 120 --debug-height 40"}
 	default:
@@ -1026,6 +1028,7 @@ var knownValueTakingCLIFlags = map[string]bool{
 	"pages-subtitle":            true,
 	"preview-pages":             true,
 	"serve-port":                true,
+	"serve-allow":               true,
 	"debug-render":              true,
 	"debug-width":               true,
 	"debug-height":              true,
@@ -1848,6 +1851,7 @@ func main() {
 	serveFlag := flag.Bool("serve", false, "Start the local web GUI server (127.0.0.1 only; prints a sign-in URL with a per-run token)")
 	servePort := flag.Int("serve-port", 0, "Port for --serve (0 = pick a free port)")
 	serveNoOpen := flag.Bool("serve-no-open", false, "With --serve: do not open the browser (BV_NO_BROWSER also suppresses it)")
+	serveAllow := flag.StringArray("serve-allow", nil, "With --serve: also serve local files (images named in bead text) from this directory; repeatable. BV_SERVE_ALLOW adds a path list. The project directory is always served")
 	serveDev := flag.Bool("serve-dev", false, "With --serve: API only, no embedded frontend; allows the Vite dev server origin (http://localhost:5173)")
 	watchExport := flag.Bool("watch-export", false, "Watch for beads changes and auto-regenerate export (use with --export-pages)")
 	pagesWizard := flag.Bool("pages", false, "Launch interactive Pages deployment wizard")
@@ -2958,6 +2962,7 @@ func main() {
 				Port:       *servePort,
 				NoOpen:     *serveNoOpen,
 				Dev:        *serveDev,
+				AllowDirs:  serveAllowDirs(*serveAllow, env.ServeAllow.Get(), func(msg string) { fmt.Fprintln(os.Stderr, msg) }),
 				BeadsPath:  beadsPath,
 				ProjectDir: projectDir,
 				Recipe:     activeRecipe,

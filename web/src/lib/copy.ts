@@ -15,17 +15,22 @@ export function copyFailure(err: unknown): string {
 }
 
 /**
- * Copies an issue id (plain text, nothing around it) and says so in a toast: "Copied <id>", or a
- * warning with the reason. Resolves true when the id is on the clipboard.
+ * Copies text to the clipboard and says so in a toast: `done` on success, or a warning with the
+ * reason. Resolves true when the text is on the clipboard.
  */
-export async function copyIssueId(id: string, env: CopyEnv): Promise<boolean> {
+export async function copyText(text: string, done: string, env: CopyEnv): Promise<boolean> {
   try {
     if (!env.clipboard) throw new Error("");
-    await env.clipboard.writeText(id);
+    await env.clipboard.writeText(text);
   } catch (err) {
     env.toasts.push("warning", `Couldn't copy: ${copyFailure(err)}`);
     return false;
   }
-  env.toasts.push("success", `Copied ${id}`);
+  env.toasts.push("success", done);
   return true;
+}
+
+/** Copies an issue id (plain text, nothing around it): "Copied <id>". */
+export function copyIssueId(id: string, env: CopyEnv): Promise<boolean> {
+  return copyText(id, `Copied ${id}`, env);
 }

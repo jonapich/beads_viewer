@@ -15,6 +15,13 @@ export const navCounts = $state({
   loaded: false,
 });
 
+/**
+ * What the server can do, from the same /meta read (the nav counts already follow it): files is
+ * true when GET /api/v1/file serves local files, so file paths in bead text can become links;
+ * reveal when POST /api/v1/file/reveal can show one in the file manager (Windows, writable tracker).
+ */
+export const appCaps = $state({ files: false, reveal: false });
+
 let etag: string | null = null;
 let refresh: () => Promise<void> = () => Promise.resolve();
 
@@ -43,6 +50,8 @@ export function startNavCounts(): () => void {
         etag = r.etag;
         navCounts.awaiting = r.data.counts?.awaiting ?? 0;
         navCounts.signoff_pending = r.data.counts?.signoff_pending ?? 0;
+        appCaps.files = r.data.capabilities?.files ?? false;
+        appCaps.reveal = r.data.capabilities?.reveal ?? false;
       }
       navCounts.loaded = true;
       return false;

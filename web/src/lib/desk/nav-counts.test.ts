@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { navCounts, refreshNavCounts, startNavCounts } from "./nav-counts.svelte";
+import { appCaps, navCounts, refreshNavCounts, startNavCounts } from "./nav-counts.svelte";
 import { session } from "../session.svelte";
 
 const meta = (awaiting: number, signoff: number) =>
@@ -69,5 +69,25 @@ describe("nav counts", () => {
     await refreshNavCounts();
     stop();
     await expect(refreshNavCounts()).resolves.toBeUndefined();
+  });
+});
+
+describe("app capabilities", () => {
+  it("follows meta capabilities.files, and reads a server without it as false", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ counts: { awaiting: 0, signoff_pending: 0 }, capabilities: { writes: true, events: true, files: true, reveal: true } }), {
+        headers: { "Content-Type": "application/json", ETag: '"c1"' },
+      }),
+    );
+    stop = startNavCounts();
+    await refreshNavCounts();
+    expect(appCaps).toMatchObject({ files: true, reveal: true });
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ counts: { awaiting: 0, signoff_pending: 0 }, capabilities: { writes: true, events: true } }), {
+        headers: { "Content-Type": "application/json", ETag: '"c2"' },
+      }),
+    );
+    await refreshNavCounts();
+    expect(appCaps).toMatchObject({ files: false, reveal: false });
   });
 });

@@ -3,6 +3,7 @@
 // imported by nothing, so it never ships.
 import type {
   ApiErrorBody,
+  FileStatResponse,
   HealthResponse,
   InboxResponse,
   IssueDetail,
@@ -37,6 +38,7 @@ import pipeline from "./__fixtures__/pipeline.json";
 import pipelineEmpty from "./__fixtures__/pipeline-empty.json";
 import sliceMetrics from "./__fixtures__/slice-metrics.json";
 import sliceMetricsEmpty from "./__fixtures__/slice-metrics-empty.json";
+import fileStat from "./__fixtures__/file-stat.json";
 import notFound from "./__fixtures__/error-not-found.json";
 import triage from "./__fixtures__/triage.json";
 import insights from "./__fixtures__/insights.json";
@@ -67,6 +69,8 @@ export const pipelineFixture: PipelineResponse = pipeline;
 export const pipelineEmptyFixture: PipelineResponse = pipelineEmpty;
 export const sliceMetricsFixture: SliceMetricsResponse = sliceMetrics;
 export const sliceMetricsEmptyFixture: SliceMetricsResponse = sliceMetricsEmpty;
+// status and kind are string unions in the type; the JSON import widens them to string, so this one is a cast (the shape is still checked).
+export const fileStatFixture = fileStat as FileStatResponse;
 export const notFoundFixture: ApiErrorBody = notFound;
 export const triageFixture: TriageResponse = triage;
 export const insightsFixture: InsightsResponse = insights;

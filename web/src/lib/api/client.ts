@@ -2,6 +2,7 @@ import { session } from "../session.svelte";
 import type {
   AnswerRequest,
   ApiErrorBody,
+  FileStatResponse,
   HealthResponse,
   InboxResponse,
   InsightsResponse,
@@ -12,6 +13,8 @@ import type {
   PipelineResponse,
   PlanResponse,
   PriorityRequest,
+  RevealRequest,
+  RevealResponse,
   SearchResponse,
   SignoffRequest,
   SignoffResponse,
@@ -162,6 +165,23 @@ export const getSignoff = (signal?: AbortSignal) => getJSON<SignoffResponse>("/a
 /** Conditional GET of the sign-off list: null means the cached copy is current. */
 export const getSignoffIfChanged = (etag: string | null, signal?: AbortSignal) =>
   getJSONIfChanged<SignoffResponse>("/api/v1/signoff", etag, { signal });
+
+/**
+ * What each path of bead text is (at most 64 per call): the file it names under the served
+ * directories, or why it is not served. 404 files_disabled when the server serves no files.
+ */
+export const getFileStats = (paths: readonly string[], signal?: AbortSignal) => {
+  const q = new URLSearchParams();
+  for (const p of paths) q.append("path", p);
+  return getJSON<FileStatResponse>(`/api/v1/file/stat?${q.toString()}`, { signal });
+};
+
+/**
+ * Shows a file in the file manager (Show in Explorer): selects it, never opens it. Rejects with
+ * ApiError (403 outside_roots, 404 not_found, 403 read_only, 501 reveal_unsupported, ...).
+ */
+export const postReveal = (path: string) =>
+  sendJSON<RevealResponse>("POST", "/api/v1/file/reveal", { path } satisfies RevealRequest);
 
 /** The agent desk inbox: open beads awaiting the user (needs-decision / needs-design), grouped by epic. */
 export const getInbox = (signal?: AbortSignal) => getJSON<InboxResponse>("/api/v1/inbox", { signal });

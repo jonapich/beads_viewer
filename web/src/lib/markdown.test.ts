@@ -231,3 +231,99 @@ describe("parseMarkdown", () => {
     }
   });
 });
+
+describe("images and local file paths", () => {
+  const t = (v: string): Inline => ({ t: "text", v });
+  const file = (path: string, v = path, extra: { explicit?: boolean; code?: boolean } = {}): Inline => ({
+    t: "file",
+    path,
+    v,
+    explicit: extra.explicit ?? false,
+    code: extra.code ?? false,
+  });
+
+  it("parses a local markdown image, with and without an alt text", () => {
+    expect(parseInline("see ![the cart](.beads/captures/cart.png) now")).toEqual([
+      t("see "),
+      { t: "img", src: ".beads/captures/cart.png", alt: "the cart", remote: false },
+      t(" now"),
+    ]);
+    expect(parseInline("![](shots/a.png)")).toEqual([{ t: "img", src: "shots/a.png", alt: "", remote: false }]);
+  });
+
+  it("takes an angle-bracket target with spaces", () => {
+    expect(parseInline("![a](<C:\\My Shots\\a.png>)")).toEqual([{ t: "img", src: "C:\\My Shots\\a.png", alt: "a", remote: false }]);
+    expect(parseInline("[open](<docs/my notes.md>)")).toEqual([file("docs/my notes.md", "open", { explicit: true })]);
+  });
+
+  it("marks an http(s) image remote and never as a local path", () => {
+    expect(parseInline("![x](https://example.com/p.png)")).toEqual([{ t: "img", src: "https://example.com/p.png", alt: "x", remote: true }]);
+    expect(parseInline("![x](http://localhost:9/p.png)")).toEqual([{ t: "img", src: "http://localhost:9/p.png", alt: "x", remote: true }]);
+  });
+
+  it("keeps an image with another scheme as plain text", () => {
+    for (const src of ["![x](javascript:alert(1))", "![x](data:image/png;base64,AAAA)", "![x](ftp://h/p.png)"]) {
+      for (const n of parseInline(src)) expect(n.t === "img" || n.t === "file").toBe(false);
+    }
+  });
+
+  it("turns [text](path) into an explicit file node when the target is a file", () => {
+    expect(parseInline("[shot](./a/b.png)")).toEqual([file("./a/b.png", "shot", { explicit: true })]);
+    expect(parseInline("[log](C:\\logs\\run.txt)")).toEqual([file("C:\\logs\\run.txt", "log", { explicit: true })]);
+    expect(parseInline("[x](file:///C:/a/b.pdf)")).toEqual([file("file:///C:/a/b.pdf", "x", { explicit: true })]);
+    expect(parseInline("[x](..\\up\\a.jpg)")).toEqual([file("..\\up\\a.jpg", "x", { explicit: true })]);
+  });
+
+  it("leaves a link whose target is not a file as before", () => {
+    expect(parseInline("[x](/relative)")).toEqual([t("[x](/relative)")]);
+    expect(parseInline("[x](docs/readme)")).toEqual([t("[x](docs/readme)")]);
+    expect(parseInline("[x](docs/a.exe)")).toEqual([t("[x](docs/a.exe)")]);
+  });
+
+  it("autolinks bare file: URLs and drive paths, trimming trailing punctuation", () => {
+    expect(parseInline("at file:///C:/x/a.png, ok")).toEqual([t("at "), file("file:///C:/x/a.png", "file:///C:/x/a.png", { explicit: true }), t(", ok")]);
+    expect(parseInline("shot C:\\Users\\me\\shot.png.")).toEqual([t("shot "), file("C:\\Users\\me\\shot.png"), t(".")]);
+    expect(parseInline("(D:/data/run.log)")).toEqual([t("("), file("D:/data/run.log"), t(")")]);
+    // Any extension for a drive path; a space ends a bare path (the rest is then a relative path of its own).
+    expect(parseInline("C:\\tools\\bin.exe and C:\\My Shots\\a.png")).toEqual([file("C:\\tools\\bin.exe"), t(" and "), file("C:\\My"), t(" "), file("Shots\\a.png")]);
+  });
+
+  it("autolinks bare paths with a separator and a viewable extension only", () => {
+    expect(parseInline("see docs/adr/0001.md for it")).toEqual([t("see "), file("docs/adr/0001.md"), t(" for it")]);
+    expect(parseInline("./shots/a.PNG, ../b/c.pdf")).toEqual([file("./shots/a.PNG"), t(", "), file("../b/c.pdf")]);
+    expect(parseInline("/home/me/a.webp")).toEqual([file("/home/me/a.webp")]);
+    expect(parseInline(".beads\\captures\\x.png")).toEqual([file(".beads\\captures\\x.png")]);
+    // No separator, no viewable extension, or an extension that continues: text.
+    for (const s of ["shot.png", "docs/readme", "docs/a.exe", "docs/a.png.bak", "a/b.json", "and/or", "10/12", "v1.2/3"]) {
+      expect(parseInline(s).some((n) => n.t === "file")).toBe(false);
+    }
+  });
+
+  it("does not take a path out of a URL or a word", () => {
+    expect(parseInline("https://example.com/a/b.png")).toEqual([{ t: "link", href: "https://example.com/a/b.png", v: "https://example.com/a/b.png" }]);
+    expect(parseInline("ftp://x.test/a/b.png mailto:a@b.c")).toEqual([t("ftp://x.test/a/b.png mailto:a@b.c")]);
+    expect(parseInline("abcC:\\x\\a.png").some((n) => n.t === "file")).toBe(false);
+  });
+
+  it("turns a code span that is wholly a path into a code file node, and leaves partial spans alone", () => {
+    expect(parseInline("`docs/a.png`")).toEqual([file("docs/a.png", "docs/a.png", { explicit: true, code: true })]);
+    expect(parseInline("`C:\\My Shots\\a.png`")).toEqual([file("C:\\My Shots\\a.png", "C:\\My Shots\\a.png", { explicit: true, code: true })]);
+    expect(parseInline("`pkg/api/auth.go:36`")).toEqual([{ t: "code", v: "pkg/api/auth.go:36" }]);
+    expect(parseInline("`go test ./...`")).toEqual([{ t: "code", v: "go test ./..." }]);
+    expect(parseInline("`shot.png`")).toEqual([{ t: "code", v: "shot.png" }]);
+  });
+
+  it("never builds an href from a path", () => {
+    const nodes = parseMarkdown("![a](C:\\x\\a.png) [b](./b.png) C:\\x\\c.png file:///d.png `e/f.png`").flatMap((b) => (b.t === "p" ? b.c : []));
+    expect(nodes.filter((n) => n.t === "file" || n.t === "img").length).toBe(5);
+    expect(JSON.stringify(nodes)).not.toContain('"href"');
+  });
+
+  it("stays linear on long runs that look like the start of a path", () => {
+    const started = performance.now();
+    for (const s of ["a".repeat(60_000), "a/".repeat(30_000), "C:\\".repeat(20_000), "./".repeat(30_000) + "x", "![" + "a".repeat(60_000), "a.png".repeat(12_000)]) {
+      parseInline(s);
+    }
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+});

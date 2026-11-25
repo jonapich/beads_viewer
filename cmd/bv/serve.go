@@ -7,7 +7,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -30,6 +33,9 @@ type serveOptions struct {
 	Port   int  // 0 = kernel-chosen
 	NoOpen bool // never open a browser
 	Dev    bool // API only; frontend comes from the Vite dev server
+	// AllowDirs are the extra directories GET /api/v1/file may serve from, besides the
+	// tracker's project directory (see serveAllowDirs).
+	AllowDirs []string
 
 	// BeadsPath is the single tracker file or database to serve. Empty serves
 	// no data: the data endpoints answer 503 not_ready.
@@ -55,6 +61,7 @@ func serveModifierRules() []modifierFlagRule {
 		{modifier: "serve-port", requires: []string{"serve"}},
 		{modifier: "serve-no-open", requires: []string{"serve"}},
 		{modifier: "serve-dev", requires: []string{"serve"}},
+		{modifier: "serve-allow", requires: []string{"serve"}},
 	}
 }
 
@@ -68,6 +75,32 @@ var serveExclusiveFlags = []string{
 	// The GUI serves one whole tracker; these select other sources or scope
 	// the session, and are not supported yet.
 	"workspace", "as-of", "label", "repo",
+}
+
+// serveAllowDirs merges the --serve-allow values with a BV_SERVE_ALLOW path list
+// (OS list separator), dropping blanks and duplicates, keeping the order. A flag
+// value is relative to the working directory as usual; a relative entry in the
+// environment variable, which is set once and read from anywhere, would mean a
+// different directory each time, so it is reported to warn and skipped.
+func serveAllowDirs(flagValues []string, envList string, warn func(string)) []string {
+	var out []string
+	add := func(d string) {
+		d = strings.TrimSpace(d)
+		if d != "" && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	for _, d := range flagValues {
+		add(d)
+	}
+	for _, d := range filepath.SplitList(envList) {
+		if d = strings.TrimSpace(d); d != "" && !filepath.IsAbs(d) {
+			warn(fmt.Sprintf("bv serve: ignoring BV_SERVE_ALLOW entry %q: it is not an absolute path", d))
+			continue
+		}
+		add(d)
+	}
+	return out
 }
 
 // validateServeFlags rejects an out-of-range --serve-port and --serve combined
@@ -193,6 +226,13 @@ func serveGUI(ctx context.Context, opts serveOptions) error {
 		return err
 	}
 	cfg := api.Config{Port: port, Token: token, Version: version.Version, Dev: opts.Dev, Store: store}
+	// Local files: the tracker's project directory, which relative paths in bead text resolve
+	// against, plus the directories the user allowed.
+	if store != nil && store.ProjectDir() != "" {
+		cfg.FileBase = store.ProjectDir()
+		cfg.FileRoots = append(cfg.FileRoots, store.ProjectDir())
+	}
+	cfg.FileRoots = append(cfg.FileRoots, opts.AllowDirs...)
 	if !opts.Dev {
 		cfg.Assets = web.FS
 	}

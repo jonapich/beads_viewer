@@ -76,7 +76,7 @@ func (s *server) buildMeta(v *View, rs *reloadStatus) MetaResponse {
 			Awaiting:       awaiting,
 			SignoffPending: signoffs,
 		},
-		Capabilities: MetaCaps{Writes: writable(snap), Events: s.cfg.Store.Watching()},
+		Capabilities: MetaCaps{Writes: writable(snap), Events: s.cfg.Store.Watching(), Files: s.fileSet != nil, Reveal: s.canReveal(v)},
 		Generation:   v.Gen,
 		LoadedAt:     snap.CreatedAt,
 	}

@@ -1,0 +1,39 @@
+{
+  "files": [
+    {
+      "abs": "ROOT/.beads/captures/a.png",
+      "kind": "image",
+      "path": ".beads/captures/a.png",
+      "size": 7,
+      "status": "ok",
+      "url": "/api/v1/file?path=ROOT%2F.beads%2Fcaptures%2Fa.png"
+    },
+    {
+      "abs": "ROOT/shots/gone.png",
+      "path": "shots/gone.png",
+      "status": "missing"
+    },
+    {
+      "abs": "OUTSIDE/elsewhere.png",
+      "path": "../elsewhere.png",
+      "status": "outside"
+    },
+    {
+      "abs": "ROOT/settings.json",
+      "path": "settings.json",
+      "status": "unsupported"
+    },
+    {
+      "path": "x:y.png",
+      "status": "invalid"
+    },
+    {
+      "abs": "ROOT/doc.pdf",
+      "kind": "pdf",
+      "path": "doc.pdf",
+      "size": 8,
+      "status": "ok",
+      "url": "/api/v1/file?path=ROOT%2Fdoc.pdf"
+    }
+  ]
+}

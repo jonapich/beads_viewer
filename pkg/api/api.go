@@ -14,9 +14,11 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +68,20 @@ type Config struct {
 	// writeTimeout bounds one tracker write; 0 means defaultWriteTimeout.
 	writeTimeout time.Duration
 
+	// FileRoots are the absolute directories GET /api/v1/file may serve from: the
+	// tracker's project directory plus each --serve-allow directory. Empty serves
+	// no files (capabilities.files is then false). FileBase is what relative paths
+	// in bead text resolve against, normally the project directory. See files.go.
+	FileRoots []string
+	FileBase  string
+
+	// reveal selects a file in the file manager (POST /api/v1/file/reveal); nil means the
+	// platform's (explorer.exe on Windows, none elsewhere). Tests inject a fake.
+	reveal revealer
+
+	// maxFileBytes bounds a served file; 0 means maxFileBytes. Tests shrink it.
+	maxFileBytes int64
+
 	// now is the clock GET /api/v1/pipeline measures staleness against; nil means
 	// time.Now. Tests pin it.
 	now func() time.Time
@@ -83,6 +99,9 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	s := &server{
 		cfg:        cfg,
 		cookieName: cookieNamePrefix + strconv.Itoa(cfg.Port),
+		fileSet: newFileSet(cfg.FileBase, cfg.FileRoots, cfg.maxFileBytes, func(msg string) {
+			fmt.Fprintf(os.Stderr, "bv serve: not serving files from %s\n", msg)
+		}),
 	}
 	if !cfg.Dev {
 		s.static = newStaticHandler(cfg.Assets)
@@ -106,6 +125,7 @@ type server struct {
 	cfg        Config
 	cookieName string
 	static     http.Handler // nil in dev mode
+	fileSet    *fileSet     // nil: no files served
 }
 
 // route is the top-level router. It is hand-rolled instead of an http.ServeMux
@@ -157,6 +177,12 @@ func (s *server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleInsights(w, r)
 	case "/api/v1/plan":
 		s.handlePlan(w, r)
+	case "/api/v1/file":
+		s.handleFile(w, r)
+	case "/api/v1/file/stat":
+		s.handleFileStat(w, r)
+	case "/api/v1/file/reveal":
+		s.handleFileReveal(w, r)
 	default:
 		if strings.HasPrefix(r.URL.Path, issuesPathPrefix) {
 			// /api/v1/issues/{id}/{action} is a write; everything else under

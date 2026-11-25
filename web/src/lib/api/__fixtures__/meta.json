@@ -2,6 +2,8 @@
   "authority_complete": true,
   "capabilities": {
     "events": false,
+    "files": false,
+    "reveal": false,
     "writes": false
   },
   "counts": {

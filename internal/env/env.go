@@ -98,6 +98,12 @@ var (
 		Default:     "`200`",
 	})
 
+	ServeAllow = register(Var{
+		Name:        "BV_SERVE_ALLOW",
+		Description: "Extra directories `bv serve` may serve local files from (screenshots named in bead text), as an OS path list (`;` on Windows, `:` elsewhere). Added to the tracker's project directory and any `--serve-allow` flags. Set it once for a scratchpad or captures directory.",
+		Default:     "(only the project directory)",
+	})
+
 	Debug = register(Var{
 		Name:        "BV_DEBUG",
 		Description: "Any value: write `[BV_DEBUG]` diagnostics to stderr.",

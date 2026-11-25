@@ -45,6 +45,45 @@ export interface MetaCaps {
   writes: boolean;
   /** True while the server watches the tracker and serves GET /api/v1/events. */
   events: boolean;
+  /**
+   * True when GET /api/v1/file serves local files (at least one allowed root); with false, file paths in
+   * bead text stay plain text. The server always sends it; optional here so partial capability objects
+   * (tests, older fixtures) stay valid, and absent reads as false.
+   */
+  files?: boolean;
+  /**
+   * True when POST /api/v1/file/reveal can show a file in the file manager (Windows, files served,
+   * tracker writable). Optional for the same reason as files.
+   */
+  reveal?: boolean;
+}
+
+/**
+ * What GET /api/v1/file/stat says about one path. ok; missing; outside (not under a directory the
+ * server may serve; whether it exists is not said); ambiguous (a relative path found in more than
+ * one repository); unsupported (a file type that is not served); too_large; invalid. "unavailable"
+ * is never sent: the client records it when the stat call itself failed (lib/files.svelte.ts).
+ */
+export type FileStatus = "ok" | "missing" | "outside" | "ambiguous" | "unsupported" | "too_large" | "invalid" | "unavailable";
+
+/** The kind of a served file (status ok). */
+export type FileKind = "image" | "video" | "pdf" | "text";
+
+/** One path of bead text, resolved (pkg/api/dto.go FileStat). */
+export interface FileStat {
+  /** The text as requested. */
+  path: string;
+  status: FileStatus;
+  /** Resolved absolute path, for a Copy path action; absent for invalid and ambiguous. */
+  abs?: string;
+  kind?: FileKind;
+  size?: number;
+  /** GET /api/v1/file?path=<abs>, status ok only. */
+  url?: string;
+}
+/** GET /api/v1/file/stat?path=a&path=b (at most 64): one FileStat per path, in order. */
+export interface FileStatResponse {
+  files: FileStat[];
 }
 
 /** Data of a GET /api/v1/events "snapshot" message (pkg/api/dto.go SnapshotEvent). A signal: refetch what you show. */
@@ -846,4 +885,15 @@ export interface WriteResponse {
   created_id?: string;
   /** The write took effect, but refreshing the export or the reload failed: the list may lag. */
   warning?: string;
+}
+
+/** POST /api/v1/file/reveal: select one file in the file manager; never opens it. */
+export interface RevealRequest {
+  /** As bead text writes it, or FileStat.abs. */
+  path: string;
+}
+
+export interface RevealResponse {
+  /** The absolute path that was shown. */
+  path: string;
 }

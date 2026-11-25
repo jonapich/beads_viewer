@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { childEnv } from "./env";
 
@@ -38,6 +38,8 @@ export interface Manifest {
   claimed: string;
   /** "Sliced target": carries slice_outcome metadata; the only row of the desk Metrics tab. */
   sliced: string;
+  /** "Captured target": closed sign-off whose description, captures and where-to-see name files under .beads/captures/e2e/ (the files exist in the writable tracker only). */
+  captured: string;
 }
 
 export const TITLES: Record<keyof Manifest, string> = {
@@ -58,7 +60,31 @@ export const TITLES: Record<keyof Manifest, string> = {
   deskSignoff: "Desk sign-off target",
   claimed: "Claimed target",
   sliced: "Sliced target",
+  captured: "Captured target",
 };
+
+/** A 10x10 PNG: small, but a real image the browser decodes (naturalWidth 10). */
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC",
+  "base64",
+);
+const PDF =
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+
+/** The files the "Captured target" bead names, relative to the tracker directory. */
+export const CAPTURE_DIR = ".beads/captures/e2e";
+
+const CAPTURED_DESCRIPTION = [
+  "Shots of the cart: ![first](.beads/captures/e2e/one.png) and ![second](.beads/captures/e2e/two.png).",
+  "",
+  "A bare path .beads/captures/e2e/one.png, a code span `.beads/captures/e2e/two.png`, a [missing one](.beads/captures/e2e/missing.png) and a remote ![tracker](https://example.invalid/pixel.png) image.",
+].join("\n");
+
+const CAPTURED_SIGNOFF = JSON.stringify({
+  what_changed: ["Captured the cart."],
+  captures: [".beads/captures/e2e/one.png", ".beads/captures/e2e/two.png", "C:\\Windows\\win.ini", ".beads/captures/e2e/missing.png"],
+  where_to_see: ["Open .beads/captures/e2e/one.png or the manual .beads/captures/e2e/doc.pdf"],
+});
 
 /** Runs bd in `dir` and returns stdout. Throws (with bd's output in the message) on a non-zero exit. */
 export function bd(bdExe: string, dir: string, ...args: string[]): string {
@@ -186,18 +212,27 @@ export function buildFixture(bdExe: string, dir: string): Manifest {
   const claimed = create(TITLES.claimed, "--type", "task");
   const sliced = create(TITLES.sliced, "--type", "task", "--metadata", SLICE_METADATA);
 
+  // Files for the captured bead (images and a PDF the file endpoint serves), inside the project directory.
+  mkdirSync(join(dir, CAPTURE_DIR), { recursive: true });
+  writeFileSync(join(dir, CAPTURE_DIR, "one.png"), PNG);
+  writeFileSync(join(dir, CAPTURE_DIR, "two.png"), PNG);
+  writeFileSync(join(dir, CAPTURE_DIR, "doc.pdf"), PDF);
+  const captured = create(TITLES.captured, "--type", "task", "--label", "needs-signoff", "--description", CAPTURED_DESCRIPTION);
+
   bd(bdExe, dir, "dep", "add", payform, cart);
   bd(bdExe, dir, "comments", "add", payform, "--kind", "brief", "Brief: the payment form must support saved cards.");
   bd(bdExe, dir, "comments", "add", payform, "Plain comment: pushed a fixup.");
   bd(bdExe, dir, "comments", "add", signoff, "--kind", "signoff", SIGNOFF_COMMENT);
   bd(bdExe, dir, "comments", "add", deskSignoff, "--kind", "signoff", SIGNOFF_COMMENT);
+  bd(bdExe, dir, "comments", "add", captured, "--kind", "signoff", CAPTURED_SIGNOFF);
+  bd(bdExe, dir, "close", captured, "--reason", "Shipped.");
   bd(bdExe, dir, "close", signoff, "--reason", "Shipped.");
   bd(bdExe, dir, "close", deskSignoff, "--reason", "Shipped.");
   bd(bdExe, dir, "update", claimed, "--claim", "--stage", "code");
   bd(bdExe, dir, "close", oldtask, "--reason", "Done.");
 
   exportJsonl(bdExe, dir);
-  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live, deskA, deskB, deskDesign, deskSignoff, claimed, sliced };
+  return { epic, cart, payform, summary, bug, oldtask, signoff, decision, edit, conflict, live, deskA, deskB, deskDesign, deskSignoff, claimed, sliced, captured };
 }
 
 /**
