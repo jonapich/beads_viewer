@@ -81,6 +81,20 @@ func WithOnError(fn func(error)) WatcherOption {
 	}
 }
 
+// WithRemovalGrace sets how long the watched file may stay missing before
+// ErrFileRemoved is reported. Tools such as bd replace a file by writing a
+// temporary one and renaming it over the target, so the file is gone for a few
+// milliseconds; that swap must not look like a deletion. Zero (the default)
+// derives it from the debounce duration: twice it, between 100 ms and 1 s.
+func WithRemovalGrace(d time.Duration) WatcherOption {
+	return func(w *Watcher) {
+		if d < 0 {
+			d = 0
+		}
+		w.removalGrace = d
+	}
+}
+
 // WithForcePoll forces polling mode even if fsnotify is available.
 func WithForcePoll(force bool) WatcherOption {
 	return func(w *Watcher) {
@@ -119,6 +133,10 @@ type Watcher struct {
 	settleTimer       *time.Timer
 	jsonlSettleWindow time.Duration
 	jsonlSettlePolls  int
+
+	// removalGrace and removalTimer delay ErrFileRemoved: see WithRemovalGrace.
+	removalGrace time.Duration
+	removalTimer *time.Timer
 
 	// Optional unexported deterministic polling seams for zero-sleep tests.
 	// Both are nil in production and incur zero overhead when unset.
@@ -267,6 +285,7 @@ func (w *Watcher) Start() error {
 	w.forcePollEnv = false
 	w.fsType = FSTypeUnknown
 	w.clearSettleLocked()
+	w.stopRemovalTimerLocked()
 
 	if envBool("BV_FORCE_POLLING") || envBool("BV_FORCE_POLL") {
 		w.forcePollEnv = true
@@ -398,6 +417,7 @@ func (w *Watcher) Stop() {
 	}
 
 	w.clearSettleLocked()
+	w.stopRemovalTimerLocked()
 	w.debouncer.Cancel()
 
 	// An event published before Stop acquired mu may still be buffered even
@@ -549,7 +569,7 @@ func (w *Watcher) inspectTargetAfterSymlinkEvent(runGeneration uint64, forceChan
 		if os.IsNotExist(err) {
 			hadFile, active := w.recordMissing(runGeneration)
 			if active && hadFile {
-				w.reportError(runGeneration, ErrFileRemoved)
+				w.armRemovalReport(runGeneration)
 			}
 		} else if os.IsPermission(err) {
 			w.reportError(runGeneration, ErrPermission)
@@ -723,7 +743,7 @@ func (w *Watcher) handleFsnotifyFileEvent(runGeneration uint64, op fsnotify.Op) 
 	if op&fsnotify.Remove != 0 {
 		hadFile, active := w.recordMissing(runGeneration)
 		if active && hadFile {
-			w.reportError(runGeneration, ErrFileRemoved)
+			w.armRemovalReport(runGeneration)
 		}
 		return
 	}
@@ -742,7 +762,7 @@ func (w *Watcher) handleFsnotifyFileEvent(runGeneration uint64, op fsnotify.Op) 
 			if op&fsnotify.Rename != 0 {
 				hadFile, active := w.recordMissing(runGeneration)
 				if active && hadFile {
-					w.reportError(runGeneration, ErrFileRemoved)
+					w.armRemovalReport(runGeneration)
 				}
 			}
 		} else if os.IsPermission(err) {
@@ -810,7 +830,7 @@ func (w *Watcher) pollOnce(runGeneration uint64) {
 		if os.IsNotExist(err) {
 			hadFile, active := w.recordMissing(runGeneration)
 			if active && hadFile {
-				w.reportError(runGeneration, ErrFileRemoved)
+				w.armRemovalReport(runGeneration)
 			}
 		} else if os.IsPermission(err) {
 			w.reportError(runGeneration, ErrPermission)
@@ -1075,7 +1095,7 @@ func (w *Watcher) recheckUnsettledJSONL(runGeneration uint64) {
 		if os.IsNotExist(err) {
 			hadFile, stillActive := w.recordMissing(runGeneration)
 			if stillActive && hadFile {
-				w.reportError(runGeneration, ErrFileRemoved)
+				w.armRemovalReport(runGeneration)
 			}
 		} else if os.IsPermission(err) {
 			w.reportError(runGeneration, ErrPermission)
@@ -1157,6 +1177,56 @@ func (w *Watcher) notifyChange(runGeneration uint64) {
 	case w.changeCh <- struct{}{}:
 	default:
 	}
+}
+
+// armRemovalReport starts the grace period of a removal the watcher just saw. The
+// file is checked again when it ends; see reportIfStillRemoved.
+func (w *Watcher) armRemovalReport(runGeneration uint64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.runIsActiveLocked(runGeneration) {
+		return
+	}
+	if w.removalTimer != nil {
+		w.removalTimer.Stop()
+	}
+	w.removalTimer = time.AfterFunc(w.effectiveRemovalGraceLocked(), func() {
+		w.reportIfStillRemoved(runGeneration)
+	})
+}
+
+// reportIfStillRemoved reports ErrFileRemoved once the grace period is over and
+// the file is still missing. A file that is back (the swap finished) reports
+// nothing: its Create or Write event, or the next poll, takes the normal change
+// path and the reload fires.
+func (w *Watcher) reportIfStillRemoved(runGeneration uint64) {
+	watchPath, _ := w.watchedPaths()
+	_, err := os.Stat(watchPath)
+	w.mu.Lock()
+	if !w.runIsActiveLocked(runGeneration) {
+		w.mu.Unlock()
+		return
+	}
+	w.removalTimer = nil
+	gone := !w.lastExists && err != nil && os.IsNotExist(err)
+	w.mu.Unlock()
+	if gone {
+		w.reportError(runGeneration, ErrFileRemoved)
+	}
+}
+
+func (w *Watcher) stopRemovalTimerLocked() {
+	if w.removalTimer != nil {
+		w.removalTimer.Stop()
+		w.removalTimer = nil
+	}
+}
+
+func (w *Watcher) effectiveRemovalGraceLocked() time.Duration {
+	if w.removalGrace > 0 {
+		return w.removalGrace
+	}
+	return min(max(2*w.debounceDuration, 100*time.Millisecond), time.Second)
 }
 
 func (w *Watcher) reportError(runGeneration uint64, err error) {

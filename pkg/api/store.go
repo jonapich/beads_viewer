@@ -69,6 +69,11 @@ type completeFunc func(context.Context, *snapshot.Snapshot) (*snapshot.Snapshot,
 // (pkg/ui/model.go).
 const watchDebounce = 200 * time.Millisecond
 
+// watchRemovalGrace is how long the tracker file may be missing before the
+// watcher reports it as removed: bd replaces issues.jsonl by renaming a temporary
+// file over it on every write, so a brief gap is routine, not an error.
+const watchRemovalGrace = time.Second
+
 // reloadStatus is the last failed reload. It lives outside View so a failure
 // never replaces the served view and never breaks an in-flight phase 2 swap.
 type reloadStatus struct {
@@ -374,6 +379,7 @@ func (s *Store) StartWatching() error {
 	}
 	w, err := watcher.NewWatcher(s.path,
 		watcher.WithDebounceDuration(watchDebounce),
+		watcher.WithRemovalGrace(watchRemovalGrace),
 		watcher.WithOnError(func(err error) {
 			// ErrWatchUnavailable means it fell back to polling; stderr only.
 			fmt.Fprintf(os.Stderr, "bv serve: file watcher: %v\n", err)
