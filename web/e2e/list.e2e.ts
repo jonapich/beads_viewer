@@ -67,9 +67,24 @@ test.describe("issue list", () => {
     const drawer = page.getByRole("complementary", { name: "Issue details" });
     await expect(drawer).toBeVisible();
     await expect(drawer).toContainText("Tax rounding off by a cent");
-    await expect(drawer.getByRole("link", { name: "Open full view" })).toBeVisible();
+    // The id is the link to the full page (there is no separate "Open full view" link).
+    await expect(drawer.getByRole("link", { name: ids.bug })).toHaveAttribute("href", `/issues/${ids.bug}`);
+    await expect(page.getByRole("link", { name: "Open full view" })).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     await expect(drawer).toBeHidden();
+  });
+
+  test("the drawer's id opens the full issue page, and the copy button beside it does not", async ({ page, tracker: { ids } }) => {
+    await row(page, ids.bug).locator(".t-btn").click();
+    const drawer = page.getByRole("complementary", { name: "Issue details" });
+    await expect(drawer).toBeVisible();
+
+    await drawer.getByRole("button", { name: "Copy issue id" }).click();
+    await expect(page).toHaveURL(/\/issues(\?|$)/); // still on the list
+
+    await drawer.getByRole("link", { name: ids.bug }).click();
+    await expect(page).toHaveURL(new RegExp(`/issues/${ids.bug}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tax rounding off by a cent");
   });
 });

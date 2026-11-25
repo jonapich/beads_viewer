@@ -5,6 +5,7 @@
   import { actionTarget, linkHost } from "../../lib/issues/detail";
   import { awaitsSignoff, canAnswer } from "../../lib/issues/model";
   import CopyId from "../CopyId.svelte";
+  import IdLink from "../IdLink.svelte";
   import CommentItem from "../detail/CommentItem.svelte";
   import DecisionCard from "../detail/DecisionCard.svelte";
   import InlineText from "../detail/InlineText.svelte";
@@ -90,13 +91,12 @@
   {:else}
     <div class="head">
       <span class="kt" data-kind={tab === "signoff" ? "signoff" : kindLabel.toLowerCase()}>{kindLabel}</span>
-      <span class="id">{detail.id}</span>
+      <IdLink id={detail.id} />
       <CopyId id={detail.id} />
       <span class="sp"></span>
       {#if tab === "signoff" && !outcome}
         <button type="button" class="btn ghost" onclick={onnext}>Skip</button>
       {/if}
-      <a class="open" href="/issues/{encodeURIComponent(detail.id)}">Open issue ↗</a>
     </div>
     <h2 class="title" tabindex="-1" bind:this={heading}><InlineText src={detail.title} /></h2>
 
@@ -216,14 +216,6 @@
   .kt[data-kind="signoff"] {
     background: var(--warning-subtle);
     color: var(--warning);
-  }
-  .id {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-  }
-  .open {
-    font-size: var(--text-sm);
   }
   .title {
     margin: var(--space-2) 0 var(--space-3);

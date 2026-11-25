@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import CopyId from "../CopyId.svelte";
+  import IdLink from "../IdLink.svelte";
   import type { ListItem } from "../../lib/api/types";
   import { answerKey, noteKey, optionKey, type IssueActions } from "../../lib/issues/actions.svelte";
   import { awaitsSignoff, canAnswer, displayStatus } from "../../lib/issues/model";
@@ -185,7 +186,7 @@
 <aside class="drawer" aria-label="Issue details" bind:this={root}>
   <div class="dh">
     <div class="ttl">
-      <div class="idline"><span class="id">{id}</span><CopyId {id} /></div>
+      <div class="idline"><IdLink {id} /><CopyId {id} /></div>
       <h2 tabindex="-1" bind:this={heading}>{title || (loader.status === "loading" ? "Loading…" : id)}</h2>
     </div>
     <button type="button" class="x" aria-label="Close details" onclick={() => void close()}>✕</button>
@@ -340,8 +341,6 @@
       <button type="button" class="retry" onclick={() => loader.load(id)}>Retry</button>
     {/if}
   </div>
-
-  <div class="df"><a href="/issues/{encodeURIComponent(id)}">Open full view</a></div>
 </aside>
 
 <style>
@@ -428,11 +427,6 @@
     min-height: 0;
     overflow: auto;
     padding: 4px 16px 16px;
-  }
-  .df {
-    border-top: 1px solid var(--border);
-    padding: 8px 16px;
-    font-size: var(--text-sm);
   }
   .sec {
     padding: 12px 0;

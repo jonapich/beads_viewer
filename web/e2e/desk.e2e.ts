@@ -51,6 +51,10 @@ test.describe("agent desk", () => {
     // The selected row's pane has the answer form.
     await expect(page.locator('[data-desk-list] [aria-current="true"]')).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Post answer" })).toBeVisible();
+    // The pane header's id is the link to the full issue page; there is no separate "Open issue" link.
+    const selectedId = (await page.locator(".pane").getAttribute("data-pane")) ?? "";
+    await expect(page.locator(".pane").getByRole("link", { name: selectedId })).toHaveAttribute("href", `/issues/${selectedId}`);
+    await expect(page.getByRole("link", { name: /^Open issue/ })).toHaveCount(0);
   });
 
   test("Inbox: answering marks the row and advances at once, and the row leaves after the linger", async ({ page, rw, tracker }) => {
