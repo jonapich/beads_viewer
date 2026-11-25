@@ -11,6 +11,7 @@
   import Markdown from "../detail/Markdown.svelte";
   import ResolvedNote from "../detail/ResolvedNote.svelte";
   import SignoffCard from "../detail/SignoffCard.svelte";
+  import Notice from "../work/Notice.svelte";
   import SkeletonRows from "../work/SkeletonRows.svelte";
 
   interface Props {
@@ -29,8 +30,10 @@
     rowKind: RowKind | undefined;
     /** What the user did with this row this visit. */
     outcome: Outcome | undefined;
-    /** A card write on this row is in flight or just landed and is not marked yet. */
-    writing: boolean;
+    /** The row's write is in flight: it is marked at click, the request is not confirmed yet. */
+    saving: boolean;
+    /** Why the row's last write failed ("Not saved"); the card is back, since the mark was reverted. */
+    notSaved: string | null;
     now: number;
     /** A card write started: the view moves the selection on once it landed. */
     onwrite: (write: Promise<boolean>, kind: "answered" | "approved" | "disputed") => void;
@@ -39,7 +42,7 @@
     onretry: () => void;
   }
 
-  let { tab, id, detail, failed, vanished, actions, readOnly, rowKind, outcome, writing, now, onwrite, onnext, onretry }: Props = $props();
+  let { tab, id, detail, failed, vanished, actions, readOnly, rowKind, outcome, saving, notSaved, now, onwrite, onnext, onretry }: Props = $props();
 
   const target = $derived(detail ? actionTarget(detail) : null);
   const card = $derived.by((): "decision" | "signoff" | null => {
@@ -48,7 +51,7 @@
     return awaitsSignoff(target) && detail.signoff ? "signoff" : null;
   });
   // The bead has left the list's state without the user's write here: answered or signed off elsewhere.
-  const gone = $derived(vanished || (detail !== null && !outcome && !writing && card === null));
+  const gone = $derived(vanished || outcome?.kind === "elsewhere" || (detail !== null && !outcome && card === null));
   const judge = $derived(detail ? judgeLink(detail.links) : undefined);
   const designWaiting = $derived(
     !!detail?.decision && detail.decision.label === "needs-design" && !detail.decision.ready_to_judge,
@@ -97,8 +100,13 @@
     </div>
     <h2 class="title" tabindex="-1" bind:this={heading}><InlineText src={detail.title} /></h2>
 
-    {#if outcome}
+    {#if outcome && outcome.kind !== "elsewhere"}
       <ResolvedNote kind={outcome.kind} followUp={actions.followUps[detail.id]} />
+      {#if saving}<p class="saving" role="status">Saving…</p>{/if}
+    {/if}
+
+    {#if notSaved}
+      <Notice tone="danger" text="Not saved: {notSaved}" />
     {/if}
 
     {#if gone}
@@ -282,6 +290,11 @@
   }
   .btn.ghost:hover {
     background: var(--bg-hover);
+  }
+  .saving {
+    margin: 4px 0;
+    font-size: var(--text-sm);
+    color: var(--text-faint);
   }
   .sec {
     margin-top: var(--space-4);

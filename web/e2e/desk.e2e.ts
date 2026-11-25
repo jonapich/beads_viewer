@@ -42,7 +42,7 @@ test.describe("agent desk", () => {
     await expect(page.getByRole("button", { name: "Post answer" })).toBeVisible();
   });
 
-  test("Inbox: answering keeps the row, muted, and moves the selection to the next unhandled one", async ({ page, rw, tracker }) => {
+  test("Inbox: answering marks the row and advances at once, and the row leaves after the linger", async ({ page, rw, tracker }) => {
     const { deskA } = tracker.ids;
     await page.goto(`${rw.base}/desk?tab=inbox&id=${deskA}`);
     const pane = page.locator(".pane");
@@ -53,14 +53,13 @@ test.describe("agent desk", () => {
     await pane.getByLabel("Add a note (optional)").fill("e2e desk answer");
     const post = writeResponse(page, "POST", deskA, "/answer");
     await page.getByRole("button", { name: "Post answer" }).click();
-    expect((await post).status()).toBe(200);
 
+    // Optimistic: the row says Answered and the selection has moved on while bd is still working, i.e.
+    // before the POST has an answer. (bd takes a second or more per step; these assertions need not wait for it.)
     const answered = page.locator(`[data-row="${deskA}"]`);
     await expect(answered).toContainText("Answered");
     await expect(answered).toContainText("(a) Go ahead");
     await expect(answered).not.toHaveAttribute("aria-current", "true");
-
-    // Auto-advance: exactly one row is selected, it is another one and it is not handled yet, and the URL and pane follow.
     const selected = page.locator('[data-desk-list] [aria-current="true"]');
     await expect(selected).toHaveCount(1);
     await expect(selected).not.toHaveAttribute("data-row", deskA);
@@ -70,19 +69,16 @@ test.describe("agent desk", () => {
     expect(new URL(page.url()).searchParams.get("id")).toBe(id);
     await expect(pane).toHaveAttribute("data-pane", id ?? "");
 
-    // bd has the answer; the row stays after the refetch (until the page is reloaded).
+    expect((await post).status()).toBe(200);
+    // bd has the answer; the handled row lingers about two seconds, muted, and then leaves the list.
     expect(tracker.show(deskA).labels ?? []).not.toContain("needs-decision");
     const comments = tracker.json<{ text: string }[]>("comments", deskA, "--json");
     expect(comments.map((c) => c.text).join("\n")).toContain("e2e desk answer");
-    await expect(answered).toContainText("Answered");
-
-    // Back on the answered row the pane says so and offers no form.
-    await answered.click();
-    await expect(page.getByText("Answered just now")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Post answer" })).toHaveCount(0);
+    await expect(answered).toHaveCount(0);
+    await expect(selected).toHaveCount(1);
   });
 
-  test("Sign-off: approving marks the row, removes the label and drops the nav badge", async ({ page, rw, tracker }) => {
+  test("Sign-off: approving marks the row at once, removes the label and drops the nav badge", async ({ page, rw, tracker }) => {
     const { deskSignoff } = tracker.ids;
     const before = await badgeTotal(page, rw.base);
     await page.goto(`${rw.base}/desk?tab=signoff&id=${deskSignoff}`);
@@ -92,17 +88,19 @@ test.describe("agent desk", () => {
 
     const post = writeResponse(page, "POST", deskSignoff, "/signoff");
     await page.getByRole("button", { name: "Approve", exact: true }).click();
-    expect((await post).status()).toBe(200);
 
+    // Before the POST has an answer: the row and the pane already show the result.
     await expect(page.locator(`[data-row="${deskSignoff}"]`)).toContainText("Approved");
     await expect(page.getByText("Approved just now")).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+
+    expect((await post).status()).toBe(200);
     expect(tracker.show(deskSignoff).labels ?? []).not.toContain("needs-signoff");
+    await expect(page.locator(`[data-row="${deskSignoff}"]`)).toHaveCount(0); // lingered, then left
 
     if (before - 1 === 0) await expect(deskLink(page).locator(".badge")).toHaveCount(0);
     else await expect(deskLink(page).locator(".badge")).toHaveText(String(before - 1));
   });
-
   test("Pipeline: the claimed bead is listed with its stage, a row opens the drawer, and it refetches every minute", async ({ page, rw, tracker }) => {
     const { claimed } = tracker.ids;
     const requests: string[] = [];

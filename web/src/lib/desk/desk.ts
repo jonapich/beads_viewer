@@ -101,8 +101,11 @@ export function signoffGroups(resp: SignoffResponse): DeskGroup[] {
   }));
 }
 
-/** What the user did with a row this visit. */
-export type OutcomeKind = "answered" | "approved" | "disputed";
+/** How long a handled row stays in the list, muted, before it leaves (whoever handled it). */
+export const LINGER_MS = 2000;
+
+/** What happened to a row this visit: the user did it here, or it left the list without a write from this desk. */
+export type OutcomeKind = "answered" | "approved" | "disputed" | "elsewhere";
 export interface Outcome {
   kind: OutcomeKind;
   /** For an answer: what was posted, as "(b) keep the cart". */
@@ -110,7 +113,12 @@ export interface Outcome {
 }
 export type Outcomes = ReadonlyMap<string, Outcome>;
 
-export const OUTCOME_LABEL: Record<OutcomeKind, string> = { answered: "Answered", approved: "Approved", disputed: "Disputed" };
+export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
+  answered: "Answered",
+  approved: "Approved",
+  disputed: "Disputed",
+  elsewhere: "Handled elsewhere",
+};
 
 /** Every row in display order. */
 export function flatRows(groups: readonly DeskGroup[]): DeskRow[] {
@@ -119,19 +127,21 @@ export function flatRows(groups: readonly DeskGroup[]): DeskRow[] {
 
 /**
  * The list to show after a reload. It is `incoming`, in the server's order, plus every row that
- * was on show and is in `keep` but has left the server's list: a bead the user just answered or
- * signed off stays in its place (muted by the view) until the page is reloaded. Such a row goes
+ * was on show and is in `pinned` but has left the server's list: a bead that was just handled
+ * stays in its place (muted by the view) while it lingers. Pin a row when the write is sent, not
+ * when it is answered: the server reloads and announces the change before it answers the request,
+ * so a refetch can arrive first, and an unpinned row would be dropped for good. Such a row goes
  * back after the nearest row before it that is still listed, in its epic's group; the group goes
- * back before the first later group that is listed, else at the end. A row that left without the
- * user's write (answered elsewhere) is not in `keep` and drops out.
+ * back before the first later group that is listed, else at the end. A row that left and is not
+ * pinned drops out (see departedIds).
  */
-export function reconcile(prev: readonly DeskGroup[], incoming: readonly DeskGroup[], keep: ReadonlySet<string>): DeskGroup[] {
+export function reconcile(prev: readonly DeskGroup[], incoming: readonly DeskGroup[], pinned: ReadonlySet<string>): DeskGroup[] {
   const out: DeskGroup[] = incoming.map((g) => ({ ...g, rows: [...g.rows] }));
-  if (keep.size === 0) return out;
+  if (pinned.size === 0) return out;
   const present = new Set(out.flatMap((g) => g.rows.map((r) => r.id)));
   prev.forEach((pg, gi) => {
     pg.rows.forEach((row, ri) => {
-      if (!keep.has(row.id) || present.has(row.id)) return;
+      if (!pinned.has(row.id) || present.has(row.id)) return;
       let group = out.find((g) => g.epic === pg.epic);
       if (!group) {
         group = { epic: pg.epic, ...(pg.title ? { title: pg.title } : {}), rows: [] };
@@ -154,6 +164,23 @@ export function reconcile(prev: readonly DeskGroup[], incoming: readonly DeskGro
   return out;
 }
 
+/**
+ * The rows that were on show and are not in the new list although this desk did not write them
+ * (not pinned): answered or signed off in the drawer, on the issue page or with bd. The view marks
+ * them handled elsewhere and lets them linger like any handled row. Empty on the first load.
+ */
+export function departedIds(prev: readonly DeskGroup[], incoming: readonly DeskGroup[], pinned: ReadonlySet<string>): string[] {
+  if (prev.length === 0) return [];
+  const listed = new Set(flatRows(incoming).map((r) => r.id));
+  return flatRows(prev)
+    .map((r) => r.id)
+    .filter((id) => !listed.has(id) && !pinned.has(id));
+}
+
+/** The list without row `id`; a group left empty goes with it. */
+export function removeRow(groups: readonly DeskGroup[], id: string): DeskGroup[] {
+  return groups.map((g) => ({ ...g, rows: g.rows.filter((r) => r.id !== id) })).filter((g) => g.rows.length > 0);
+}
 /** Rows the user has not handled this visit. */
 export function unhandledCount(groups: readonly DeskGroup[], outcomes: Outcomes): number {
   return flatRows(groups).filter((r) => !outcomes.has(r.id)).length;

@@ -5,6 +5,7 @@ import {
   badgeCount,
   badgeTitle,
   defaultTab,
+  departedIds,
   firstUnhandled,
   flatRows,
   holderText,
@@ -19,8 +20,11 @@ import {
   pipelineSummary,
   readyCount,
   reconcile,
+  removeRow,
   selectionFor,
   signoffGroups,
+  OUTCOME_LABEL,
+  LINGER_MS,
   stageCounts,
   summaryParts,
   timeLeft,
@@ -326,5 +330,62 @@ describe("metrics", () => {
     expect(metricsCells(r.total)).toMatchObject({ epic: "all", slices: "3", outcome: "2/1", firstPass: "33%", tokens: "32/4/1 (2?)" });
     const none = { ...r.total, epic: "", epic_title: undefined, slices: 0, review_rounds: 0, first_pass_approvals: 0, slice_wall_minutes: 0 };
     expect(metricsCells(none)).toMatchObject({ epic: "(no epic)", title: "", revPerSlice: "0.0", firstPass: "0%", minPerSlice: "0" });
+  });
+});
+
+describe("handled rows linger, whoever handled them", () => {
+  const prev = [group("e1", "a", "b", "c"), group("", "d")];
+
+  // The server reloads and announces the change before it answers the POST, so the refetch without
+  // the row can land first. The row is pinned when the write is sent, so the order does not matter.
+  it("keeps a row pinned at click when the refetch lands before the write's response", () => {
+    const pinnedAtClick = new Set(["b"]);
+    const refetch = [group("e1", "a", "c"), group("", "d")];
+    expect(departedIds(prev, refetch, pinnedAtClick)).toEqual([]);
+    const shown = reconcile(prev, refetch, pinnedAtClick);
+    expect(ids(shown)).toEqual(["e1:a,b,c", ":d"]);
+    // The response arrives later: nothing changes.
+    expect(ids(reconcile(shown, refetch, pinnedAtClick))).toEqual(["e1:a,b,c", ":d"]);
+  });
+
+  it("would have dropped it for good when pinned only after the response (the old order)", () => {
+    const refetch = [group("e1", "a", "c"), group("", "d")];
+    const dropped = reconcile(prev, refetch, new Set());
+    expect(ids(dropped)).toEqual(["e1:a,c", ":d"]);
+    expect(ids(reconcile(dropped, refetch, new Set(["b"])))).toEqual(["e1:a,c", ":d"]); // too late
+  });
+
+  it("reports a row that left without a write from this desk", () => {
+    const refetch = [group("e1", "a"), group("", "d")];
+    expect(departedIds(prev, refetch, new Set())).toEqual(["b", "c"]);
+    expect(departedIds(prev, refetch, new Set(["b"]))).toEqual(["c"]);
+    expect(departedIds(prev, prev, new Set())).toEqual([]);
+  });
+
+  it("reports nothing on the first load", () => {
+    expect(departedIds([], [group("e1", "a")], new Set())).toEqual([]);
+  });
+
+  it("lets a departed row linger when the view pins it, then drops it after the unpin", () => {
+    const refetch = [group("e1", "a", "c"), group("", "d")];
+    const gone = departedIds(prev, refetch, new Set());
+    expect(gone).toEqual(["b"]);
+    const lingering = reconcile(prev, refetch, new Set(gone));
+    expect(ids(lingering)).toEqual(["e1:a,b,c", ":d"]);
+    // After the linger the view takes the row out and unpins it: it does not come back or count as departed.
+    const after = removeRow(lingering, "b");
+    expect(ids(after)).toEqual(["e1:a,c", ":d"]);
+    expect(departedIds(after, refetch, new Set())).toEqual([]);
+    expect(ids(reconcile(after, refetch, new Set()))).toEqual(["e1:a,c", ":d"]);
+  });
+
+  it("removeRow drops an emptied group and changes nothing else", () => {
+    expect(ids(removeRow([group("e1", "a"), group("", "d", "e")], "a"))).toEqual([":d,e"]);
+    expect(ids(removeRow(prev, "zzz"))).toEqual(ids(prev));
+  });
+
+  it("names the elsewhere outcome and lingers two seconds", () => {
+    expect(OUTCOME_LABEL.elsewhere).toBe("Handled elsewhere");
+    expect(LINGER_MS).toBe(2000);
   });
 });

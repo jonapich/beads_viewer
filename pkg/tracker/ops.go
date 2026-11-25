@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // op is one tracker invocation: `<tracker> <args...> -- <id> <trailing...>`.
@@ -64,7 +65,8 @@ func substituteNewID(values []string, id string) []string {
 // runOps runs each op against the client's tracker in order, stopping at the
 // first failure. Result.Output is the diagnostic of the last op that ran and
 // Result.CreatedID is set as soon as an ID is captured, so both survive a later
-// failure.
+// failure. It records the start of the last command it ran in c.lastOpStart,
+// fallback commands included.
 func (c *Client) runOps(ctx context.Context, ops []op) (Result, error) {
 	var result Result
 	newID := ""
@@ -75,6 +77,7 @@ func (c *Client) runOps(ctx context.Context, ops []op) (Result, error) {
 			if !o.noTarget {
 				args = append(append(args, "--", c.origin.LocalID), substituteNewID(o.trailing, newID)...)
 			}
+			c.lastOpStart = time.Now()
 			out, diagnostic, err := c.b.run(ctx, c.origin, true, args)
 			result.Output = diagnostic
 			var commandErr *CommandError

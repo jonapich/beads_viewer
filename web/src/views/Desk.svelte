@@ -21,8 +21,10 @@
   import {
     DESK_TABS,
     TAB_LABEL,
+    LINGER_MS,
     answerSummary,
     defaultTab,
+    departedIds,
     firstUnhandled,
     flatRows,
     inboxGroups,
@@ -32,6 +34,7 @@
     parseTab,
     readyCount,
     reconcile,
+    removeRow,
     selectionFor,
     signoffGroups,
     summaryParts,
@@ -72,6 +75,8 @@
       stopFeed();
       stopDetail();
       ac.abort();
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
     };
   });
 
@@ -93,25 +98,75 @@
     };
   });
 
-  // ---- the lists: the server's order, plus the rows the user handled this visit, which stay
-  // in place (muted) until the page is reloaded. `keep` is told by the write before the refetch
-  // lands, so the row is not dropped out from under the selection.
-  let keep = $state.raw<ReadonlySet<string>>(new Set());
+  // ---- the lists: the server's order, plus the rows handled this visit, which stay in place,
+  // muted, for LINGER_MS and then leave, whoever handled them. A row is pinned (kept in the list)
+  // when its write is sent, not when it is answered: the server reloads and announces the change
+  // before it answers the request, so a refetch without the row can arrive first.
+  let pinned = $state.raw<ReadonlySet<string>>(new Set());
   let outcomes = $state.raw<Outcomes>(new Map());
+  /** Rows whose write is in flight, and rows whose write failed with the reason. */
+  let saving = $state.raw<ReadonlySet<string>>(new Set());
+  let unsaved = $state.raw<ReadonlyMap<string, string>>(new Map());
   let shownInbox = $state.raw<DeskGroup[] | null>(null);
   let shownSignoff = $state.raw<DeskGroup[] | null>(null);
+  /** The pending unpin of each lingering row. */
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** The message of each failed write, from IssueActions, for the row and the pane. */
+  const failMessages = new Map<string, string>();
+
+  function schedule(id: string, ms: number): void {
+    clearTimeout(timers.get(id));
+    timers.set(id, setTimeout(() => unpin(id), Math.max(0, ms)));
+  }
+
+  /** The linger is over: the row leaves the list (and the selection moves on first). */
+  function unpin(id: string): void {
+    timers.delete(id);
+    if (isListTab(tab) && sel.id === id) {
+      const to = groups ? nextUnhandled(groups, id, outcomes) : null;
+      setParams({ id: to });
+    }
+    pinned = new Set([...pinned].filter((p) => p !== id));
+    // Taken out here, not left to the next reconcile, which would take it for a row that left on its own.
+    if (shownInbox) shownInbox = removeRow(shownInbox, id);
+    if (shownSignoff) shownSignoff = removeRow(shownSignoff, id);
+  }
+
+  /** Rows that left the list without a write from this desk: marked, and lingering like the rest. */
+  function markElsewhere(ids: string[]): void {
+    pinned = new Set([...pinned, ...ids]);
+    const next = new Map(outcomes);
+    for (const id of ids) {
+      if (!next.has(id)) next.set(id, { kind: "elsewhere" });
+      schedule(id, LINGER_MS);
+    }
+    outcomes = next;
+  }
 
   $effect(() => {
     const data = inbox.data;
-    const k = keep;
-    if (data) shownInbox = reconcile(untrack(() => shownInbox) ?? [], inboxGroups(data), k);
+    const p = pinned;
+    if (!data) return;
+    untrack(() => {
+      const prev = shownInbox ?? [];
+      const incoming = inboxGroups(data);
+      const gone = departedIds(prev, incoming, p);
+      if (gone.length > 0) markElsewhere(gone);
+      shownInbox = reconcile(prev, incoming, gone.length > 0 ? new Set([...p, ...gone]) : p);
+    });
   });
   $effect(() => {
     const data = signoff.data;
-    const k = keep;
-    if (data) shownSignoff = reconcile(untrack(() => shownSignoff) ?? [], signoffGroups(data), k);
+    const p = pinned;
+    if (!data) return;
+    untrack(() => {
+      const prev = shownSignoff ?? [];
+      const incoming = signoffGroups(data);
+      const gone = departedIds(prev, incoming, p);
+      if (gone.length > 0) markElsewhere(gone);
+      shownSignoff = reconcile(prev, incoming, gone.length > 0 ? new Set([...p, ...gone]) : p);
+    });
   });
-
   // ---- the tab and the selection live in the URL (?tab=&id=) and are rewritten in place.
   function setParams(patch: Record<string, string | null>): void {
     const p = new URLSearchParams(route.query);
@@ -178,39 +233,56 @@
     refresh: async () => {
       await Promise.all([feed.refresh(), detailFeed.refresh(), refreshNavCounts()]);
     },
-    sticky: (id) => {
-      keep = new Set(keep).add(id);
-    },
+    // Rows are pinned when the write is sent (onwrite), which is earlier than this hook is called.
+    sticky: () => {},
+    onFailed: (id, message) => failMessages.set(id, message),
   });
 
   let pane = $state<DeskPane>();
-  /** Rows with a card write in flight: until it is marked, the pane must not read the refetched bead (no longer awaiting) as "handled elsewhere". */
-  let writing = $state.raw<ReadonlySet<string>>(new Set());
 
-  /** A card write started on the selected row: once it landed, mark the row and move on to the next one. */
-  function onwrite(write: Promise<boolean>, kind: OutcomeKind): void {
+  /**
+   * A card write was just started on the selected row. The row is marked (Answered, Approved,
+   * Disputed) and pinned at once, before the request has an answer, and the selection moves on: the
+   * server takes a couple of seconds (bd runs a process per step) and nothing waits for it. When the
+   * write is confirmed the row lingers LINGER_MS from the click and leaves; when it fails the mark is
+   * reverted, the row says "Not saved" and the pane shows why.
+   */
+  function onwrite(write: Promise<boolean>, kind: Exclude<OutcomeKind, "elsewhere">): void {
     const id = sel.id;
-    if (!id) return;
+    // IssueActions marks the issue busy before its first await: not busy means nothing was sent (read-only, blank note).
+    if (!id || !actions.isBusy(id)) return;
     // The drafts are dropped when the write succeeds, so read what was posted now.
     const note =
       kind === "answered"
         ? answerSummary(detail?.decision?.options ?? [], actions.getDraft(optionKey(id)), actions.getDraft(answerKey(id)))
         : "";
-    writing = new Set(writing).add(id);
-    void (async () => {
-      const ok = await write;
-      if (ok) outcomes = new Map(outcomes).set(id, { kind, ...(note ? { note } : {}) });
-      writing = new Set([...writing].filter((w) => w !== id));
-      if (!ok) return;
-      // The user may have picked another row while the write ran: leave their choice alone.
-      if (sel.id !== id) return;
-      const next = groups ? nextUnhandled(groups, id, outcomes) : null;
-      if (next) setParams({ id: next });
-      await tick();
-      pane?.focusHeading();
-    })();
-  }
+    const markedAt = Date.now();
+    failMessages.delete(id);
+    unsaved = new Map([...unsaved].filter(([k]) => k !== id));
+    pinned = new Set(pinned).add(id);
+    outcomes = new Map(outcomes).set(id, { kind, ...(note ? { note } : {}) });
+    saving = new Set(saving).add(id);
 
+    // Advance now, not when the server answers.
+    const to = groups ? nextUnhandled(groups, id, outcomes) : null;
+    if (to) setParams({ id: to });
+    void tick().then(() => pane?.focusHeading());
+
+    void write.then((ok) => {
+      saving = new Set([...saving].filter((s) => s !== id));
+      if (ok) {
+        // Two seconds from the click, but never before the server has confirmed it.
+        schedule(id, markedAt + LINGER_MS - Date.now());
+        return;
+      }
+      const next = new Map(outcomes);
+      next.delete(id);
+      outcomes = next;
+      pinned = new Set([...pinned].filter((p) => p !== id));
+      unsaved = new Map(unsaved).set(id, failMessages.get(id) ?? "The change was not saved.");
+      failMessages.delete(id);
+    });
+  }
   /** The next row not handled yet (Skip, and "Next item" on a row that left the list). */
   function next(): void {
     if (!groups) return;
@@ -348,11 +420,11 @@
       </div>
     {:else}
       {#if allHandled}
-        <div class="alert" role="status">All caught up. Answered items leave the list on the next reload.</div>
+        <div class="alert" role="status">All caught up.</div>
       {/if}
       <div class="body">
         <div class="card" data-desk-list>
-          <DeskList tab={listTab} {groups} selectedId={sel.id} {outcomes} {now} onselect={select} />
+          <DeskList tab={listTab} {groups} selectedId={sel.id} {outcomes} {saving} failed={unsaved} {now} onselect={select} />
         </div>
         <div class="card" data-desk-pane>
           {#if sel.id}
@@ -367,7 +439,8 @@
               {readOnly}
               rowKind={rows.find((r) => r.id === sel.id)?.kind}
               {outcome}
-              writing={writing.has(sel.id)}
+              saving={saving.has(sel.id)}
+              notSaved={unsaved.get(sel.id) ?? null}
               {now}
               {onwrite}
               onnext={next}

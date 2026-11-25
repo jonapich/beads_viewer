@@ -18,6 +18,12 @@ export interface ActionsEnv {
   refresh: () => Promise<void>;
   /** The row stays in the list under the "Active" filter until the filters change. */
   sticky: (id: string) => void;
+  /**
+   * A write failed (the server refused it or the request did not complete): called with the id and
+   * the message the error toast shows, so a view can mark the row itself. Not called for a write that
+   * was never sent (read-only tracker, busy, blank note).
+   */
+  onFailed?: (id: string, message: string) => void;
 }
 
 /** A draft key: the dispute note or the answer text of one issue. */
@@ -86,7 +92,9 @@ export class IssueActions {
       try {
         resp = await call();
       } catch (err) {
-        this.env.toasts.push("danger", err instanceof Error && err.message !== "" ? err.message : "The change was not saved.");
+        const message = err instanceof Error && err.message !== "" ? err.message : "The change was not saved.";
+        this.env.toasts.push("danger", message);
+        this.env.onFailed?.(id, message);
         return false;
       }
       this.env.toasts.push("success", success(resp));

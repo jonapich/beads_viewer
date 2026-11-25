@@ -186,3 +186,42 @@ describe("IssueActions", () => {
     expect([noteKey("a"), answerKey("a"), noteKey("b"), noteKey("c")].map((k) => actions.getDraft(k))).toEqual(["1", "2", "3", ""]);
   });
 });
+
+describe("IssueActions onFailed", () => {
+  const withFailed = (client: Partial<WriteClient>, writable = true) => {
+    const s = setup({ client, writable });
+    const failed: Array<[string, string]> = [];
+    const env = {
+      client: s.client,
+      toasts: { push: (kind: string, text: string) => s.toasts.push([kind, text]) },
+      writable: () => writable,
+      refresh: async () => {},
+      sticky: () => {},
+      onFailed: (id: string, message: string) => failed.push([id, message]),
+    } as ActionsEnv;
+    return { actions: new IssueActions(env), failed, toasts: s.toasts };
+  };
+
+  it("reports a refused write with the id and the toast message", async () => {
+    const { actions, failed, toasts } = withFailed({ postSignoff: vi.fn(async () => Promise.reject(new ApiError(409, "conflict", "bd said no"))) });
+    await expect(actions.approve("x-1")).resolves.toBe(false);
+    expect(failed).toEqual([["x-1", "bd said no"]]);
+    expect(toasts).toEqual([["danger", "bd said no"]]);
+  });
+
+  it("falls back to the generic message for an error with none", async () => {
+    const { actions, failed } = withFailed({ postAnswer: vi.fn(async () => Promise.reject("boom")) });
+    await actions.answer("x-1", { text: "t" });
+    expect(failed).toEqual([["x-1", "The change was not saved."]]);
+  });
+
+  it("is not called for a write that was never sent, nor for one that succeeded", async () => {
+    const ro = withFailed({}, false);
+    await ro.actions.approve("x-1");
+    await ro.actions.answer("x-1", {});
+    const ok = withFailed({});
+    await ok.actions.approve("x-1");
+    expect(ro.failed).toEqual([]);
+    expect(ok.failed).toEqual([]);
+  });
+});

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"strconv"
+	"time"
 
 	"github.com/Dicklesworthstone/beads_viewer/pkg/agentdesk"
 	"github.com/Dicklesworthstone/beads_viewer/pkg/loader"
@@ -19,9 +20,12 @@ type backend struct {
 	run        func(ctx context.Context, origin model.IssueOrigin, mutating bool, operation []string) (stdout []byte, diagnostic string, err error)
 	revalidate func(sourcePath string, origin model.IssueOrigin) error
 	exportBD   func(ctx context.Context, origin model.IssueOrigin) error
+	// exportFresh reports whether bd's own auto-export rewrote the JSONL since the
+	// given instant (see bdExportFresh). Nil means "unknown", which is false.
+	exportFresh func(origin model.IssueOrigin, since time.Time) bool
 }
 
-var defaultBackend = backend{run: runTracker, revalidate: loader.RevalidateIssueOrigin, exportBD: loader.RefreshBDExport}
+var defaultBackend = backend{run: runTracker, revalidate: loader.RevalidateIssueOrigin, exportBD: loader.RefreshBDExport, exportFresh: bdExportFresh}
 
 // Result is what a write reports besides its error. It is filled in even when
 // the write failed.
@@ -77,6 +81,8 @@ type Client struct {
 	origin     model.IssueOrigin
 	sourcePath string
 	b          backend
+	// lastOpStart is when the last tracker command of the last write began; see refreshAfterWrite.
+	lastOpStart time.Time
 }
 
 // New binds a Client to issue and the tracker route in issue.Origin. sourcePath
@@ -98,10 +104,31 @@ func (c *Client) Origin() model.IssueOrigin { return c.origin }
 // view needs it.
 func (c *Client) write(ctx context.Context, ops []op) (Result, error) {
 	result, err := c.runOps(ctx, ops)
-	if err == nil && needsRefresh(c.origin, c.sourcePath) {
-		result.RefreshErr = c.RefreshExport(ctx)
+	if err == nil {
+		c.refreshAfterWrite(ctx, &result)
 	}
 	return result, err
+}
+
+// refreshAfterWrite refreshes the export after a successful write, unless bd
+// already did: bd exports after a mutating command when export.auto is on and
+// its interval has passed, and a second `bd export` then costs a whole bd
+// process (about 1.3 s here) for nothing. The skip needs proof, not a guess at
+// bd's config (it layers files and BD_* variables, and has guards that skip an
+// export silently): the state file bd writes after an export and the JSONL
+// itself must both be newer than the start of the last command the write ran.
+// The last command, not the first: with bd's interval throttle an earlier one
+// can export and a later one not. Residual risk, accepted: another bd process
+// exports during that command while ours is throttled, and the view lags until
+// the next change (the same failure as a RefreshErr warning).
+func (c *Client) refreshAfterWrite(ctx context.Context, result *Result) {
+	if !needsRefresh(c.origin, c.sourcePath) {
+		return
+	}
+	if c.origin.Tracker == "bd" && c.b.exportFresh != nil && !c.lastOpStart.IsZero() && c.b.exportFresh(c.origin, c.lastOpStart) {
+		return
+	}
+	result.RefreshErr = c.RefreshExport(ctx)
 }
 
 // SetPriority runs `update --json --priority=<p>`.
@@ -203,13 +230,12 @@ func (c *Client) Update(ctx context.Context, diff FieldDiff) (Result, error) {
 	}
 	args := append([]string{"update", "--json"}, diff.flags()...)
 	args = append(args, "--", c.origin.LocalID)
+	c.lastOpStart = time.Now()
 	_, result.Output, err = c.b.run(ctx, c.origin, true, args)
 	if err != nil {
 		return result, err
 	}
-	if needsRefresh(c.origin, c.sourcePath) {
-		result.RefreshErr = c.RefreshExport(ctx)
-	}
+	c.refreshAfterWrite(ctx, &result)
 	return result, nil
 }
 

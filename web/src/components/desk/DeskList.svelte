@@ -9,11 +9,15 @@
     groups: readonly DeskGroup[];
     selectedId: string | null;
     outcomes: Outcomes;
+    /** Rows whose write is in flight: shown with their final word at once, dimmed until it is confirmed. */
+    saving: ReadonlySet<string>;
+    /** Rows whose write failed, with the reason: no outcome, not muted, tagged "Not saved". */
+    failed: ReadonlyMap<string, string>;
     now: number;
     onselect: (id: string) => void;
   }
 
-  let { tab, groups, selectedId, outcomes, now, onselect }: Props = $props();
+  let { tab, groups, selectedId, outcomes, saving, failed, now, onselect }: Props = $props();
 </script>
 
 <div class="list" role="group" aria-label={tab === "inbox" ? "Awaiting you" : "Pending sign-offs"}>
@@ -27,11 +31,15 @@
     </div>
     {#each g.rows as r (r.id)}
       {@const out = outcomes.get(r.id)}
+      {@const isSaving = saving.has(r.id)}
+      {@const err = failed.get(r.id)}
       <button
         type="button"
         class="row"
         class:sel={r.id === selectedId}
         class:handled={out !== undefined}
+        class:saving={isSaving}
+        aria-busy={isSaving ? "true" : undefined}
         data-row={r.id}
         aria-current={r.id === selectedId ? "true" : undefined}
         onclick={() => onselect(r.id)}
@@ -49,7 +57,9 @@
           <span class="id">{r.id}</span>
           <span class="ti">{r.title}</span>
           {#if out}
-            <span class="tag" data-outcome={out.kind}>{OUTCOME_LABEL[out.kind]}</span>
+            <span class="tag" data-outcome={out.kind} title={isSaving ? "Saving…" : undefined}>{OUTCOME_LABEL[out.kind]}</span>
+          {:else if err !== undefined}
+            <span class="tag err" title={err}>Not saved</span>
           {:else if r.kind === "signoff"}
             {#if r.noNote}<span class="tag warn">No sign-off note</span>{/if}
           {:else if r.ready}
@@ -212,6 +222,18 @@
   .tag.warn {
     background: var(--warning-subtle);
     color: var(--warning);
+    border-color: transparent;
+  }
+  .row.saving .mark,
+  .row.saving .tag {
+    opacity: 0.55;
+  }
+  .mark[data-outcome="elsewhere"] {
+    color: var(--text-faint);
+  }
+  .tag.err {
+    background: var(--danger-subtle);
+    color: var(--danger);
     border-color: transparent;
   }
   .tag[data-outcome="disputed"] {
