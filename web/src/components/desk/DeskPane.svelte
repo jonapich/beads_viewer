@@ -4,6 +4,7 @@
   import type { IssueActions } from "../../lib/issues/actions.svelte";
   import { actionTarget, linkHost } from "../../lib/issues/detail";
   import { awaitsSignoff, canAnswer } from "../../lib/issues/model";
+  import CopyId from "../CopyId.svelte";
   import CommentItem from "../detail/CommentItem.svelte";
   import DecisionCard from "../detail/DecisionCard.svelte";
   import InlineText from "../detail/InlineText.svelte";
@@ -87,6 +88,7 @@
     <div class="head">
       <span class="kt" data-kind={tab === "signoff" ? "signoff" : kindLabel.toLowerCase()}>{kindLabel}</span>
       <span class="id">{detail.id}</span>
+      <CopyId id={detail.id} />
       <span class="sp"></span>
       {#if tab === "signoff" && !outcome}
         <button type="button" class="btn ghost" onclick={onnext}>Skip</button>

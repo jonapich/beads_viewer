@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test("the detail page loads straight from its URL", async ({ page, rw, tracker: { ids } }) => {
+test("the detail page loads straight from its URL", async ({ page, context, rw, tracker: { ids } }) => {
   await rw.signIn(page);
   // A full page load of a deep link: the server answers it with the app (the SPA fallback).
   await page.goto(`${rw.base}/issues/${ids.payform}`);
@@ -10,4 +10,10 @@ test("the detail page loads straight from its URL", async ({ page, rw, tracker: 
   await expect(page.getByRole("complementary", { name: "Details" })).toContainText("Alice");
   // A kinded comment is open by default.
   await expect(page.getByText("Brief: the payment form must support saved cards.")).toBeVisible();
+
+  // The copy button next to the id puts the plain id on the clipboard and says so.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: rw.base });
+  await page.getByRole("button", { name: "Copy issue id" }).click();
+  await expect(page.getByRole("log", { name: "Notifications" })).toContainText(`Copied ${ids.payform}`);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(ids.payform);
 });

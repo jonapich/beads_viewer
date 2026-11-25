@@ -2,7 +2,7 @@
   import type { IssueDetail } from "../../lib/api/types";
   import { absTime, PILL_GLYPH, PILL_NAME, pillStatus, relTime, shortDate } from "../../lib/issues/detail";
   import { editProblem, type IssueEdits } from "../../lib/issues/edits.svelte";
-  import { toasts } from "../../lib/toasts.svelte";
+  import CopyId from "../CopyId.svelte";
   import PriorityPill from "../issues/PriorityPill.svelte";
   import TypeIcon from "../issues/TypeIcon.svelte";
   import EditButtons from "./EditButtons.svelte";
@@ -111,14 +111,6 @@
     void refocus(() => document.querySelector<HTMLElement>("button[data-status-anchor]"));
   }
 
-  async function copyId(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(detail.id);
-      toasts.push("success", `Copied ${detail.id}`);
-    } catch {
-      toasts.push("danger", "Couldn't copy the id.");
-    }
-  }
 </script>
 
 <header class="head">
@@ -199,9 +191,7 @@
     {/if}
     <span class="idg">
       {detail.id}
-      <button type="button" class="iconbtn" aria-label="Copy id" title="Copy id" onclick={() => void copyId()}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10V4a1 1 0 011-1h6" /></svg>
-      </button>
+      <CopyId id={detail.id} />
     </span>
   </div>
 
@@ -377,21 +367,6 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--text-muted);
-  }
-  .iconbtn {
-    border: 0;
-    background: transparent;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--radius-sm);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-  .iconbtn:hover {
-    background: var(--bg-hover);
   }
   @media (max-width: 479px) {
     .idg {

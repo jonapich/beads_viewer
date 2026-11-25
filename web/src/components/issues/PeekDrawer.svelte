@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
+  import CopyId from "../CopyId.svelte";
   import type { ListItem } from "../../lib/api/types";
   import { answerKey, noteKey, optionKey, type IssueActions } from "../../lib/issues/actions.svelte";
   import { awaitsSignoff, canAnswer, displayStatus } from "../../lib/issues/model";
@@ -184,7 +185,7 @@
 <aside class="drawer" aria-label="Issue details" bind:this={root}>
   <div class="dh">
     <div class="ttl">
-      <div class="id">{id}</div>
+      <div class="idline"><span class="id">{id}</span><CopyId {id} /></div>
       <h2 tabindex="-1" bind:this={heading}>{title || (loader.status === "loading" ? "Loading…" : id)}</h2>
     </div>
     <button type="button" class="x" aria-label="Close details" onclick={() => void close()}>✕</button>
@@ -385,6 +386,11 @@
   .ttl {
     flex: 1;
     min-width: 0;
+  }
+  .idline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
   .id {
     font-family: var(--font-mono);
