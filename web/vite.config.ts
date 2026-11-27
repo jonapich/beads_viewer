@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 
 // bv serve (the Go API) listens on BV_API_PORT; the dev server proxies to it.
@@ -16,6 +16,17 @@ const target = `http://127.0.0.1:${apiPort()}`;
 
 export default defineConfig({
   plugins: [svelte()],
+  // Under vitest only (the app build is unchanged): Svelte resolves its browser build. The "effects"
+  // project (*.effects.test.ts) also compiles .svelte.ts modules for the client, so a test can drive
+  // $effect (flushSync); plain node compiles them for SSR, where effects never run. The other tests
+  // keep the node/SSR setup (client-mode $state changes the timing of async tests).
+  resolve: process.env.VITEST ? { conditions: ["browser"] } : {},
+  test: {
+    projects: [
+      { extends: true, test: { name: "unit", include: ["src/**/*.test.ts"], exclude: ["src/**/*.effects.test.ts"] } },
+      { extends: true, test: { name: "effects", include: ["src/**/*.effects.test.ts"], environment: "./vitest-client-env.ts" } },
+    ],
+  },
   server: {
     // strictPort: bv's origin guard only allows the dev origin :5173.
     port: 5173,

@@ -46,6 +46,7 @@
     type Outcomes,
   } from "../lib/desk/desk";
   import { refreshNavCounts } from "../lib/desk/nav-counts.svelte";
+  import { onIdChange } from "../lib/desk/on-id-change.svelte";
   import { Resource, ViewFeed } from "../lib/feeds/view-feed.svelte";
   import { onLive } from "../lib/live.svelte";
   import { rowClicks } from "../lib/work/row-click";
@@ -207,15 +208,18 @@
   }
 
   // ---- the pane
+  // sel is a new object on every feed refresh: the effects below depend on its id (a primitive,
+  // compared by value) so a refresh with the same row selected does not re-run them.
+  const selId = $derived(sel.id);
   $effect(() => {
-    const id = sel.id;
+    const id = selId;
     if (id && !sel.vanished && isListTab(tab)) untrack(() => detailFeed.setId(id));
   });
   // Another row: its half-written dispute form is closed (the note is kept in the drafts).
-  $effect(() => {
-    void sel.id;
-    untrack(() => actions.closeDispute());
-  });
+  onIdChange(
+    () => sel.id,
+    () => actions.closeDispute(),
+  );
 
   const detail = $derived(detailFeed.detail && detailFeed.detail.id === sel.id ? detailFeed.detail : null);
   const gone = $derived(sel.vanished || detailFeed.status === "missing");
